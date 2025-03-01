@@ -9,48 +9,7 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      profiles: {
-        Row: {
-          avatar_url: string | null
-          created_at: string
-          email: string | null
-          id: string
-        }
-        Insert: {
-          avatar_url?: string | null
-          created_at?: string
-          email?: string | null
-          id: string
-        }
-        Update: {
-          avatar_url?: string | null
-          created_at?: string
-          email?: string | null
-          id?: string
-        }
-        Relationships: []
-      }
-      "Users-Firebase": {
-        Row: {
-          attrs: Json | null
-          created_at: string | null
-          email: string | null
-          uid: string | null
-        }
-        Insert: {
-          attrs?: Json | null
-          created_at?: string | null
-          email?: string | null
-          uid?: string | null
-        }
-        Update: {
-          attrs?: Json | null
-          created_at?: string | null
-          email?: string | null
-          uid?: string | null
-        }
-        Relationships: []
-      }
+      [_ in never]: never
     }
     Views: {
       [_ in never]: never
