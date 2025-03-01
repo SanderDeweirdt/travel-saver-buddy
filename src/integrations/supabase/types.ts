@@ -9,7 +9,238 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      bookings: {
+        Row: {
+          booking_reference: string | null
+          booking_url: string | null
+          cancellation_deadline: string | null
+          check_in_date: string
+          check_out_date: string
+          created_at: string
+          currency: string | null
+          current_price: number
+          hotel_name: string
+          id: string
+          image_url: string | null
+          location: string
+          original_price: number
+          room_type: string
+          status: Database["public"]["Enums"]["booking_status"] | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          booking_reference?: string | null
+          booking_url?: string | null
+          cancellation_deadline?: string | null
+          check_in_date: string
+          check_out_date: string
+          created_at?: string
+          currency?: string | null
+          current_price: number
+          hotel_name: string
+          id?: string
+          image_url?: string | null
+          location: string
+          original_price: number
+          room_type: string
+          status?: Database["public"]["Enums"]["booking_status"] | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          booking_reference?: string | null
+          booking_url?: string | null
+          cancellation_deadline?: string | null
+          check_in_date?: string
+          check_out_date?: string
+          created_at?: string
+          currency?: string | null
+          current_price?: number
+          hotel_name?: string
+          id?: string
+          image_url?: string | null
+          location?: string
+          original_price?: number
+          room_type?: string
+          status?: Database["public"]["Enums"]["booking_status"] | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bookings_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notifications: {
+        Row: {
+          booking_id: string | null
+          created_at: string
+          data: Json | null
+          id: string
+          message: string
+          status: Database["public"]["Enums"]["notification_status"] | null
+          title: string
+          type: Database["public"]["Enums"]["notification_type"] | null
+          user_id: string
+        }
+        Insert: {
+          booking_id?: string | null
+          created_at?: string
+          data?: Json | null
+          id?: string
+          message: string
+          status?: Database["public"]["Enums"]["notification_status"] | null
+          title: string
+          type?: Database["public"]["Enums"]["notification_type"] | null
+          user_id: string
+        }
+        Update: {
+          booking_id?: string | null
+          created_at?: string
+          data?: Json | null
+          id?: string
+          message?: string
+          status?: Database["public"]["Enums"]["notification_status"] | null
+          title?: string
+          type?: Database["public"]["Enums"]["notification_type"] | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      price_history: {
+        Row: {
+          booking_id: string
+          checked_at: string
+          currency: string | null
+          id: string
+          price: number
+        }
+        Insert: {
+          booking_id: string
+          checked_at?: string
+          currency?: string | null
+          id?: string
+          price: number
+        }
+        Update: {
+          booking_id?: string
+          checked_at?: string
+          currency?: string | null
+          id?: string
+          price?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "price_history_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          email: string
+          first_name: string | null
+          id: string
+          last_name: string | null
+          notification_email: boolean | null
+          notification_push: boolean | null
+          updated_at: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          email: string
+          first_name?: string | null
+          id: string
+          last_name?: string | null
+          notification_email?: boolean | null
+          notification_push?: boolean | null
+          updated_at?: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          email?: string
+          first_name?: string | null
+          id?: string
+          last_name?: string | null
+          notification_email?: boolean | null
+          notification_push?: boolean | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      savings: {
+        Row: {
+          amount: number
+          booking_id: string
+          created_at: string
+          currency: string | null
+          description: string | null
+          id: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          booking_id: string
+          created_at?: string
+          currency?: string | null
+          description?: string | null
+          id?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          booking_id?: string
+          created_at?: string
+          currency?: string | null
+          description?: string | null
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "savings_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "savings_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -18,7 +249,9 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      booking_status: "upcoming" | "active" | "past" | "cancelled"
+      notification_status: "unread" | "read"
+      notification_type: "price_drop" | "cancellation_deadline" | "system"
     }
     CompositeTypes: {
       [_ in never]: never
