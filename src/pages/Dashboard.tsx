@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus, TrendingDown, Search, Filter, Clock, ArrowUpRight } from 'lucide-react';
@@ -58,7 +57,7 @@ const mockBookings = [
     imageUrl: "https://images.unsplash.com/photo-1566073771259-6a8506099945?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1080&q=80",
     priceDropped: true,
     newPrice: 989.75,
-    status: 'upcoming'
+    status: 'upcoming' as 'upcoming' | 'active' | 'past' | 'cancelled'
   },
   {
     id: "2",
@@ -73,7 +72,7 @@ const mockBookings = [
     imageUrl: "https://images.unsplash.com/photo-1618773928121-c32242e63f39?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1080&q=80",
     priceDropped: true,
     newPrice: 749.00,
-    status: 'upcoming'
+    status: 'upcoming' as 'upcoming' | 'active' | 'past' | 'cancelled'
   },
   {
     id: "3",
@@ -86,7 +85,7 @@ const mockBookings = [
     roomType: "Executive Suite",
     cancellationDate: "Oct 2, 2023",
     imageUrl: "https://images.unsplash.com/photo-1590073242678-70ee3fc28f8a?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1080&q=80",
-    status: 'upcoming'
+    status: 'upcoming' as 'upcoming' | 'active' | 'past' | 'cancelled'
   }
 ];
 
