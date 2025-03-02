@@ -17,13 +17,49 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Function to ensure user profile exists
+  const ensureUserProfile = async (user: User) => {
+    try {
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('id', user.id)
+        .single();
+        
+      if (error && error.code === 'PGRST116') {
+        console.log('Profile does not exist, creating now...');
+        
+        const { error: insertError } = await supabase
+          .from('profiles')
+          .insert([{ 
+            id: user.id,
+            email: user.email
+          }]);
+          
+        if (insertError) {
+          console.error('Error creating profile:', insertError);
+        } else {
+          console.log('Profile created successfully');
+        }
+      }
+    } catch (error) {
+      console.error('Error checking user profile:', error);
+    }
+  };
+
   useEffect(() => {
     // Get session on mount
     const getInitialSession = async () => {
       try {
         const { data } = await supabase.auth.getSession();
         setSession(data.session);
-        setUser(data.session?.user ?? null);
+        
+        if (data.session?.user) {
+          setUser(data.session.user);
+          await ensureUserProfile(data.session.user);
+        } else {
+          setUser(null);
+        }
       } catch (error) {
         console.error('Error getting initial session:', error);
       } finally {
@@ -35,9 +71,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
+      async (_event, session) => {
         setSession(session);
-        setUser(session?.user ?? null);
+        
+        if (session?.user) {
+          setUser(session.user);
+          await ensureUserProfile(session.user);
+        } else {
+          setUser(null);
+        }
+        
         setLoading(false);
       }
     );
