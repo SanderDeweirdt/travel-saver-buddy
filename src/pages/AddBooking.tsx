@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { format } from 'date-fns';
-import { Calendar as CalendarIcon, Building, MapPin, Bed, DollarSign, Calendar } from 'lucide-react';
+import { Calendar as CalendarIcon, Building, MapPin, Bed, DollarSign } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { Calendar } from '@/components/ui/calendar';
@@ -26,6 +26,9 @@ import Header from '@/components/layout/Header';
 import NavigationBar from '@/components/layout/NavigationBar';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
+import { Database } from '@/integrations/supabase/types';
+
+type BookingStatus = Database['public']['Enums']['booking_status'];
 
 interface FormData {
   hotelName: string;
@@ -99,7 +102,7 @@ const AddBooking = () => {
         original_price: parseFloat(data.price),
         current_price: parseFloat(data.price), // Initially the same as original price
         currency: data.currency,
-        status: 'upcoming',
+        status: 'upcoming' as BookingStatus,
       };
       
       const { error } = await supabase
@@ -175,7 +178,7 @@ const AddBooking = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <Label className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4 text-muted-foreground" />
+                      <CalendarIcon className="h-4 w-4 text-muted-foreground" />
                       Check-in Date
                     </Label>
                     <div className="mt-1.5">
@@ -208,7 +211,7 @@ const AddBooking = () => {
                   
                   <div>
                     <Label className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4 text-muted-foreground" />
+                      <CalendarIcon className="h-4 w-4 text-muted-foreground" />
                       Check-out Date
                     </Label>
                     <div className="mt-1.5">
@@ -241,7 +244,7 @@ const AddBooking = () => {
                 
                 <div>
                   <Label className="flex items-center gap-2">
-                    <Calendar className="h-4 w-4 text-muted-foreground" />
+                    <CalendarIcon className="h-4 w-4 text-muted-foreground" />
                     Cancellation Deadline (Optional)
                   </Label>
                   <div className="mt-1.5">
