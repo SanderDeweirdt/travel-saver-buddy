@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { format } from 'date-fns';
@@ -45,6 +44,42 @@ const AddBooking = () => {
   const [checkInDate, setCheckInDate] = useState<Date | undefined>(undefined);
   const [checkOutDate, setCheckOutDate] = useState<Date | undefined>(undefined);
   const [cancellationDate, setCancellationDate] = useState<Date | undefined>(undefined);
+  
+  useEffect(() => {
+    const checkUserProfile = async () => {
+      if (!user) return;
+      
+      try {
+        const { data: profile, error } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('id', user.id)
+          .single();
+          
+        if (error && error.code === 'PGRST116') {
+          console.log('Profile does not exist, creating now...');
+          
+          const { error: insertError } = await supabase
+            .from('profiles')
+            .insert([{ 
+              id: user.id,
+              email: user.email
+            }]);
+            
+          if (insertError) {
+            console.error('Error creating profile:', insertError);
+            toast.error('Failed to create user profile');
+          } else {
+            console.log('Profile created successfully');
+          }
+        }
+      } catch (error) {
+        console.error('Error checking user profile:', error);
+      }
+    };
+    
+    checkUserProfile();
+  }, [user]);
   
   const {
     register,
