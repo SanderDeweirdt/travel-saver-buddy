@@ -8,6 +8,7 @@ import SignIn from '@/pages/SignIn';
 import SignUp from '@/pages/SignUp';
 import AuthCallback from '@/pages/AuthCallback';
 import Dashboard from '@/pages/Dashboard';
+import AddBooking from '@/pages/AddBooking';
 import Bookings from '@/pages/Bookings';
 import NotFound from '@/pages/NotFound';
 import './App.css';
@@ -37,6 +38,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <Bookings />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/add-booking" 
+            element={
+              <ProtectedRoute>
+                <AddBooking />
               </ProtectedRoute>
             } 
           />
