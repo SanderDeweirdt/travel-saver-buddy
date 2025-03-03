@@ -9,3 +9,51 @@ const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiO
 // import { supabase } from "@/integrations/supabase/client";
 
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+
+// Helper function to check if a profile exists and create it if not
+export const ensureUserProfile = async (userId: string, email: string | undefined) => {
+  if (!userId) {
+    console.error('Cannot ensure profile: No user ID provided');
+    return false;
+  }
+
+  try {
+    // First check if the profile exists
+    const { data: profile, error: fetchError } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('id', userId)
+      .single();
+
+    // If profile exists, we're good
+    if (profile) {
+      return true;
+    }
+
+    // If error is not "no rows found", something else went wrong
+    if (fetchError && fetchError.code !== 'PGRST116') {
+      console.error('Error checking profile:', fetchError);
+      return false;
+    }
+
+    // Profile doesn't exist, try to create it
+    const { data: newProfile, error: insertError } = await supabase
+      .from('profiles')
+      .insert([{ 
+        id: userId, 
+        email: email || '' 
+      }])
+      .select()
+      .single();
+
+    if (insertError) {
+      console.error('Error creating profile:', insertError);
+      return false;
+    }
+
+    return !!newProfile;
+  } catch (err) {
+    console.error('Unexpected error in ensureUserProfile:', err);
+    return false;
+  }
+};

@@ -1,21 +1,36 @@
 
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import SignInForm from '@/components/auth/SignInForm';
 import { toast } from 'sonner';
 
 const SignIn = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // Get the redirect path from location state or default to dashboard
+  const from = location.state?.from?.pathname || '/dashboard';
   
   useEffect(() => {
     // Check if user is already logged in
     const checkSession = async () => {
-      const { data } = await supabase.auth.getSession();
-      if (data.session) {
-        navigate('/dashboard');
+      try {
+        const { data, error } = await supabase.auth.getSession();
+        
+        if (error) {
+          console.error('Error checking session:', error);
+          return;
+        }
+        
+        if (data.session) {
+          console.log('User already logged in, redirecting to dashboard');
+          navigate('/dashboard', { replace: true });
+        }
+      } catch (err) {
+        console.error('Unexpected error checking session:', err);
       }
     };
     
@@ -40,10 +55,36 @@ const SignIn = () => {
         console.log('Sign in successful, user ID:', data.user.id);
         toast.success('Successfully signed in!');
         
+        // Verify the profile exists before redirecting
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('id', data.user.id)
+          .single();
+        
+        if (profileError && profileError.code !== 'PGRST116') {
+          console.error('Error verifying profile:', profileError);
+          
+          // Try to create the profile if it doesn't exist
+          const { error: insertError } = await supabase
+            .from('profiles')
+            .insert([{ id: data.user.id, email: data.user.email }])
+            .select('id')
+            .single();
+            
+          if (insertError) {
+            console.error('Error creating profile:', insertError);
+            toast.error('Failed to set up your profile. Please try again.');
+            // Don't prevent navigation - they're authenticated just might have limited functionality
+          } else {
+            console.log('Successfully created profile for user');
+          }
+        }
+        
         // Delay navigation slightly to allow profile creation to complete
         setTimeout(() => {
-          navigate('/dashboard');
-        }, 500);
+          navigate(from, { replace: true });
+        }, 800);
       }
     } catch (err: any) {
       console.error('Error signing in:', err);
