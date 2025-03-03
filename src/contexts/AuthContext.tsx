@@ -39,7 +39,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       // If error is not "No rows found" (PGRST116), something else went wrong
       if (selectError && selectError.code !== 'PGRST116') {
         console.error('Error checking user profile:', selectError);
-        toast.error('Error verifying user profile');
         return false;
       }
       
@@ -57,6 +56,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       
       if (insertError) {
         console.error('Error creating profile:', insertError);
+        
+        // Check specifically for RLS policy violation
+        if (insertError.code === '42501') {
+          console.error('RLS policy violation. User lacks permission to create their profile.');
+          toast.error('Authorization error. Please contact support.');
+          return false;
+        }
+        
         toast.error('Failed to create user profile. Please try logging out and in again.');
         return false;
       }
@@ -64,6 +71,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       // Verify the profile was created by checking the returned data
       if (insertData && insertData.id) {
         console.log('Profile created successfully:', insertData.id);
+        toast.success('Profile created successfully');
         return true;
       } else {
         // This shouldn't happen if insert succeeds, but check anyway
@@ -76,6 +84,40 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       toast.error('An unexpected error occurred with your user profile');
       return false;
     }
+  };
+
+  // Verify profile existence with retries
+  const verifyProfileExists = async (userId: string): Promise<boolean> => {
+    // Try up to 3 times with a slight delay
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        console.log(`Verifying profile exists (attempt ${attempt}/3) for user:`, userId);
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('id', userId)
+          .single();
+        
+        if (data) {
+          console.log('Profile verification successful:', data.id);
+          return true;
+        }
+        
+        if (error && error.code !== 'PGRST116') {
+          console.error(`Profile verification error (attempt ${attempt}/3):`, error);
+        }
+        
+        // Wait a bit before retrying (200ms, 400ms, 600ms)
+        if (attempt < 3) {
+          await new Promise(resolve => setTimeout(resolve, attempt * 200));
+        }
+      } catch (err) {
+        console.error(`Unexpected error in profile verification (attempt ${attempt}/3):`, err);
+      }
+    }
+    
+    console.error('Profile verification failed after 3 attempts');
+    return false;
   };
 
   useEffect(() => {
@@ -92,13 +134,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           // Important: First set the user so the app knows someone is logged in
           setUser(data.session.user);
           
-          // Then ensure the profile exists (don't block the UI rendering on this)
-          const profileExists = await ensureUserProfile(data.session.user);
+          // Then check if the profile already exists
+          const profileExists = await verifyProfileExists(data.session.user.id);
           
           if (!profileExists) {
-            console.warn('Failed to ensure profile exists on initial session');
-            // We don't log out the user here, as they're technically authenticated
-            // But operations requiring a profile might fail
+            console.log('Profile does not exist on initial session, creating it');
+            // Create the profile if it doesn't exist
+            const created = await ensureUserProfile(data.session.user);
+            
+            if (!created) {
+              console.warn('Failed to create profile on initial session');
+              // We don't log out the user here, as they're technically authenticated
+              // But operations requiring a profile might fail
+            }
           }
         } else {
           console.log('No session found');
@@ -123,14 +171,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           // First set the user so the app knows someone is logged in
           setUser(session.user);
           
-          // Then ensure the profile exists if signed in
+          // Then verify the profile exists
           if (event === 'SIGNED_IN') {
-            const profileExists = await ensureUserProfile(session.user);
+            const profileExists = await verifyProfileExists(session.user.id);
             
             if (!profileExists) {
-              console.warn('Failed to ensure profile exists on auth change');
-              // We don't log out the user here, as they're technically authenticated
-              // But operations requiring a profile might fail
+              console.log('Profile does not exist on auth change, creating it');
+              const created = await ensureUserProfile(session.user);
+              
+              if (!created) {
+                console.warn('Failed to create profile on auth change');
+                // We don't log out the user here, as they're technically authenticated
+                // But operations requiring a profile might fail
+              }
             }
           }
         } else {

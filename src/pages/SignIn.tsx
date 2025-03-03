@@ -37,8 +37,13 @@ const SignIn = () => {
       }
       
       if (data.user) {
+        console.log('Sign in successful, user ID:', data.user.id);
         toast.success('Successfully signed in!');
-        navigate('/dashboard');
+        
+        // Delay navigation slightly to allow profile creation to complete
+        setTimeout(() => {
+          navigate('/dashboard');
+        }, 500);
       }
     } catch (err: any) {
       console.error('Error signing in:', err);
