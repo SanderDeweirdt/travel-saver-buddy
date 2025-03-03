@@ -1,12 +1,13 @@
 
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase, ensureUserProfile } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
 const AuthCallback = () => {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const handleAuthCallback = async () => {
@@ -17,15 +18,17 @@ const AuthCallback = () => {
         
         if (error) {
           console.error('Error getting session:', error);
+          setError('Authentication failed. Please try again.');
           toast.error('Authentication failed. Please try again.');
-          navigate('/signin');
+          setTimeout(() => navigate('/signin'), 1500);
           return;
         }
         
         if (!data.session) {
           console.error('No session found after OAuth callback');
+          setError('No session found. Please sign in again.');
           toast.error('No session found. Please sign in again.');
-          navigate('/signin');
+          setTimeout(() => navigate('/signin'), 1500);
           return;
         }
         
@@ -35,86 +38,25 @@ const AuthCallback = () => {
         const userId = data.session.user.id;
         const userEmail = data.session.user.email;
         
-        // First check if profile exists
-        const { data: profileData, error: profileError } = await supabase
-          .from('profiles')
-          .select('id')
-          .eq('id', userId)
-          .single();
-          
-        // If no profile or error (except "no rows returned"), create one
-        if (!profileData || (profileError && profileError.code === 'PGRST116')) {
-          console.log('Creating profile for OAuth user:', userId);
-          
-          // Try to create the profile
-          const { error: insertError } = await supabase
-            .from('profiles')
-            .insert([{ 
-              id: userId,
-              email: userEmail,
-            }])
-            .select('id')
-            .single();
-              
-          if (insertError) {
-            console.error('Error creating profile in OAuth callback:', insertError);
-            
-            // Only show warning but continue with authentication since the
-            // user is already authenticated - they'll just have limited functionality
-            toast.warning('Failed to create user profile. Some features may be limited.');
-          } else {
-            console.log('Successfully created profile for OAuth user');
-          }
-        } else if (profileError && profileError.code !== 'PGRST116') {
-          console.error('Error checking profile in OAuth callback:', profileError);
-          toast.warning('Error checking user profile. Some features may be limited.');
-        } else {
-          console.log('Profile already exists for OAuth user');
-        }
+        const profileExists = await ensureUserProfile(userId, userEmail);
         
-        // Verify the profile exists before redirecting, with retries
-        let profileVerified = false;
-        
-        for (let attempt = 1; attempt <= 3; attempt++) {
-          console.log(`Verifying profile exists (attempt ${attempt}/3)`);
-          const { data: verifyData, error: verifyError } = await supabase
-            .from('profiles')
-            .select('id')
-            .eq('id', userId)
-            .single();
-              
-          if (verifyData && !verifyError) {
-            profileVerified = true;
-            console.log('Profile verified successfully');
-            break;
-          }
-          
-          if (verifyError) {
-            console.error(`Profile verification error (attempt ${attempt}/3):`, verifyError);
-          }
-          
-          // Wait a bit before retrying (400ms, 800ms, 1200ms)
-          if (attempt < 3) {
-            await new Promise(resolve => setTimeout(resolve, attempt * 400));
-          }
-        }
-        
-        if (profileVerified) {
-          // Redirect to dashboard on successful login
+        if (profileExists) {
+          // Success path
           toast.success('Successfully signed in!');
         } else {
-          // Show warning but still allow navigation
+          // Warning but continue
           toast.warning('Profile setup may be incomplete. Some features may be limited.');
         }
         
-        // Add a slight delay to ensure toast is visible
+        // Add a delay to ensure auth state is properly updated
         setTimeout(() => {
           navigate('/dashboard', { replace: true });
         }, 800);
-      } catch (error) {
+      } catch (error: any) {
         console.error('Unexpected error during authentication:', error);
-        toast.error('An unexpected error occurred');
-        navigate('/signin');
+        setError(error.message || 'An unexpected error occurred');
+        toast.error(error.message || 'An unexpected error occurred');
+        setTimeout(() => navigate('/signin'), 1500);
       } finally {
         setIsLoading(false);
       }
@@ -122,6 +64,28 @@ const AuthCallback = () => {
 
     handleAuthCallback();
   }, [navigate]);
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-muted/30">
+        <div className="text-center">
+          <div className="text-red-500 mb-4">
+            <svg className="h-12 w-12 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <h2 className="text-xl font-semibold mb-2">Authentication Error</h2>
+          <p className="text-muted-foreground">{error}</p>
+          <button 
+            onClick={() => navigate('/signin')}
+            className="mt-6 bg-primary text-white px-4 py-2 rounded-md hover:bg-primary/90 transition-colors"
+          >
+            Return to Sign In
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-muted/30">

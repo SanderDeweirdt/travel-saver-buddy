@@ -10,13 +10,14 @@ const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
   const { user, loading } = useAuth();
   const location = useLocation();
 
-  // Show loading state while checking authentication
+  // Show improved loading state while checking authentication
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-muted/30">
         <div className="text-center">
           <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Verifying authentication...</p>
+          <p className="text-muted-foreground">Verifying your authentication...</p>
+          <p className="text-xs text-muted-foreground mt-2">This should only take a moment</p>
         </div>
       </div>
     );

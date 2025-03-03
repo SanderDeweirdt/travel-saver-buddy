@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase, ensureUserProfile } from '@/integrations/supabase/client';
 import SignInForm from '@/components/auth/SignInForm';
 import { toast } from 'sonner';
 
@@ -55,36 +55,19 @@ const SignIn = () => {
         console.log('Sign in successful, user ID:', data.user.id);
         toast.success('Successfully signed in!');
         
-        // Verify the profile exists before redirecting
-        const { data: profileData, error: profileError } = await supabase
-          .from('profiles')
-          .select('id')
-          .eq('id', data.user.id)
-          .single();
+        // Attempt to ensure the profile exists
+        const profileExists = await ensureUserProfile(data.user.id, data.user.email);
         
-        if (profileError && profileError.code !== 'PGRST116') {
-          console.error('Error verifying profile:', profileError);
-          
-          // Try to create the profile if it doesn't exist
-          const { error: insertError } = await supabase
-            .from('profiles')
-            .insert([{ id: data.user.id, email: data.user.email }])
-            .select('id')
-            .single();
-            
-          if (insertError) {
-            console.error('Error creating profile:', insertError);
-            toast.error('Failed to set up your profile. Please try again.');
-            // Don't prevent navigation - they're authenticated just might have limited functionality
-          } else {
-            console.log('Successfully created profile for user');
-          }
+        if (!profileExists) {
+          console.warn('Failed to verify or create profile, but continuing with signin');
+          toast.warning('Profile setup may be incomplete. Some features may be limited.');
         }
         
-        // Delay navigation slightly to allow profile creation to complete
+        // Navigate to the requested page or dashboard
+        // Add a slight delay to ensure the auth state is updated
         setTimeout(() => {
           navigate(from, { replace: true });
-        }, 800);
+        }, 500);
       }
     } catch (err: any) {
       console.error('Error signing in:', err);
@@ -110,6 +93,7 @@ const SignIn = () => {
       if (error) {
         throw error;
       }
+      // Don't set isLoading to false here as we're redirecting to Google
     } catch (err: any) {
       console.error('Error signing in with Google:', err);
       setError(err.message || 'An error occurred during sign in');
