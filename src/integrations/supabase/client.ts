@@ -46,15 +46,9 @@ export const ensureUserProfile = async (userId: string, email: string | undefine
     
     // First try with a direct admin insert using RPC if available
     try {
-      const { data: rpcData, error: rpcError } = await supabase.rpc('create_user_profile', { 
-        user_id: userId, 
-        user_email: email || '' 
-      });
-      
-      if (!rpcError) {
-        console.log('Profile created successfully via RPC');
-        return true;
-      }
+      // Remove this RPC call as it's causing the type error and it's not actually 
+      // being used successfully in the flow since there's no actual RPC function
+      console.log('Trying standard insert approach directly');
     } catch (rpcErr) {
       // If RPC fails, continue with standard insert approach
       console.log('RPC not available, trying standard insert');
