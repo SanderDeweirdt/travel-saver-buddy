@@ -55,11 +55,34 @@ const SignIn = () => {
         console.log('Sign in successful, user ID:', data.user.id);
         toast.success('Successfully signed in!');
         
-        // Attempt to ensure the profile exists
-        const profileExists = await ensureUserProfile(data.user.id, data.user.email);
+        // Make multiple attempts to ensure the profile exists
+        let profileSuccess = false;
+        let attempts = 0;
+        const maxAttempts = 3;
         
-        if (!profileExists) {
-          console.warn('Failed to verify or create profile, but continuing with signin');
+        while (!profileSuccess && attempts < maxAttempts) {
+          attempts++;
+          
+          try {
+            console.log(`Attempting to verify/create profile (attempt ${attempts}/${maxAttempts})`);
+            profileSuccess = await ensureUserProfile(data.user.id, data.user.email);
+            
+            if (profileSuccess) {
+              console.log('Profile verification successful');
+              break;
+            }
+            
+            // Small delay between attempts
+            if (attempts < maxAttempts) {
+              await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+          } catch (profileErr) {
+            console.error(`Profile check attempt ${attempts} failed:`, profileErr);
+          }
+        }
+        
+        if (!profileSuccess) {
+          console.warn('Failed to verify or create profile after multiple attempts');
           toast.warning('Profile setup may be incomplete. Some features may be limited.');
         }
         

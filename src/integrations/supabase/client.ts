@@ -43,6 +43,24 @@ export const ensureUserProfile = async (userId: string, email: string | undefine
 
     // Profile doesn't exist, try to create it
     console.log('Creating profile for user:', userId);
+    
+    // First try with a direct admin insert using RPC if available
+    try {
+      const { data: rpcData, error: rpcError } = await supabase.rpc('create_user_profile', { 
+        user_id: userId, 
+        user_email: email || '' 
+      });
+      
+      if (!rpcError) {
+        console.log('Profile created successfully via RPC');
+        return true;
+      }
+    } catch (rpcErr) {
+      // If RPC fails, continue with standard insert approach
+      console.log('RPC not available, trying standard insert');
+    }
+
+    // Standard insert approach
     const { data: newProfile, error: insertError } = await supabase
       .from('profiles')
       .insert([{ 
@@ -55,6 +73,25 @@ export const ensureUserProfile = async (userId: string, email: string | undefine
       if (insertError.code === '23505') { // unique_violation
         console.log('Profile already exists (conflict during creation)');
         return true;
+      }
+      
+      // Check for RLS policy violation
+      if (insertError.code === '42501') {
+        console.error('RLS policy violation. User lacks permission to create their profile.');
+        
+        // Make one final check to see if the profile was created anyway by the trigger
+        const { data: finalCheck, error: finalCheckError } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('id', userId);
+          
+        if (finalCheck && finalCheck.length > 0) {
+          console.log('Profile exists after final check - likely created by trigger');
+          return true;
+        }
+        
+        toast.error('Authorization error with user profile. Try signing out and in again.');
+        return false;
       }
       
       console.error('Error creating profile:', insertError);

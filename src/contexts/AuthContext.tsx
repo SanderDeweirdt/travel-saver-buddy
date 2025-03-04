@@ -9,6 +9,7 @@ type AuthContextType = {
   user: User | null;
   loading: boolean;
   signOut: () => Promise<void>;
+  ensureProfile: () => Promise<boolean>;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -17,92 +18,64 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [profileCheckInProgress, setProfileCheckInProgress] = useState(false);
 
-  // Improved function to ensure user profile exists with proper error handling and verification
-  const ensureUserProfile = async (user: User): Promise<boolean> => {
+  // Helper function to ensure user profile exists with proper error handling
+  const ensureProfile = async (): Promise<boolean> => {
+    if (!user) {
+      console.log('Cannot ensure profile: No user logged in');
+      return false;
+    }
+    
+    if (profileCheckInProgress) {
+      console.log('Profile check already in progress');
+      return false;
+    }
+    
     try {
-      console.log('Checking if profile exists for user:', user.id);
+      setProfileCheckInProgress(true);
       
-      // First, check for profiles using array result not single object
-      const { data: profiles, error: selectError } = await supabase
+      // Simply verify the profile exists without creating it
+      const { data: profiles, error } = await supabase
         .from('profiles')
         .select('id')
         .eq('id', user.id);
       
-      // If profile exists, return true
-      if (profiles && profiles.length > 0) {
-        console.log('Profile already exists:', profiles[0].id);
-        return true;
-      }
-      
-      // If error is not related to "no rows", something else went wrong
-      if (selectError && selectError.code !== 'PGRST116') {
-        console.error('Error checking user profile:', selectError);
+      if (error) {
+        console.error('Error checking profile:', error);
         return false;
       }
       
-      console.log('Profile does not exist, creating now...');
+      if (profiles && profiles.length > 0) {
+        return true;
+      }
       
-      // If profile doesn't exist, create it
-      const { data: insertData, error: insertError } = await supabase
-        .from('profiles')
-        .insert([{ 
-          id: user.id,
-          email: user.email
-        }]);
-      
-      if (insertError) {
-        console.error('Error creating profile:', insertError);
+      // If no profile is found, try to create one
+      try {
+        const { error: insertError } = await supabase
+          .from('profiles')
+          .insert([{ id: user.id, email: user.email }]);
         
-        // Check specifically for RLS policy violation
-        if (insertError.code === '42501') {
-          console.error('RLS policy violation. User lacks permission to create their profile.');
-          toast.error('Authorization error. Please contact support.');
+        if (insertError) {
+          console.error('Error creating profile:', insertError);
           return false;
         }
         
-        toast.error('Failed to create user profile. Please try logging out and in again.');
-        return false;
-      }
-      
-      console.log('Profile created successfully');
-      toast.success('Profile created successfully');
-      return true;
-    } catch (error) {
-      console.error('Unexpected error in ensureUserProfile:', error);
-      toast.error('An unexpected error occurred with your user profile');
-      return false;
-    }
-  };
-
-  // Verify profile existence - simplified to not use single() which causes 406 errors
-  const verifyProfileExists = async (userId: string): Promise<boolean> => {
-    try {
-      console.log('Verifying profile exists for user:', userId);
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('id', userId);
-      
-      if (data && data.length > 0) {
-        console.log('Profile verification successful:', data[0].id);
         return true;
-      }
-      
-      if (error) {
-        console.error('Profile verification error:', error);
+      } catch (insertErr) {
+        console.error('Error in profile creation:', insertErr);
         return false;
       }
-      
+    } catch (e) {
+      console.error('Unexpected error in ensureProfile:', e);
       return false;
-    } catch (err) {
-      console.error('Unexpected error in profile verification:', err);
-      return false;
+    } finally {
+      setProfileCheckInProgress(false);
     }
   };
 
   useEffect(() => {
-    // Get session on mount
+    // Get session on mount with a timeout safeguard
     const getInitialSession = async () => {
       try {
         console.log('Getting initial session...');
@@ -111,18 +84,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         
         if (data.session?.user) {
           console.log('Session found, setting user:', data.session.user.id);
-          
-          // Important: First set the user so the app knows someone is logged in
           setUser(data.session.user);
-          
-          // Then check if the profile already exists
-          const profileExists = await verifyProfileExists(data.session.user.id);
-          
-          if (!profileExists) {
-            console.log('Profile does not exist on initial session, creating it');
-            // Create the profile if it doesn't exist
-            await ensureUserProfile(data.session.user);
-          }
         } else {
           console.log('No session found');
           setUser(null);
@@ -135,6 +97,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
     };
 
+    // Set a timeout to ensure loading state doesn't get stuck
+    const timeoutId = setTimeout(() => {
+      if (loading) {
+        console.warn('Session check timed out, forcing loading state to false');
+        setLoading(false);
+      }
+    }, 5000); // 5 second timeout
+
     getInitialSession();
 
     // Listen for auth changes
@@ -144,18 +114,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setSession(session);
         
         if (session?.user) {
-          // First set the user so the app knows someone is logged in
           setUser(session.user);
-          
-          // Then verify the profile exists
-          if (event === 'SIGNED_IN') {
-            const profileExists = await verifyProfileExists(session.user.id);
-            
-            if (!profileExists) {
-              console.log('Profile does not exist on auth change, creating it');
-              await ensureUserProfile(session.user);
-            }
-          }
         } else {
           setUser(null);
         }
@@ -165,6 +124,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     );
 
     return () => {
+      clearTimeout(timeoutId);
       subscription.unsubscribe();
     };
   }, []);
@@ -188,6 +148,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     user,
     loading,
     signOut,
+    ensureProfile,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
