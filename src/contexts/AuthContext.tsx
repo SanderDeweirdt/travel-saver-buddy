@@ -1,6 +1,6 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { supabase, ensureUserProfile } from '@/integrations/supabase/client';
+import { supabase } from '@/integrations/supabase/client';
 import { Session, User } from '@supabase/supabase-js';
 import { toast } from 'sonner';
 
@@ -18,60 +18,27 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
-  const [profileCheckInProgress, setProfileCheckInProgress] = useState(false);
 
-  // Helper function to ensure user profile exists with proper error handling
+  // Helper function to ensure user profile exists
   const ensureProfile = async (): Promise<boolean> => {
     if (!user) {
       console.log('Cannot ensure profile: No user logged in');
       return false;
     }
     
-    if (profileCheckInProgress) {
-      console.log('Profile check already in progress');
+    // Simply verify the profile exists
+    const { data: profiles, error } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('id', user.id)
+      .single();
+    
+    if (error) {
+      console.error('Error checking profile:', error);
       return false;
     }
     
-    try {
-      setProfileCheckInProgress(true);
-      
-      // Simply verify the profile exists without creating it
-      const { data: profiles, error } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('id', user.id);
-      
-      if (error) {
-        console.error('Error checking profile:', error);
-        return false;
-      }
-      
-      if (profiles && profiles.length > 0) {
-        return true;
-      }
-      
-      // If no profile is found, try to create one
-      try {
-        const { error: insertError } = await supabase
-          .from('profiles')
-          .insert([{ id: user.id, email: user.email }]);
-        
-        if (insertError) {
-          console.error('Error creating profile:', insertError);
-          return false;
-        }
-        
-        return true;
-      } catch (insertErr) {
-        console.error('Error in profile creation:', insertErr);
-        return false;
-      }
-    } catch (e) {
-      console.error('Unexpected error in ensureProfile:', e);
-      return false;
-    } finally {
-      setProfileCheckInProgress(false);
-    }
+    return true;
   };
 
   useEffect(() => {
@@ -105,7 +72,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       } catch (error) {
         console.error('Error getting initial session:', error);
       } finally {
-        // Always set loading to false, even if errors occur
+        // Always set loading to false
         if (isSubscribed) setLoading(false);
       }
     };
@@ -116,7 +83,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         console.warn('Session check timed out, forcing loading state to false');
         setLoading(false);
       }
-    }, 3000); // Reduce timeout to 3 seconds for faster response
+    }, 2000); // Use a shorter timeout for better UX
     
     getInitialSession();
 

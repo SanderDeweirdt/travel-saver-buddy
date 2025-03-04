@@ -1,7 +1,7 @@
 
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 
 type ProtectedRouteProps = {
@@ -20,7 +20,7 @@ const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
         console.log('Authentication verification timed out');
         setIsTimeout(true);
         toast.error('Authentication verification timed out. Please try signing in again.');
-      }, 3000); // Reduce to 3 seconds for faster response
+      }, 2000); // 2 second timeout for faster UX
 
       return () => clearTimeout(timer);
     }
@@ -34,14 +34,13 @@ const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
     return <Navigate to="/signin" state={{ from: location, error: "Authentication timed out" }} replace />;
   }
 
-  // Show improved loading state while checking authentication
+  // Show loading state while checking authentication
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-muted/30">
         <div className="text-center">
           <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4"></div>
           <p className="text-muted-foreground">Verifying your authentication...</p>
-          <p className="text-xs text-muted-foreground mt-2">This should only take a moment</p>
         </div>
       </div>
     );

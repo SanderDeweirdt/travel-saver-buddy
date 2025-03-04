@@ -28,67 +28,50 @@ export const ensureUserProfile = async (userId: string, email: string | undefine
   try {
     console.log('Checking if profile exists for user:', userId);
 
-    // First check if the profile exists - with improved error handling
-    const { data: profiles, error: fetchError } = await supabase
+    // First check if the profile exists
+    const { data: profile, error: fetchError } = await supabase
       .from('profiles')
       .select('id')
       .eq('id', userId)
       .maybeSingle();
 
     // If profile exists, we're good
-    if (profiles) {
-      console.log('Profile found:', profiles.id);
+    if (profile) {
+      console.log('Profile found:', profile.id);
       return true;
     }
 
     // If error is not related to "no rows", something else went wrong
     if (fetchError && fetchError.code !== 'PGRST116') {
       console.error('Profile check error:', fetchError);
-      toast.error('Error checking user profile. Please try again.');
       return false;
     }
 
     // Profile doesn't exist, try to create it
     console.log('Creating profile for user:', userId);
     
-    // Standard insert approach - no RPC needed
-    const { data: newProfile, error: insertError } = await supabase
+    const { error: insertError } = await supabase
       .from('profiles')
       .insert([{ 
         id: userId, 
         email: email || '' 
-      }])
-      .select();
+      }]);
 
     if (insertError) {
-      // Check for conflicts (might already exist due to race condition)
-      if (insertError.code === '23505') { // unique_violation
-        console.log('Profile already exists (conflict during creation)');
+      console.error('Error creating profile:', insertError);
+      
+      // One final check to see if profile was created by trigger
+      const { data: finalCheck } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('id', userId)
+        .maybeSingle();
+        
+      if (finalCheck) {
+        console.log('Profile exists after final check - likely created by trigger');
         return true;
       }
       
-      // Check for RLS policy violation
-      if (insertError.code === '42501') {
-        console.error('RLS policy violation. User lacks permission to create their profile.');
-        
-        // Make one final check to see if the profile was created anyway by the trigger
-        const { data: finalCheck, error: finalCheckError } = await supabase
-          .from('profiles')
-          .select('id')
-          .eq('id', userId)
-          .maybeSingle();
-          
-        if (finalCheck) {
-          console.log('Profile exists after final check - likely created by trigger');
-          return true;
-        }
-        
-        toast.error('Authorization error with user profile. Try signing out and in again.');
-        return false;
-      }
-      
-      console.error('Error creating profile:', insertError);
-      toast.error('Could not create user profile. Please try again later.');
       return false;
     }
 
@@ -96,7 +79,6 @@ export const ensureUserProfile = async (userId: string, email: string | undefine
     return true;
   } catch (err) {
     console.error('Unexpected error in ensureUserProfile:', err);
-    toast.error('An unexpected error occurred with your user profile');
     return false;
   }
 };
