@@ -20,7 +20,7 @@ const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
         console.log('Authentication verification timed out');
         setIsTimeout(true);
         toast.error('Authentication verification timed out. Please try signing in again.');
-      }, 8000); // 8 seconds timeout
+      }, 3000); // Reduce to 3 seconds for faster response
 
       return () => clearTimeout(timer);
     }

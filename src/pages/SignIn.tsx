@@ -74,7 +74,7 @@ const SignIn = () => {
             
             // Small delay between attempts
             if (attempts < maxAttempts) {
-              await new Promise(resolve => setTimeout(resolve, 1000));
+              await new Promise(resolve => setTimeout(resolve, 500));
             }
           } catch (profileErr) {
             console.error(`Profile check attempt ${attempts} failed:`, profileErr);
@@ -87,10 +87,10 @@ const SignIn = () => {
         }
         
         // Navigate to the requested page or dashboard
-        // Add a slight delay to ensure the auth state is updated
+        // Use a shorter delay to ensure better user experience
         setTimeout(() => {
           navigate(from, { replace: true });
-        }, 500);
+        }, 300);
       }
     } catch (err: any) {
       console.error('Error signing in:', err);

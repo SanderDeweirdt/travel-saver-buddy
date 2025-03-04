@@ -1,6 +1,6 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase, ensureUserProfile } from '@/integrations/supabase/client';
 import { Session, User } from '@supabase/supabase-js';
 import { toast } from 'sonner';
 
@@ -75,55 +75,72 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   useEffect(() => {
+    let isSubscribed = true;
+    
     // Get session on mount with a timeout safeguard
     const getInitialSession = async () => {
       try {
         console.log('Getting initial session...');
-        const { data } = await supabase.auth.getSession();
-        setSession(data.session);
+        const { data, error } = await supabase.auth.getSession();
+        
+        if (error) {
+          console.error('Error getting initial session:', error);
+          if (isSubscribed) setLoading(false);
+          return;
+        }
         
         if (data.session?.user) {
           console.log('Session found, setting user:', data.session.user.id);
-          setUser(data.session.user);
+          if (isSubscribed) {
+            setSession(data.session);
+            setUser(data.session.user);
+          }
         } else {
           console.log('No session found');
-          setUser(null);
+          if (isSubscribed) {
+            setUser(null);
+            setSession(null);
+          }
         }
       } catch (error) {
         console.error('Error getting initial session:', error);
       } finally {
         // Always set loading to false, even if errors occur
-        setLoading(false);
+        if (isSubscribed) setLoading(false);
       }
     };
 
     // Set a timeout to ensure loading state doesn't get stuck
     const timeoutId = setTimeout(() => {
-      if (loading) {
+      if (loading && isSubscribed) {
         console.warn('Session check timed out, forcing loading state to false');
         setLoading(false);
       }
-    }, 5000); // 5 second timeout
-
+    }, 3000); // Reduce timeout to 3 seconds for faster response
+    
     getInitialSession();
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        console.log('Auth state changed:', event, session?.user?.id);
-        setSession(session);
+      async (event, currentSession) => {
+        console.log('Auth state changed:', event, currentSession?.user?.id);
         
-        if (session?.user) {
-          setUser(session.user);
-        } else {
-          setUser(null);
+        if (isSubscribed) {
+          setSession(currentSession);
+          
+          if (currentSession?.user) {
+            setUser(currentSession.user);
+          } else {
+            setUser(null);
+          }
+          
+          setLoading(false);
         }
-        
-        setLoading(false);
       }
     );
 
     return () => {
+      isSubscribed = false;
       clearTimeout(timeoutId);
       subscription.unsubscribe();
     };

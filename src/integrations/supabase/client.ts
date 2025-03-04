@@ -10,7 +10,13 @@ const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiO
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
-export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true
+  }
+});
 
 // Helper function to check if a profile exists and create it if not
 export const ensureUserProfile = async (userId: string, email: string | undefined): Promise<boolean> => {
@@ -26,11 +32,12 @@ export const ensureUserProfile = async (userId: string, email: string | undefine
     const { data: profiles, error: fetchError } = await supabase
       .from('profiles')
       .select('id')
-      .eq('id', userId);
+      .eq('id', userId)
+      .maybeSingle();
 
     // If profile exists, we're good
-    if (profiles && profiles.length > 0) {
-      console.log('Profile found:', profiles[0].id);
+    if (profiles) {
+      console.log('Profile found:', profiles.id);
       return true;
     }
 
@@ -44,23 +51,14 @@ export const ensureUserProfile = async (userId: string, email: string | undefine
     // Profile doesn't exist, try to create it
     console.log('Creating profile for user:', userId);
     
-    // First try with a direct admin insert using RPC if available
-    try {
-      // Remove this RPC call as it's causing the type error and it's not actually 
-      // being used successfully in the flow since there's no actual RPC function
-      console.log('Trying standard insert approach directly');
-    } catch (rpcErr) {
-      // If RPC fails, continue with standard insert approach
-      console.log('RPC not available, trying standard insert');
-    }
-
-    // Standard insert approach
+    // Standard insert approach - no RPC needed
     const { data: newProfile, error: insertError } = await supabase
       .from('profiles')
       .insert([{ 
         id: userId, 
         email: email || '' 
-      }]);
+      }])
+      .select();
 
     if (insertError) {
       // Check for conflicts (might already exist due to race condition)
@@ -77,9 +75,10 @@ export const ensureUserProfile = async (userId: string, email: string | undefine
         const { data: finalCheck, error: finalCheckError } = await supabase
           .from('profiles')
           .select('id')
-          .eq('id', userId);
+          .eq('id', userId)
+          .maybeSingle();
           
-        if (finalCheck && finalCheck.length > 0) {
+        if (finalCheck) {
           console.log('Profile exists after final check - likely created by trigger');
           return true;
         }
