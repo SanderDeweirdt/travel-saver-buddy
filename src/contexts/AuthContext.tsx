@@ -23,20 +23,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       console.log('Checking if profile exists for user:', user.id);
       
-      // First, check if the profile already exists
-      const { data: profile, error: selectError } = await supabase
+      // First, check for profiles using array result not single object
+      const { data: profiles, error: selectError } = await supabase
         .from('profiles')
         .select('id')
-        .eq('id', user.id)
-        .single();
+        .eq('id', user.id);
       
       // If profile exists, return true
-      if (profile) {
-        console.log('Profile already exists:', profile.id);
+      if (profiles && profiles.length > 0) {
+        console.log('Profile already exists:', profiles[0].id);
         return true;
       }
       
-      // If error is not "No rows found" (PGRST116), something else went wrong
+      // If error is not related to "no rows", something else went wrong
       if (selectError && selectError.code !== 'PGRST116') {
         console.error('Error checking user profile:', selectError);
         return false;
@@ -44,15 +43,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       
       console.log('Profile does not exist, creating now...');
       
-      // If profile doesn't exist (PGRST116), create it
+      // If profile doesn't exist, create it
       const { data: insertData, error: insertError } = await supabase
         .from('profiles')
         .insert([{ 
           id: user.id,
           email: user.email
-        }])
-        .select('id')
-        .single();
+        }]);
       
       if (insertError) {
         console.error('Error creating profile:', insertError);
@@ -68,17 +65,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         return false;
       }
       
-      // Verify the profile was created by checking the returned data
-      if (insertData && insertData.id) {
-        console.log('Profile created successfully:', insertData.id);
-        toast.success('Profile created successfully');
-        return true;
-      } else {
-        // This shouldn't happen if insert succeeds, but check anyway
-        console.error('Profile creation returned no data');
-        toast.error('Profile creation failed. Please try again.');
-        return false;
-      }
+      console.log('Profile created successfully');
+      toast.success('Profile created successfully');
+      return true;
     } catch (error) {
       console.error('Unexpected error in ensureUserProfile:', error);
       toast.error('An unexpected error occurred with your user profile');
@@ -86,38 +75,30 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  // Verify profile existence with retries
+  // Verify profile existence - simplified to not use single() which causes 406 errors
   const verifyProfileExists = async (userId: string): Promise<boolean> => {
-    // Try up to 3 times with a slight delay
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      try {
-        console.log(`Verifying profile exists (attempt ${attempt}/3) for user:`, userId);
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('id')
-          .eq('id', userId)
-          .single();
-        
-        if (data) {
-          console.log('Profile verification successful:', data.id);
-          return true;
-        }
-        
-        if (error && error.code !== 'PGRST116') {
-          console.error(`Profile verification error (attempt ${attempt}/3):`, error);
-        }
-        
-        // Wait a bit before retrying (200ms, 400ms, 600ms)
-        if (attempt < 3) {
-          await new Promise(resolve => setTimeout(resolve, attempt * 200));
-        }
-      } catch (err) {
-        console.error(`Unexpected error in profile verification (attempt ${attempt}/3):`, err);
+    try {
+      console.log('Verifying profile exists for user:', userId);
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('id', userId);
+      
+      if (data && data.length > 0) {
+        console.log('Profile verification successful:', data[0].id);
+        return true;
       }
+      
+      if (error) {
+        console.error('Profile verification error:', error);
+        return false;
+      }
+      
+      return false;
+    } catch (err) {
+      console.error('Unexpected error in profile verification:', err);
+      return false;
     }
-    
-    console.error('Profile verification failed after 3 attempts');
-    return false;
   };
 
   useEffect(() => {
@@ -140,13 +121,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           if (!profileExists) {
             console.log('Profile does not exist on initial session, creating it');
             // Create the profile if it doesn't exist
-            const created = await ensureUserProfile(data.session.user);
-            
-            if (!created) {
-              console.warn('Failed to create profile on initial session');
-              // We don't log out the user here, as they're technically authenticated
-              // But operations requiring a profile might fail
-            }
+            await ensureUserProfile(data.session.user);
           }
         } else {
           console.log('No session found');
@@ -155,6 +130,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       } catch (error) {
         console.error('Error getting initial session:', error);
       } finally {
+        // Always set loading to false, even if errors occur
         setLoading(false);
       }
     };
@@ -177,13 +153,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             
             if (!profileExists) {
               console.log('Profile does not exist on auth change, creating it');
-              const created = await ensureUserProfile(session.user);
-              
-              if (!created) {
-                console.warn('Failed to create profile on auth change');
-                // We don't log out the user here, as they're technically authenticated
-                // But operations requiring a profile might fail
-              }
+              await ensureUserProfile(session.user);
             }
           }
         } else {
@@ -200,11 +170,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const signOut = async () => {
+    setLoading(true);
     try {
       await supabase.auth.signOut();
+      setUser(null);
+      setSession(null);
     } catch (error) {
       console.error('Error signing out:', error);
       toast.error('Error signing out. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 

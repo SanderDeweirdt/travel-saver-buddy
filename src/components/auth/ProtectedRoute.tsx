@@ -1,14 +1,38 @@
 
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 
 type ProtectedRouteProps = {
   children: React.ReactNode;
 };
 
 const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
-  const { user, loading } = useAuth();
+  const { user, loading, signOut } = useAuth();
   const location = useLocation();
+  const [isTimeout, setIsTimeout] = useState(false);
+
+  // Add a timeout to prevent infinite loading
+  useEffect(() => {
+    if (loading) {
+      const timer = setTimeout(() => {
+        console.log('Authentication verification timed out');
+        setIsTimeout(true);
+        toast.error('Authentication verification timed out. Please try signing in again.');
+      }, 8000); // 8 seconds timeout
+
+      return () => clearTimeout(timer);
+    }
+  }, [loading]);
+
+  // Handle authentication timeout
+  if (isTimeout) {
+    console.log('Authentication timed out, redirecting to signin');
+    // Force sign out to reset the state
+    signOut().catch(err => console.error('Error signing out after timeout:', err));
+    return <Navigate to="/signin" state={{ from: location, error: "Authentication timed out" }} replace />;
+  }
 
   // Show improved loading state while checking authentication
   if (loading) {

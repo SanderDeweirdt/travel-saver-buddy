@@ -1,7 +1,7 @@
 
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase, ensureUserProfile } from '@/integrations/supabase/client';
+import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
 const AuthCallback = () => {
@@ -34,24 +34,49 @@ const AuthCallback = () => {
         
         console.log('OAuth session found, user ID:', data.session.user.id);
         
-        // Verify the profile exists and create it if needed
+        // Use simplified profile creation logic
         const userId = data.session.user.id;
         const userEmail = data.session.user.email;
         
-        const profileExists = await ensureUserProfile(userId, userEmail);
-        
-        if (profileExists) {
-          // Success path
-          toast.success('Successfully signed in!');
-        } else {
-          // Warning but continue
+        try {
+          // Check if profile exists
+          const { data: profiles, error: profileError } = await supabase
+            .from('profiles')
+            .select('id')
+            .eq('id', userId);
+            
+          if (profileError) {
+            console.error('Error checking profile:', profileError);
+          }
+          
+          // Create profile if it doesn't exist
+          if (!profiles || profiles.length === 0) {
+            console.log('Creating profile for user:', userId);
+            const { error: insertError } = await supabase
+              .from('profiles')
+              .insert([{ 
+                id: userId, 
+                email: userEmail || '' 
+              }]);
+              
+            if (insertError) {
+              console.error('Error creating profile:', insertError);
+              toast.warning('Profile setup may be incomplete. Some features may be limited.');
+            } else {
+              toast.success('Profile created successfully!');
+            }
+          } else {
+            toast.success('Successfully signed in!');
+          }
+        } catch (profileErr) {
+          console.error('Error in profile management:', profileErr);
           toast.warning('Profile setup may be incomplete. Some features may be limited.');
         }
         
-        // Add a delay to ensure auth state is properly updated
+        // Navigate to dashboard with delay to ensure auth state is updated
         setTimeout(() => {
           navigate('/dashboard', { replace: true });
-        }, 800);
+        }, 1000);
       } catch (error: any) {
         console.error('Unexpected error during authentication:', error);
         setError(error.message || 'An unexpected error occurred');
