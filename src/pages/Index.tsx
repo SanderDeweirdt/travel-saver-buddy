@@ -4,11 +4,9 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowRight, TrendingDown, Shield, BarChart3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { useAuth } from '@/contexts/AuthContext';
 
 const Index = () => {
   const navigate = useNavigate();
-  const { user, signOut } = useAuth();
   const [isScrolled, setIsScrolled] = React.useState(false);
   
   useEffect(() => {
@@ -55,47 +53,26 @@ const Index = () => {
           </div>
           
           <div className="hidden md:flex space-x-6">
-            {user ? (
-              <>
-                <Button 
-                  variant="ghost" 
-                  className="text-sm font-medium"
-                  onClick={() => navigate('/dashboard')}
-                >
-                  Dashboard
-                </Button>
-                <Button 
-                  variant="ghost" 
-                  className="text-sm font-medium"
-                  onClick={() => signOut()}
-                >
-                  Sign Out
-                </Button>
-              </>
-            ) : (
-              <>
-                <Button 
-                  variant="ghost" 
-                  className="text-sm font-medium"
-                  onClick={() => navigate('/signin')}
-                >
-                  Sign In
-                </Button>
-                <Button 
-                  onClick={() => navigate('/signup')}
-                  className="text-sm"
-                >
-                  Get Started
-                </Button>
-              </>
-            )}
+            <Button 
+              variant="ghost" 
+              className="text-sm font-medium"
+              onClick={() => navigate('/signin')}
+            >
+              Sign In
+            </Button>
+            <Button 
+              onClick={() => navigate('/signup')}
+              className="text-sm"
+            >
+              Get Started
+            </Button>
           </div>
           
           <Button 
             className="md:hidden"
-            onClick={() => user ? navigate('/dashboard') : navigate('/signin')}
+            onClick={() => navigate('/signin')}
           >
-            {user ? 'Dashboard' : 'Sign In'}
+            Sign In
           </Button>
         </div>
       </header>
