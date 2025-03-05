@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { format } from 'date-fns';
@@ -25,7 +25,7 @@ import {
 import Header from '@/components/layout/Header';
 import NavigationBar from '@/components/layout/NavigationBar';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase, ensureUserProfile } from '@/integrations/supabase/client';
+import { supabase } from '@/integrations/supabase/client';
 import { Database } from '@/integrations/supabase/types';
 
 type BookingStatus = Database['public']['Enums']['booking_status'];
@@ -45,7 +45,6 @@ const AddBooking = () => {
   const [checkInDate, setCheckInDate] = useState<Date | undefined>(undefined);
   const [checkOutDate, setCheckOutDate] = useState<Date | undefined>(undefined);
   const [cancellationDate, setCancellationDate] = useState<Date | undefined>(undefined);
-  const [profileVerified, setProfileVerified] = useState(false);
   
   const {
     register,
@@ -61,31 +60,6 @@ const AddBooking = () => {
   });
   
   const watchCurrency = watch('currency');
-  
-  // Check if profile exists on component mount
-  useEffect(() => {
-    const verifyUserProfile = async () => {
-      if (!user) return;
-      
-      try {
-        // Ensure user profile exists
-        const profileSuccess = await ensureUserProfile(user.id, user.email);
-        
-        if (profileSuccess) {
-          setProfileVerified(true);
-          console.log('User profile verified successfully');
-        } else {
-          console.error('Failed to verify user profile');
-          toast.error('Unable to verify your user profile. Please try signing out and in again.');
-        }
-      } catch (error) {
-        console.error('Error verifying profile:', error);
-        toast.error('Error checking your user profile. Please try again later.');
-      }
-    };
-    
-    verifyUserProfile();
-  }, [user]);
   
   const validateDates = () => {
     if (!checkInDate) {
@@ -114,19 +88,8 @@ const AddBooking = () => {
   const onSubmit = async (data: FormData) => {
     if (!validateDates() || !user) return;
     
-    if (!profileVerified) {
-      toast.error('Your user profile is not ready. Please try signing out and in again.');
-      return;
-    }
-    
     try {
       setIsSubmitting(true);
-      
-      // Double-check profile exists right before submitting
-      const profileExists = await ensureUserProfile(user.id, user.email);
-      if (!profileExists) {
-        throw new Error('Unable to verify your user profile');
-      }
       
       const bookingData = {
         user_id: user.id,
@@ -147,18 +110,14 @@ const AddBooking = () => {
         .insert(bookingData);
       
       if (error) {
-        console.error('Error details:', error);
-        if (error.code === '23503' && error.message.includes('profiles')) {
-          throw new Error('Your user profile does not exist. Please sign out and sign in again.');
-        }
         throw error;
       }
       
       toast.success('Booking added successfully');
       navigate('/dashboard');
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error adding booking:', error);
-      toast.error(error.message || 'Failed to add booking. Please try again.');
+      toast.error('Failed to add booking. Please try again.');
     } finally {
       setIsSubmitting(false);
     }

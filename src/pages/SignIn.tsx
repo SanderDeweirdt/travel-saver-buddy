@@ -1,25 +1,21 @@
 
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
+import { supabase } from '@/integrations/supabase/client';
 import SignInForm from '@/components/auth/SignInForm';
 import { toast } from 'sonner';
 
 const SignIn = () => {
   const navigate = useNavigate();
-  const location = useLocation();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
-  // Get the redirect path from location state or default to dashboard
-  const from = location.state?.from?.pathname || '/dashboard';
-  
   useEffect(() => {
     // Check if user is already logged in
-    const checkSession = () => {
-      const storedUser = localStorage.getItem('mockUser');
-      if (storedUser) {
-        console.log('User already logged in, redirecting to dashboard');
-        navigate('/dashboard', { replace: true });
+    const checkSession = async () => {
+      const { data } = await supabase.auth.getSession();
+      if (data.session) {
+        navigate('/dashboard');
       }
     };
     
@@ -31,23 +27,19 @@ const SignIn = () => {
     setError(null);
     
     try {
-      // Simulate authentication delay
-      await new Promise(resolve => setTimeout(resolve, 800));
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
       
-      // For demo purposes, any email/password combination works
-      const mockUser = {
-        id: '12345',
-        email: email
-      };
+      if (error) {
+        throw error;
+      }
       
-      // Store in localStorage for our mock auth
-      localStorage.setItem('mockUser', JSON.stringify(mockUser));
-      
-      console.log('Sign in successful, user ID:', mockUser.id);
-      toast.success('Successfully signed in!');
-      
-      // Navigate to the requested page or dashboard
-      navigate(from, { replace: true });
+      if (data.user) {
+        toast.success('Successfully signed in!');
+        navigate('/dashboard');
+      }
     } catch (err: any) {
       console.error('Error signing in:', err);
       setError(err.message || 'An error occurred during sign in');
@@ -62,23 +54,20 @@ const SignIn = () => {
     setError(null);
     
     try {
-      // Simulate authentication delay
-      await new Promise(resolve => setTimeout(resolve, 800));
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback`,
+        }
+      });
       
-      // Mock Google auth
-      const mockUser = {
-        id: 'google-user-123',
-        email: 'google-user@example.com'
-      };
-      
-      localStorage.setItem('mockUser', JSON.stringify(mockUser));
-      toast.success('Successfully signed in with Google!');
-      navigate(from, { replace: true });
+      if (error) {
+        throw error;
+      }
     } catch (err: any) {
       console.error('Error signing in with Google:', err);
       setError(err.message || 'An error occurred during sign in');
       toast.error(err.message || 'Sign in with Google failed');
-    } finally {
       setIsLoading(false);
     }
   };
