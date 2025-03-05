@@ -1,7 +1,5 @@
 
 import { toast } from 'sonner';
-import { supabase } from '@/integrations/supabase/client';
-import { User } from '@supabase/supabase-js';
 
 export interface PriceAlert {
   id: string;
@@ -37,6 +35,60 @@ export interface SavingsData {
   averageSavingPercentage: number;
 }
 
+// Mock data for bookings
+const mockBookings: Booking[] = [
+  {
+    id: "1",
+    hotel_name: "Grand Hyatt New York",
+    location: "New York, NY",
+    check_in_date: "Aug 15, 2023",
+    check_out_date: "Aug 20, 2023",
+    original_price: 1249.50,
+    current_price: 989.75,
+    currency: "$",
+    room_type: "King Room",
+    cancellation_deadline: "Aug 13, 2023",
+    image_url: "https://images.unsplash.com/photo-1566073771259-6a8506099945?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1080&q=80",
+    status: 'upcoming'
+  },
+  {
+    id: "2",
+    hotel_name: "Hilton San Francisco",
+    location: "San Francisco, CA",
+    check_in_date: "Sep 10, 2023",
+    check_out_date: "Sep 15, 2023",
+    original_price: 899.00,
+    current_price: 749.00,
+    currency: "$",
+    room_type: "Double Queen Room",
+    cancellation_deadline: "Sep 8, 2023",
+    image_url: "https://images.unsplash.com/photo-1618773928121-c32242e63f39?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1080&q=80",
+    status: 'upcoming'
+  },
+  {
+    id: "3",
+    hotel_name: "Marriott London",
+    location: "London, UK",
+    check_in_date: "Oct 5, 2023",
+    check_out_date: "Oct 10, 2023",
+    original_price: 1100.00,
+    current_price: 1100.00,
+    currency: "£",
+    room_type: "Executive Suite",
+    cancellation_deadline: "Oct 2, 2023",
+    image_url: "https://images.unsplash.com/photo-1590073242678-70ee3fc28f8a?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1080&q=80",
+    status: 'upcoming'
+  }
+];
+
+// Mock data for savings
+const mockSavingsData: SavingsData = {
+  totalSavings: 409.75,
+  currency: "$",
+  rebookings: 2,
+  averageSavingPercentage: 24
+};
+
 export const dismissAlert = async (alertId: string, setPriceAlerts: React.Dispatch<React.SetStateAction<PriceAlert[]>>) => {
   // In a real application, you might want to mark this alert as dismissed in the database
   setPriceAlerts(prev => prev.filter(alert => alert.id !== alertId));
@@ -45,7 +97,7 @@ export const dismissAlert = async (alertId: string, setPriceAlerts: React.Dispat
 
 export const rebookHotel = async (
   alertId: string,
-  user: User | null,
+  user: any | null,
   priceAlerts: PriceAlert[],
   bookings: Booking[],
   setPriceAlerts: React.Dispatch<React.SetStateAction<PriceAlert[]>>,
@@ -65,28 +117,8 @@ export const rebookHotel = async (
     // Calculate the savings amount
     const savingsAmount = booking.original_price - booking.current_price;
     
-    // Update the booking with the new price
-    const { error: updateError } = await supabase
-      .from('bookings')
-      .update({
-        original_price: booking.current_price,
-      })
-      .eq('id', alertId);
-    
-    if (updateError) throw updateError;
-    
-    // Record the savings
-    const { error: savingsError } = await supabase
-      .from('savings')
-      .insert([{
-        user_id: user.id,
-        booking_id: alertId,
-        amount: savingsAmount,
-        currency: booking.currency,
-        description: `Rebooked ${booking.hotel_name} at a lower rate`
-      }]);
-    
-    if (savingsError) throw savingsError;
+    // Simulate API call
+    await new Promise(resolve => setTimeout(resolve, 800));
     
     // Remove the alert
     setPriceAlerts(prev => prev.filter(a => a.id !== alertId));
@@ -116,50 +148,15 @@ export const rebookHotel = async (
   }
 };
 
-export const fetchDashboardData = async (user: User | null) => {
+export const fetchDashboardData = async (user: any | null) => {
   if (!user) return { bookings: [], priceAlerts: [], savingsData: null, error: new Error('User not authenticated') };
   
   try {
-    // Fetch bookings
-    const { data: bookingsData, error: bookingsError } = await supabase
-      .from('bookings')
-      .select('*')
-      .order('check_in_date', { ascending: true });
-    
-    if (bookingsError) {
-      throw bookingsError;
-    }
-    
-    // Format the bookings data
-    const formattedBookings = bookingsData.map(booking => ({
-      id: booking.id,
-      hotel_name: booking.hotel_name,
-      location: booking.location,
-      check_in_date: new Date(booking.check_in_date).toLocaleDateString('en-US', { 
-        month: 'short', 
-        day: 'numeric', 
-        year: 'numeric' 
-      }),
-      check_out_date: new Date(booking.check_out_date).toLocaleDateString('en-US', { 
-        month: 'short', 
-        day: 'numeric', 
-        year: 'numeric' 
-      }),
-      original_price: booking.original_price,
-      current_price: booking.current_price,
-      currency: booking.currency,
-      room_type: booking.room_type,
-      cancellation_deadline: booking.cancellation_deadline ? 
-        new Date(booking.cancellation_deadline).toLocaleDateString('en-US', { 
-          month: 'short', 
-          day: 'numeric' 
-        }) : undefined,
-      image_url: booking.image_url,
-      status: booking.status,
-    }));
+    // Simulate API call delay
+    await new Promise(resolve => setTimeout(resolve, 800));
     
     // Generate price alerts for bookings with price drops
-    const alerts = formattedBookings
+    const alerts = mockBookings
       .filter(booking => booking.current_price < booking.original_price)
       .map(booking => ({
         id: booking.id,
@@ -173,46 +170,10 @@ export const fetchDashboardData = async (user: User | null) => {
         imageUrl: booking.image_url || '',
       }));
     
-    // Fetch savings data
-    const { data: savingsData, error: savingsError } = await supabase
-      .from('savings')
-      .select('amount, currency');
-    
-    if (savingsError) {
-      throw savingsError;
-    }
-    
-    // Calculate total savings
-    let processedSavingsData = null;
-    
-    if (savingsData && savingsData.length > 0) {
-      const totalSaved = savingsData.reduce((sum, item) => sum + Number(item.amount), 0);
-      const rebookingsCount = savingsData.length;
-      
-      // Calculate average savings percentage
-      // For simplicity, we're using a fixed percentage here
-      // In a real app, you would calculate this based on original booking prices
-      const avgSavingsPercentage = Math.round((totalSaved / (totalSaved * 4)) * 100);
-      
-      processedSavingsData = {
-        totalSavings: totalSaved,
-        currency: savingsData[0].currency || "$",
-        rebookings: rebookingsCount,
-        averageSavingPercentage: avgSavingsPercentage || 24
-      };
-    } else {
-      processedSavingsData = {
-        totalSavings: 0,
-        currency: "$",
-        rebookings: 0,
-        averageSavingPercentage: 0
-      };
-    }
-    
     return {
-      bookings: formattedBookings,
+      bookings: mockBookings,
       priceAlerts: alerts,
-      savingsData: processedSavingsData,
+      savingsData: mockSavingsData,
       error: null
     };
   } catch (error) {

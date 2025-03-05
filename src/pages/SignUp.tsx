@@ -1,7 +1,5 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
 import { User, Mail, Lock, ArrowRight, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,9 +19,9 @@ const SignUp = () => {
   
   useEffect(() => {
     // Check if user is already logged in
-    const checkSession = async () => {
-      const { data } = await supabase.auth.getSession();
-      if (data.session) {
+    const checkSession = () => {
+      const storedUser = localStorage.getItem('mockUser');
+      if (storedUser) {
         navigate('/dashboard');
       }
     };
@@ -59,25 +57,22 @@ const SignUp = () => {
     setError(null);
     
     try {
-      const { data, error } = await supabase.auth.signUp({
+      // Simulate network delay
+      await new Promise(resolve => setTimeout(resolve, 800));
+      
+      // For demo purposes, create a mock user
+      const mockUser = {
+        id: 'user-' + Math.random().toString(36).substring(2, 9),
         email,
-        password,
-        options: {
-          data: {
-            first_name: firstName,
-            last_name: lastName,
-          }
-        }
-      });
+        firstName,
+        lastName
+      };
       
-      if (error) {
-        throw error;
-      }
+      // In a real app, we would send this to the backend
+      console.log('Created user:', mockUser);
       
-      if (data.user) {
-        toast.success('Account created successfully! Please check your email to confirm your account.');
-        navigate('/signin');
-      }
+      toast.success('Account created successfully! Please sign in with your new account.');
+      navigate('/signin');
     } catch (err: any) {
       console.error('Error signing up:', err);
       setError(err.message || 'An error occurred during sign up');
@@ -92,20 +87,24 @@ const SignUp = () => {
     setError(null);
     
     try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
-        }
-      });
+      // Simulate network delay
+      await new Promise(resolve => setTimeout(resolve, 800));
       
-      if (error) {
-        throw error;
-      }
+      // Mock Google sign up
+      const mockUser = {
+        id: 'google-user-' + Math.random().toString(36).substring(2, 9),
+        email: 'google-user@example.com'
+      };
+      
+      localStorage.setItem('mockUser', JSON.stringify(mockUser));
+      toast.success('Successfully signed up with Google!');
+      navigate('/dashboard');
     } catch (err: any) {
       console.error('Error signing up with Google:', err);
       setError(err.message || 'An error occurred during sign up');
       toast.error(err.message || 'Sign up with Google failed');
+      setIsLoading(false);
+    } finally {
       setIsLoading(false);
     }
   };

@@ -9,7 +9,7 @@ type ProtectedRouteProps = {
 };
 
 const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
-  const { user, loading, signOut } = useAuth();
+  const { user, loading } = useAuth();
   const location = useLocation();
   const [isTimeout, setIsTimeout] = useState(false);
 
@@ -20,7 +20,7 @@ const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
         console.log('Authentication verification timed out');
         setIsTimeout(true);
         toast.error('Authentication verification timed out. Please try signing in again.');
-      }, 2000); // 2 second timeout for faster UX
+      }, 2000); // 2 second timeout
 
       return () => clearTimeout(timer);
     }
@@ -29,8 +29,6 @@ const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
   // Handle authentication timeout
   if (isTimeout) {
     console.log('Authentication timed out, redirecting to signin');
-    // Force sign out to reset the state
-    signOut().catch(err => console.error('Error signing out after timeout:', err));
     return <Navigate to="/signin" state={{ from: location, error: "Authentication timed out" }} replace />;
   }
 
