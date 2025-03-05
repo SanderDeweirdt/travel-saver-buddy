@@ -4,10 +4,12 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowRight, TrendingDown, Shield, BarChart3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
 
 const Index = () => {
   const navigate = useNavigate();
   const [isScrolled, setIsScrolled] = React.useState(false);
+  const { user } = useAuth();
   
   useEffect(() => {
     const handleScroll = () => {
@@ -17,6 +19,14 @@ const Index = () => {
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+  
+  const handleGetStarted = () => {
+    if (user) {
+      navigate('/dashboard');
+    } else {
+      navigate('/signup');
+    }
+  };
   
   const features = [
     {
@@ -53,27 +63,47 @@ const Index = () => {
           </div>
           
           <div className="hidden md:flex space-x-6">
+            {user ? (
+              <Button 
+                onClick={() => navigate('/dashboard')}
+                className="text-sm"
+              >
+                Dashboard
+              </Button>
+            ) : (
+              <>
+                <Button 
+                  variant="ghost" 
+                  className="text-sm font-medium"
+                  onClick={() => navigate('/signin')}
+                >
+                  Sign In
+                </Button>
+                <Button 
+                  onClick={() => navigate('/signup')}
+                  className="text-sm"
+                >
+                  Get Started
+                </Button>
+              </>
+            )}
+          </div>
+          
+          {user ? (
             <Button 
-              variant="ghost" 
-              className="text-sm font-medium"
+              className="md:hidden"
+              onClick={() => navigate('/dashboard')}
+            >
+              Dashboard
+            </Button>
+          ) : (
+            <Button 
+              className="md:hidden"
               onClick={() => navigate('/signin')}
             >
               Sign In
             </Button>
-            <Button 
-              onClick={() => navigate('/signup')}
-              className="text-sm"
-            >
-              Get Started
-            </Button>
-          </div>
-          
-          <Button 
-            className="md:hidden"
-            onClick={() => navigate('/signin')}
-          >
-            Sign In
-          </Button>
+          )}
         </div>
       </header>
       
@@ -93,7 +123,7 @@ const Index = () => {
                 <Button 
                   size="lg" 
                   className="text-base px-8 h-12"
-                  onClick={() => navigate('/signup')}
+                  onClick={handleGetStarted}
                 >
                   Get Started
                   <ArrowRight className="ml-2 h-5 w-5" />
@@ -102,9 +132,9 @@ const Index = () => {
                   variant="outline" 
                   size="lg" 
                   className="text-base px-8 h-12"
-                  onClick={() => navigate('/dashboard')}
+                  onClick={() => user ? navigate('/dashboard') : navigate('/signin')}
                 >
-                  View Demo
+                  {user ? 'View Dashboard' : 'View Demo'}
                 </Button>
               </div>
             </div>
@@ -254,7 +284,7 @@ const Index = () => {
               <Button 
                 size="lg" 
                 className="mt-8 text-base px-8 h-12"
-                onClick={() => navigate('/signup')}
+                onClick={handleGetStarted}
               >
                 Get Started for Free
               </Button>
