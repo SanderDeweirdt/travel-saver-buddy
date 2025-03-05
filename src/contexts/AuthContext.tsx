@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
@@ -24,6 +23,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const navigate = useNavigate();
 
   useEffect(() => {
+    // Check if we have a hash in the URL (from OAuth redirect)
+    if (window.location.hash && window.location.hash.includes('access_token')) {
+      // We have an OAuth redirect, let supabase handle it
+      setLoading(true);
+      const { data, error } = supabase.auth.getSession();
+      
+      if (error) {
+        console.error('Error getting session from hash:', error);
+        toast.error('Error during authentication');
+        setLoading(false);
+      } else {
+        // Clear the hash from the URL
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+    }
+
     // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
@@ -37,11 +52,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
+        
+        // Navigate to home page when user signs in
+        if (session && window.location.pathname.includes('/signin')) {
+          navigate('/');
+          toast.success('Successfully signed in!');
+        }
       }
     );
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [navigate]);
 
   const signIn = async (email: string, password: string) => {
     try {
@@ -68,7 +89,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: window.location.origin,
+          redirectTo: `${window.location.origin}`,
         },
       });
       
