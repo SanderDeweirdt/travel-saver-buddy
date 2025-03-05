@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
@@ -27,16 +28,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (window.location.hash && window.location.hash.includes('access_token')) {
       // We have an OAuth redirect, let supabase handle it
       setLoading(true);
-      const { data, error } = supabase.auth.getSession();
       
-      if (error) {
-        console.error('Error getting session from hash:', error);
-        toast.error('Error during authentication');
-        setLoading(false);
-      } else {
-        // Clear the hash from the URL
-        window.history.replaceState({}, document.title, window.location.pathname);
-      }
+      // Fixed: Need to await the Promise returned by getSession
+      const handleHashChange = async () => {
+        try {
+          const { data, error } = await supabase.auth.getSession();
+          
+          if (error) {
+            console.error('Error getting session from hash:', error);
+            toast.error('Error during authentication');
+          } else {
+            console.log('Successfully got session from hash:', data);
+          }
+        } catch (err) {
+          console.error('Unexpected error during authentication:', err);
+          toast.error('Unexpected error during authentication');
+        } finally {
+          // Clear the hash from the URL
+          window.history.replaceState({}, document.title, window.location.pathname);
+          setLoading(false);
+        }
+      };
+      
+      handleHashChange();
     }
 
     // Get initial session
