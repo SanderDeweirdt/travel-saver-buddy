@@ -134,7 +134,7 @@ const AddBookingModal: React.FC<AddBookingModalProps> = ({ isOpen, onClose, onBo
               placeholder="https://example.com/hotel"
               value={hotelUrl}
               onChange={(e) => setHotelUrl(e.target.value)}
-              type="url"
+              // Removed type="url" to prevent browser's built-in validation
             />
           </div>
           
@@ -180,12 +180,13 @@ const AddBookingModal: React.FC<AddBookingModalProps> = ({ isOpen, onClose, onBo
                     {checkInDate ? format(checkInDate, "PPP") : "Select date"}
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
+                <PopoverContent className="w-auto p-0" align="start">
                   <Calendar
                     mode="single"
                     selected={checkInDate}
                     onSelect={setCheckInDate}
                     initialFocus
+                    className="p-3 pointer-events-auto"
                   />
                 </PopoverContent>
               </Popover>
@@ -206,12 +207,13 @@ const AddBookingModal: React.FC<AddBookingModalProps> = ({ isOpen, onClose, onBo
                     {checkOutDate ? format(checkOutDate, "PPP") : "Select date"}
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
+                <PopoverContent className="w-auto p-0" align="start">
                   <Calendar
                     mode="single"
                     selected={checkOutDate}
                     onSelect={setCheckOutDate}
                     initialFocus
+                    className="p-3 pointer-events-auto"
                     disabled={(date) => {
                       return checkInDate ? date < checkInDate : false;
                     }}
@@ -236,12 +238,13 @@ const AddBookingModal: React.FC<AddBookingModalProps> = ({ isOpen, onClose, onBo
                   {cancellationDate ? format(cancellationDate, "PPP") : "Select date"}
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-auto p-0">
+              <PopoverContent className="w-auto p-0" align="start">
                 <Calendar
                   mode="single"
                   selected={cancellationDate}
                   onSelect={setCancellationDate}
                   initialFocus
+                  className="p-3 pointer-events-auto"
                 />
               </PopoverContent>
             </Popover>
