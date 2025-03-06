@@ -8,6 +8,7 @@ import { Card } from '@/components/ui/card';
 import { PlusCircle } from 'lucide-react';
 import AddBookingModal from '@/components/AddBookingModal';
 import BookingListView from '@/components/BookingListView';
+import Header from '@/components/layout/Header';
 import { toast } from 'sonner';
 
 interface Booking {
@@ -115,8 +116,9 @@ const UserDashboard = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="container max-w-7xl mx-auto px-4 py-8">
+    <div className="min-h-screen bg-background flex flex-col">
+      <Header />
+      <div className="container max-w-7xl mx-auto px-4 py-8 flex-1">
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-3xl font-bold">Your Bookings</h1>
           <Button 
