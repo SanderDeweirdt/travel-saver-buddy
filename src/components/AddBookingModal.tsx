@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -13,13 +13,25 @@ import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
+interface Booking {
+  id: string;
+  hotel_name: string;
+  hotel_url: string;
+  price_paid: number;
+  room_type: string;
+  check_in_date: string;
+  check_out_date: string;
+  cancellation_date: string;
+}
+
 interface AddBookingModalProps {
   isOpen: boolean;
   onClose: () => void;
   onBookingAdded: () => void;
+  booking?: Booking | null;
 }
 
-const AddBookingModal: React.FC<AddBookingModalProps> = ({ isOpen, onClose, onBookingAdded }) => {
+const AddBookingModal: React.FC<AddBookingModalProps> = ({ isOpen, onClose, onBookingAdded, booking }) => {
   const { user } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -30,6 +42,21 @@ const AddBookingModal: React.FC<AddBookingModalProps> = ({ isOpen, onClose, onBo
   const [checkInDate, setCheckInDate] = useState<Date | undefined>(undefined);
   const [checkOutDate, setCheckOutDate] = useState<Date | undefined>(undefined);
   const [cancellationDate, setCancellationDate] = useState<Date | undefined>(undefined);
+
+  // Populate form when editing a booking
+  useEffect(() => {
+    if (booking) {
+      setHotelName(booking.hotel_name);
+      setHotelUrl(booking.hotel_url || '');
+      setPricePaid(booking.price_paid.toString());
+      setRoomType(booking.room_type || '');
+      setCheckInDate(booking.check_in_date ? new Date(booking.check_in_date) : undefined);
+      setCheckOutDate(booking.check_out_date ? new Date(booking.check_out_date) : undefined);
+      setCancellationDate(booking.cancellation_date ? new Date(booking.cancellation_date) : undefined);
+    } else {
+      resetForm();
+    }
+  }, [booking, isOpen]);
 
   const resetForm = () => {
     setHotelName('');
@@ -78,31 +105,39 @@ const AddBookingModal: React.FC<AddBookingModalProps> = ({ isOpen, onClose, onBo
     try {
       setIsSubmitting(true);
 
-      // Type-safe insert
-      const { error } = await supabase
-        .from('bookings')
-        .insert([
-          {
-            user_id: user?.id,
-            hotel_name: hotelName,
-            hotel_url: hotelUrl,
-            price_paid: Number(pricePaid),
-            room_type: roomType,
-            check_in_date: checkInDate.toISOString(),
-            check_out_date: checkOutDate.toISOString(),
-            cancellation_date: cancellationDate.toISOString(),
-          },
-        ]);
+      const bookingData = {
+        user_id: user?.id,
+        hotel_name: hotelName,
+        hotel_url: hotelUrl,
+        price_paid: Number(pricePaid),
+        room_type: roomType,
+        check_in_date: checkInDate.toISOString(),
+        check_out_date: checkOutDate.toISOString(),
+        cancellation_date: cancellationDate.toISOString(),
+      };
 
-      if (error) {
-        throw error;
+      if (booking) {
+        // Update existing booking
+        const { error } = await supabase
+          .from('bookings')
+          .update(bookingData)
+          .eq('id', booking.id);
+
+        if (error) throw error;
+      } else {
+        // Insert new booking
+        const { error } = await supabase
+          .from('bookings')
+          .insert([bookingData]);
+
+        if (error) throw error;
       }
 
       resetForm();
       onBookingAdded();
     } catch (error: any) {
-      console.error('Error adding booking:', error.message);
-      toast.error('Failed to add booking. Please try again.');
+      console.error('Error saving booking:', error.message);
+      toast.error('Failed to save booking. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -112,7 +147,7 @@ const AddBookingModal: React.FC<AddBookingModalProps> = ({ isOpen, onClose, onBo
     <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Add New Booking</DialogTitle>
+          <DialogTitle>{booking ? 'Edit Booking' : 'Add New Booking'}</DialogTitle>
         </DialogHeader>
         
         <form onSubmit={handleSubmit} className="space-y-4 pt-4">
@@ -255,7 +290,7 @@ const AddBookingModal: React.FC<AddBookingModalProps> = ({ isOpen, onClose, onBo
               Cancel
             </Button>
             <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? 'Saving...' : 'Add Booking'}
+              {isSubmitting ? 'Saving...' : booking ? 'Update Booking' : 'Add Booking'}
             </Button>
           </div>
         </form>
