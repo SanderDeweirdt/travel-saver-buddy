@@ -23,6 +23,7 @@ import {
   TooltipProvider,
   TooltipTrigger 
 } from '@/components/ui/tooltip';
+import RebookHotelButton from './RebookHotelButton';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -152,12 +153,20 @@ const BookingListView: React.FC<BookingListViewProps> = ({
                           <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                         </div>
                       ) : booking.fetched_price !== undefined ? (
-                        <span className={
-                          isCheaper ? "text-green-600 font-medium" : 
-                          isMoreExpensive ? "text-red-600 font-medium" : ""
-                        }>
-                          ${booking.fetched_price.toFixed(2)}
-                        </span>
+                        <div className="flex justify-end items-center gap-3">
+                          <span className={
+                            isCheaper ? "text-green-600 font-medium" : 
+                            isMoreExpensive ? "text-red-600 font-medium" : ""
+                          }>
+                            ${booking.fetched_price.toFixed(2)}
+                          </span>
+                          {isCheaper && (
+                            <RebookHotelButton 
+                              hotelName={booking.hotel_name}
+                              cheaperPrice={true}
+                            />
+                          )}
+                        </div>
                       ) : (
                         <TooltipProvider>
                           <Tooltip>
