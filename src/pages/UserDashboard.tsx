@@ -41,6 +41,7 @@ const UserDashboard = () => {
   const fetchBookings = async () => {
     try {
       setIsLoading(true);
+      // Type-safe query that won't be in the types until after a server restart
       const { data, error } = await supabase
         .from('bookings')
         .select('*')

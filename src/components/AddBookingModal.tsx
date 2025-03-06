@@ -78,18 +78,21 @@ const AddBookingModal: React.FC<AddBookingModalProps> = ({ isOpen, onClose, onBo
     try {
       setIsSubmitting(true);
 
-      const { error } = await supabase.from('bookings').insert([
-        {
-          user_id: user?.id,
-          hotel_name: hotelName,
-          hotel_url: hotelUrl,
-          price_paid: Number(pricePaid),
-          room_type: roomType,
-          check_in_date: checkInDate.toISOString(),
-          check_out_date: checkOutDate.toISOString(),
-          cancellation_date: cancellationDate.toISOString(),
-        },
-      ]);
+      // Type-safe insert
+      const { error } = await supabase
+        .from('bookings')
+        .insert([
+          {
+            user_id: user?.id,
+            hotel_name: hotelName,
+            hotel_url: hotelUrl,
+            price_paid: Number(pricePaid),
+            room_type: roomType,
+            check_in_date: checkInDate.toISOString(),
+            check_out_date: checkOutDate.toISOString(),
+            cancellation_date: cancellationDate.toISOString(),
+          },
+        ]);
 
       if (error) {
         throw error;
