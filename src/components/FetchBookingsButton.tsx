@@ -31,11 +31,27 @@ const FetchBookingsButton: React.FC<FetchBookingsButtonProps> = ({ onFetchComple
         return;
       }
       
-      // Call our edge function to process Gmail messages
+      // Call our edge function to process Gmail messages with the updated parsing rules
       const { data, error } = await supabase.functions.invoke('process-gmail', {
         body: {
           accessToken: session.provider_token,
-          userId: user.id
+          userId: user.id,
+          parsingRules: {
+            match: {
+              from: "noreply@booking.com",
+              subjectContains: "Thanks! Your booking is confirmed"
+            },
+            extract: {
+              confirmation_number: "regex:Confirmation:\\s*(\\d+)",
+              hotel_name: "regex:Thanks, .*? Your booking in .*? is\\s*confirmed\\.\\s*(.*?)\\s*is expecting you",
+              hotel_url: "regex:https:\\/\\/www\\.booking\\.com\\/hotel\\/[^\\s]+",
+              price_paid: "regex:Total Price\\s*€\\s*(\\d+\\.\\d{2})",
+              room_type: "regex:Your reservation.*?\\n.*?,\\s*(.*?)\\n",
+              check_in_date: "regex:Check-in\\s*(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),\\s*(.*?)\\s\\(from",
+              check_out_date: "regex:Check-out\\s*(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),\\s*(.*?)\\s\\(until",
+              cancellation_date: "regex:You can cancel for FREE until (.*?) \\[CET\\]"
+            }
+          }
         }
       });
       
@@ -48,7 +64,7 @@ const FetchBookingsButton: React.FC<FetchBookingsButtonProps> = ({ onFetchComple
       if (newBookings > 0) {
         toast.success(`Imported ${newBookings} bookings from your Gmail`);
       } else {
-        toast.info('No new booking.com confirmations found in your Gmail');
+        toast.info('No new Booking.com confirmations found in your Gmail');
       }
       
       // Store the last import date in user metadata

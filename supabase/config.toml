@@ -1,23 +1,5 @@
 
-project_id = "your-project-id"
-
-[api]
-enabled = true
-port = 54321
-schemas = ["public", "storage"]
-
-[db]
-port = 54322
-
-[realtime]
-enabled = true
-
-[storage]
-enabled = true
-
-[studio]
-enabled = true
-port = 54323
+project_id = "syzbxllcmgvyhjzuzead"
 
 [functions.process-gmail]
-verify_jwt = true
+verify_jwt = false

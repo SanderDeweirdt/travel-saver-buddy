@@ -35,6 +35,23 @@ interface GmailMessage {
   internalDate: string;
 }
 
+interface ParsingRules {
+  match: {
+    from: string;
+    subjectContains: string;
+  };
+  extract: {
+    confirmation_number: string;
+    hotel_name: string;
+    hotel_url: string;
+    price_paid: string;
+    room_type: string;
+    check_in_date: string;
+    check_out_date: string;
+    cancellation_date: string;
+  };
+}
+
 interface BookingInfo {
   booking_reference: string;
   hotel_name: string;
@@ -47,20 +64,46 @@ interface BookingInfo {
   email_id: string;
 }
 
-// Extract booking information from email content
-function extractBookingInfo(body: string, emailId: string): BookingInfo | null {
+// Extract booking information from email content using the provided parsing rules
+function extractBookingInfo(body: string, emailId: string, parsingRules?: ParsingRules): BookingInfo | null {
   try {
     console.log("Extracting booking info from email");
     
-    // More targeted regex patterns for Booking.com emails
-    const bookingRefRegex = /Booking number:?\s*([A-Z0-9]+)/i;
-    const hotelNameRegex = /(?:Your booking at|Your booking is confirmed at)\s*(.+?)(?:\s*\(|\s*\n|\.)/i;
-    const roomTypeRegex = /Room type:?\s*(.+?)(?:\n|$)/i;
-    const checkInRegex = /Check-?in:?\s*(\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]+\s+\d{4})/i;
-    const checkOutRegex = /Check-?out:?\s*(\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]+\s+\d{4})/i;
-    const cancellationRegex = /(?:Free cancellation until|Cancel for free until):?\s*(\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]+\s+\d{4})/i;
-    const priceRegex = /(?:Total price|Total cost):?\s*(?:(?:US|€|£|\$))?(\d+[.,]\d+)(?:\s*(?:US|€|£|\$))?/i;
-    const hotelUrlRegex = /(https:\/\/(?:www\.)?booking\.com\/(?:hotel\/\w+\/)?[a-z0-9-]+\.html)/i;
+    // Define regex patterns based on provided parsing rules or use defaults
+    const extractRegex = (pattern: string): RegExp => {
+      const regexPattern = pattern.replace('regex:', '');
+      return new RegExp(regexPattern, 'i');
+    };
+    
+    let bookingRefRegex: RegExp;
+    let hotelNameRegex: RegExp; 
+    let roomTypeRegex: RegExp;
+    let checkInRegex: RegExp;
+    let checkOutRegex: RegExp;
+    let cancellationRegex: RegExp;
+    let priceRegex: RegExp;
+    let hotelUrlRegex: RegExp;
+    
+    if (parsingRules) {
+      bookingRefRegex = extractRegex(parsingRules.extract.confirmation_number);
+      hotelNameRegex = extractRegex(parsingRules.extract.hotel_name);
+      roomTypeRegex = extractRegex(parsingRules.extract.room_type);
+      checkInRegex = extractRegex(parsingRules.extract.check_in_date);
+      checkOutRegex = extractRegex(parsingRules.extract.check_out_date);
+      cancellationRegex = extractRegex(parsingRules.extract.cancellation_date);
+      priceRegex = extractRegex(parsingRules.extract.price_paid);
+      hotelUrlRegex = extractRegex(parsingRules.extract.hotel_url);
+    } else {
+      // Fallback to default patterns
+      bookingRefRegex = /Booking number:?\s*([A-Z0-9]+)/i;
+      hotelNameRegex = /(?:Your booking at|Your booking is confirmed at)\s*(.+?)(?:\s*\(|\s*\n|\.)/i;
+      roomTypeRegex = /Room type:?\s*(.+?)(?:\n|$)/i;
+      checkInRegex = /Check-?in:?\s*(\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]+\s+\d{4})/i;
+      checkOutRegex = /Check-?out:?\s*(\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]+\s+\d{4})/i;
+      cancellationRegex = /(?:Free cancellation until|Cancel for free until):?\s*(\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]+\s+\d{4})/i;
+      priceRegex = /(?:Total price|Total cost):?\s*(?:(?:US|€|£|\$))?(\d+[.,]\d+)(?:\s*(?:US|€|£|\$))?/i;
+      hotelUrlRegex = /(https:\/\/(?:www\.)?booking\.com\/(?:hotel\/\w+\/)?[a-z0-9-]+\.html)/i;
+    }
 
     // Match the patterns in the email body
     const bookingRefMatch = body.match(bookingRefRegex);
@@ -175,10 +218,15 @@ function extractPlainText(message: GmailMessage): string {
 }
 
 // Process Gmail messages to extract booking information
-async function processGmailMessages(accessToken: string, userId: string): Promise<BookingInfo[]> {
+async function processGmailMessages(accessToken: string, userId: string, parsingRules?: ParsingRules): Promise<BookingInfo[]> {
   try {
-    // Search specifically for booking.com confirmation emails
-    const query = 'from:booking.com subject:"Your booking is confirmed at"';
+    // Build query based on parsing rules or use default
+    let query = 'from:booking.com subject:"Your booking is confirmed at"';
+    
+    if (parsingRules) {
+      query = `from:${parsingRules.match.from} subject:"${parsingRules.match.subjectContains}"`;
+    }
+    
     console.log(`Searching Gmail with query: ${query}`);
     
     const response = await fetch(
@@ -233,7 +281,11 @@ async function processGmailMessages(accessToken: string, userId: string): Promis
       const subject = subjectHeader?.value || '';
       
       // Check if this is truly a booking confirmation
-      if (!subject.includes('Your booking is confirmed at')) {
+      const subjectMatch = parsingRules ? 
+        subject.includes(parsingRules.match.subjectContains) : 
+        subject.includes('Your booking is confirmed at');
+        
+      if (!subjectMatch) {
         console.log(`Skipping message ID ${messageInfo.id}: Not a booking confirmation`);
         continue;
       }
@@ -241,8 +293,8 @@ async function processGmailMessages(accessToken: string, userId: string): Promis
       // Extract the plain text content from the email
       const emailContent = extractPlainText(message);
       
-      // Extract booking information from the email content
-      const bookingInfo = extractBookingInfo(emailContent, message.id);
+      // Extract booking information from the email content using parsing rules
+      const bookingInfo = extractBookingInfo(emailContent, message.id, parsingRules);
       
       if (bookingInfo) {
         console.log(`Successfully extracted booking info for ${bookingInfo.hotel_name}`);
@@ -300,7 +352,7 @@ serve(async (req) => {
       });
     }
 
-    const { accessToken, userId } = await req.json();
+    const { accessToken, userId, parsingRules } = await req.json();
 
     if (!accessToken || !userId) {
       return new Response(JSON.stringify({ error: 'Missing required parameters' }), {
@@ -310,7 +362,7 @@ serve(async (req) => {
     }
 
     console.log(`Processing Gmail messages for user ${userId}`);
-    const bookings = await processGmailMessages(accessToken, userId);
+    const bookings = await processGmailMessages(accessToken, userId, parsingRules);
 
     return new Response(JSON.stringify({ success: true, bookings }), {
       status: 200,
