@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
@@ -27,12 +26,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Check if we have a hash in the URL (from OAuth redirect)
     if (window.location.hash && window.location.hash.includes('access_token')) {
-      // We have an OAuth redirect, let supabase handle it
       setLoading(true);
       
-      // Fixed: Need to await the Promise returned by getSession
       const handleHashChange = async () => {
         try {
           const { data, error } = await supabase.auth.getSession();
@@ -47,7 +43,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           console.error('Unexpected error during authentication:', err);
           toast.error('Unexpected error during authentication');
         } finally {
-          // Clear the hash from the URL
           window.history.replaceState({}, document.title, window.location.pathname);
           setLoading(false);
         }
@@ -56,12 +51,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       handleHashChange();
     }
 
-    // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
       
-      // Check if Gmail is connected
       if (session?.user) {
         const gmailConnected = session.user.user_metadata?.gmail_connected || false;
         setIsGmailConnected(gmailConnected);
@@ -70,13 +63,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setLoading(false);
     });
 
-    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (_event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
         
-        // Check if Gmail is connected
         if (session?.user) {
           const gmailConnected = session.user.user_metadata?.gmail_connected || false;
           setIsGmailConnected(gmailConnected);
@@ -86,7 +77,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         
         setLoading(false);
         
-        // Navigate to home page when user signs in
         if (session && window.location.pathname.includes('/signin')) {
           navigate('/');
           toast.success('Successfully signed in!');
@@ -119,19 +109,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signInWithGoogle = async (requestGmailAccess = false) => {
     try {
       setLoading(true);
-      let options = {
+      
+      const options: any = {
         redirectTo: `${window.location.origin}`,
       };
       
       if (requestGmailAccess) {
-        // Add additional Gmail scopes for accessing emails
-        options = {
-          ...options,
-          queryParams: {
-            access_type: 'offline',
-            prompt: 'consent',
-            scope: 'https://www.googleapis.com/auth/gmail.readonly',
-          },
+        options.scopes = 'https://www.googleapis.com/auth/gmail.readonly';
+        options.queryParams = {
+          access_type: 'offline',
+          prompt: 'consent',
         };
       }
       
@@ -144,7 +131,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         throw error;
       }
       
-      // No need for navigate or toast here as the OAuth flow will handle redirection
     } catch (error: any) {
       toast.error(error.message || 'Error signing in with Google');
       console.error('Error signing in with Google:', error);
@@ -156,17 +142,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       setLoading(true);
       
-      // Use a separate function for Gmail connection to request specific scopes
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
           redirectTo: `${window.location.origin}/profile`,
+          scopes: 'https://www.googleapis.com/auth/gmail.readonly',
           queryParams: {
             access_type: 'offline',
             prompt: 'consent',
-            scope: 'https://www.googleapis.com/auth/gmail.readonly',
             client_id: '891502742038-7or08pgkf2ljstmv5l7j1pf8sjurb29q.apps.googleusercontent.com',
-          },
+          } as any,
         },
       });
       
@@ -174,10 +159,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         throw error;
       }
       
-      // We'll handle the connection in the redirect callback
       toast.info('Connecting to Gmail...');
       
-      // Update metadata to indicate Gmail is connected
       await supabase.auth.updateUser({
         data: { gmail_connected: true }
       });

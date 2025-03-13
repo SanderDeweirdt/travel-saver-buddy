@@ -19,6 +19,5 @@ enabled = true
 enabled = true
 port = 54323
 
-[[functions]]
-name = "process-gmail"
+[functions.process-gmail]
 verify_jwt = true
