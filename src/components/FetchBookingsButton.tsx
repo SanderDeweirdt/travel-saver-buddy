@@ -45,8 +45,8 @@ const FetchBookingsButton: React.FC<FetchBookingsButtonProps> = ({ onFetchComple
               confirmation_number: "regex:Confirmation:\\s*(\\d+)",
               hotel_name: "regex:Your booking is confirmed at\\s*(.*)",
               hotel_url: "linkContains:/hotel/",
-              price_paid: "regex:Total Price\\s*€\\s*(\\d+\\.\\d{2})",
-              room_type: "regex:Your reservation\\s*\\d+ night[s]*,\\s*(.*?)\\n",
+              price_paid: "regex:Total price<\\/div>\\s*<div><span>€\\s*(\\d+\\.\\d{2})<\\/span>",
+              room_type: "regex:Your reservation<\\/strong><\\/div>\\s*<div>\\d+ night[s]*, ([^<]+)",
               check_in_date_raw: "regex:Check-in\\s*\\w+,\\s*(\\w+ \\d{1,2}, \\d{4})",
               check_out_date_raw: "regex:Check-out\\s*\\w+,\\s*(\\w+ \\d{1,2}, \\d{4})",
               cancellation_date_raw: "regex:cancel for FREE until\\s*(\\w+ \\d{1,2}, \\d{4} \\d{2}:\\d{2} [AP]M)"
