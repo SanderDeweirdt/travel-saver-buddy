@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -64,7 +65,7 @@ const GmailBookingImport: React.FC<GmailBookingImportProps> = ({
         return;
       }
       
-      // Call our edge function to process Gmail messages
+      // Call our edge function to process Gmail messages with enhanced parsing rules
       const { data, error } = await supabase.functions.invoke('process-gmail', {
         body: {
           accessToken: session.provider_token,
@@ -77,7 +78,7 @@ const GmailBookingImport: React.FC<GmailBookingImportProps> = ({
             extract: {
               confirmation_number: "regex:Confirmation:\\s*(\\d+)",
               hotel_name: "regex:Your booking is confirmed at\\s*(.*)",
-              hotel_url: "regex:https:\\/\\/www\\.booking\\.com\\/hotel\\/[^\\s\"\\)]+",
+              hotel_url: "linkContains:/hotel/",
               price_paid: "regex:Total Price\\s*€\\s*(\\d+\\.\\d{2})",
               room_type: "regex:Your reservation\\s*\\d+ night[s]*,\\s*(.*?)\\n",
               check_in_date_raw: "regex:Check-in\\s*\\w+,\\s*(\\w+ \\d{1,2}, \\d{4})",

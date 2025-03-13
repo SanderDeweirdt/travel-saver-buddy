@@ -1,3 +1,4 @@
+
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
 
@@ -79,6 +80,7 @@ function extractBookingInfo(body: string, emailId: string, parsingRules?: Parsin
     
     let bookingRefRegex: RegExp;
     let hotelNameRegex: RegExp; 
+    let hotelNameFallbackRegex: RegExp = /(.*?) is expecting you/i;
     let roomTypeRegex: RegExp;
     let checkInRegex: RegExp;
     let checkOutRegex: RegExp;
@@ -111,7 +113,13 @@ function extractBookingInfo(body: string, emailId: string, parsingRules?: Parsin
           : /cancel for FREE until\s*(\w+ \d{1,2}, \d{4} \d{2}:\d{2} [AP]M)/i);
           
       priceRegex = extractRegex(parsingRules.extract.price_paid);
-      hotelUrlRegex = extractRegex(parsingRules.extract.hotel_url);
+      
+      // Enhanced hotel URL extraction with "linkContains:/hotel/" pattern
+      if (parsingRules.extract.hotel_url.includes("linkContains:/hotel/")) {
+        hotelUrlRegex = /https:\/\/www\.booking\.com\/hotel\/[^\s"\)]+/i;
+      } else {
+        hotelUrlRegex = extractRegex(parsingRules.extract.hotel_url);
+      }
     } else {
       // Default patterns
       bookingRefRegex = /Confirmation:\s*(\d+)/i;
@@ -121,12 +129,13 @@ function extractBookingInfo(body: string, emailId: string, parsingRules?: Parsin
       checkOutRegex = /Check-out\s*\w+,\s*(\w+ \d{1,2}, \d{4})/i;
       cancellationRegex = /cancel for FREE until\s*(\w+ \d{1,2}, \d{4} \d{2}:\d{2} [AP]M)/i;
       priceRegex = /Total Price\s*€\s*(\d+\.\d{2})/i;
-      hotelUrlRegex = /https:\/\/www\.booking\.com\/hotel\/de\/[^\s"\)]+/i;
+      hotelUrlRegex = /https:\/\/www\.booking\.com\/hotel\/[^\s"\)]+/i;
     }
 
     // Match the patterns in the email body
     const bookingRefMatch = body.match(bookingRefRegex);
     const hotelNameMatch = body.match(hotelNameRegex);
+    const hotelNameFallbackMatch = body.match(hotelNameFallbackRegex);
     const roomTypeMatch = body.match(roomTypeRegex);
     const checkInMatch = body.match(checkInRegex);
     const checkOutMatch = body.match(checkOutRegex);
@@ -134,9 +143,26 @@ function extractBookingInfo(body: string, emailId: string, parsingRules?: Parsin
     const priceMatch = body.match(priceRegex);
     const hotelUrlMatch = body.match(hotelUrlRegex);
 
+    // Extract hotel name from URL if needed
+    let hotelNameFromUrl = "";
+    if (hotelUrlMatch) {
+      const urlPath = hotelUrlMatch[0].split('/hotel/')[1];
+      if (urlPath) {
+        // Get the last part of the URL path which is usually the hotel slug
+        const hotelSlug = urlPath.split('/').pop() || urlPath.split('/')[1] || "";
+        // Convert slug to readable name (replace hyphens with spaces and capitalize)
+        hotelNameFromUrl = hotelSlug
+          .split('-')
+          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(' ');
+      }
+    }
+
     console.log("Regex matches:", {
       bookingRef: bookingRefMatch?.[1] || 'Not found',
       hotelName: hotelNameMatch?.[1] || 'Not found',
+      hotelNameFallback: hotelNameFallbackMatch?.[1] || 'Not found',
+      hotelNameFromUrl: hotelNameFromUrl || 'Not found',
       roomType: roomTypeMatch?.[1] || 'Not found',
       checkIn: checkInMatch?.[1] || 'Not found',
       checkOut: checkOutMatch?.[1] || 'Not found',
@@ -192,8 +218,17 @@ function extractBookingInfo(body: string, emailId: string, parsingRules?: Parsin
       return now.toISOString().replace('Z', '+01:00');
     };
     
-    // Get default hotel name if not found
-    const hotelNameValue = hotelNameMatch?.[1]?.trim() || 'Unknown Hotel';
+    // Determine hotel name with fallback strategy
+    let hotelNameValue: string;
+    if (hotelNameMatch && hotelNameMatch[1]?.trim()) {
+      hotelNameValue = hotelNameMatch[1].trim();
+    } else if (hotelNameFallbackMatch && hotelNameFallbackMatch[1]?.trim()) {
+      hotelNameValue = hotelNameFallbackMatch[1].trim();
+    } else if (hotelNameFromUrl) {
+      hotelNameValue = hotelNameFromUrl;
+    } else {
+      hotelNameValue = 'Unknown Hotel';
+    }
     
     // Set reasonable fallback for check-in (today) and check-out (tomorrow)
     const checkInDate = checkInMatch ? 
