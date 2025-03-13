@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Mail, Bell } from 'lucide-react';
+import { Mail, Bell, AlertCircle, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { 
   Select,
@@ -23,6 +23,7 @@ const UserProfile = () => {
   const [fullName, setFullName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isConnectingGmail, setIsConnectingGmail] = useState(false);
   const [priceAlertThreshold, setPriceAlertThreshold] = useState(10);
   const [preferredCurrency, setPreferredCurrency] = useState('USD');
   const [timezone, setTimezone] = useState('UTC');
@@ -68,12 +69,34 @@ const UserProfile = () => {
   };
 
   const handleConnectGmail = async () => {
+    // If Gmail is already connected, just show a notification
     if (isGmailConnected) {
-      toast.info('Gmail already connected');
+      toast.info('Gmail is already connected to your account');
       return;
     }
     
-    await connectGmail();
+    try {
+      setIsConnectingGmail(true);
+      
+      // Check user authentication
+      if (!user) {
+        toast.error('You must be logged in to connect Gmail');
+        return;
+      }
+      
+      // Initiate the Gmail connection process
+      await connectGmail();
+      
+      // Note: The actual connection will happen after OAuth redirect
+      // The UI changes will be handled by the auth context after
+      // the user comes back from Google auth
+      
+    } catch (error: any) {
+      console.error('Error connecting Gmail:', error);
+      toast.error('Failed to connect Gmail. Please try again.');
+    } finally {
+      setIsConnectingGmail(false);
+    }
   };
 
   const handleSaveNotificationSettings = async () => {
@@ -185,11 +208,36 @@ const UserProfile = () => {
                 <Button 
                   variant={isGmailConnected ? "secondary" : "default"}
                   onClick={handleConnectGmail}
-                  disabled={isGmailConnected}
+                  disabled={isConnectingGmail || isGmailConnected}
                 >
-                  {isGmailConnected ? 'Connected' : 'Connect Gmail'}
+                  {isConnectingGmail ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Connecting...
+                    </>
+                  ) : isGmailConnected ? (
+                    'Connected'
+                  ) : (
+                    'Connect Gmail'
+                  )}
                 </Button>
               </div>
+              
+              {!isGmailConnected && !isConnectingGmail && (
+                <div className="mt-4 p-3 bg-amber-50 border border-amber-100 rounded-md">
+                  <div className="flex">
+                    <AlertCircle className="h-5 w-5 text-amber-500 mt-0.5 mr-2 flex-shrink-0" />
+                    <div className="text-sm text-amber-800">
+                      <p>Connecting Gmail will allow Travel Buddy to:</p>
+                      <ul className="list-disc pl-5 mt-1 space-y-1">
+                        <li>Read your booking.com confirmation emails</li>
+                        <li>Automatically import hotel reservations</li>
+                        <li>Monitor price changes for your bookings</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
           
