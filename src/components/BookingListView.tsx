@@ -52,6 +52,7 @@ const BookingListView: React.FC<BookingListViewProps> = ({
   onRefresh
 }) => {
   const [loadingBookings, setLoadingBookings] = useState<Record<string, boolean>>({});
+  const [isSyncingAll, setIsSyncingAll] = useState(false);
 
   // Format date string to a readable format
   const formatDate = (dateString: string) => {
@@ -77,10 +78,44 @@ const BookingListView: React.FC<BookingListViewProps> = ({
     }
   };
 
+  const handleSyncAll = async () => {
+    setIsSyncingAll(true);
+    try {
+      // Simulate fetching all prices
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // In a real app, this would update all bookings
+      onRefresh();
+      toast.success('All bookings synced successfully');
+    } catch (error: any) {
+      toast.error(`Failed to sync all bookings: ${error.message}`);
+    } finally {
+      setIsSyncingAll(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <h2 className="text-xl font-semibold">Your Bookings</h2>
+        <Button 
+          onClick={handleSyncAll}
+          variant="outline"
+          disabled={isSyncingAll}
+          className="flex items-center gap-2"
+        >
+          {isSyncingAll ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Syncing...
+            </>
+          ) : (
+            <>
+              <RefreshCw className="h-4 w-4" />
+              Force Sync All
+            </>
+          )}
+        </Button>
       </div>
       
       <div className="rounded-md border">
@@ -103,7 +138,6 @@ const BookingListView: React.FC<BookingListViewProps> = ({
               </TableRow>
             ) : (
               bookings.map((booking) => {
-                const isLoading = loadingBookings[booking.id] || false;
                 const isCheaper = booking.fetched_price !== undefined && booking.fetched_price < booking.price_paid;
                 const isMoreExpensive = booking.fetched_price !== undefined && booking.fetched_price > booking.price_paid;
                 
@@ -117,7 +151,7 @@ const BookingListView: React.FC<BookingListViewProps> = ({
                       ${booking.price_paid.toFixed(2)}
                     </TableCell>
                     <TableCell className="text-right">
-                      {isLoading ? (
+                      {loadingBookings[booking.id] ? (
                         <div className="flex justify-end items-center">
                           <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                         </div>
@@ -125,23 +159,6 @@ const BookingListView: React.FC<BookingListViewProps> = ({
                         <div className="flex justify-end items-center text-amber-500 gap-1.5">
                           <AlertCircle className="h-4 w-4" />
                           <span className="text-sm">Price unavailable</span>
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button 
-                                  variant="ghost" 
-                                  size="sm" 
-                                  className="h-7 px-2 ml-1"
-                                  onClick={() => handleSyncBooking(booking.id)}
-                                >
-                                  <RefreshCw className="h-3.5 w-3.5" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p>Try again</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
                         </div>
                       ) : booking.fetched_price !== undefined ? (
                         <div className="flex justify-end items-center gap-3">
@@ -161,23 +178,7 @@ const BookingListView: React.FC<BookingListViewProps> = ({
                           )}
                         </div>
                       ) : (
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button 
-                                variant="ghost" 
-                                size="sm" 
-                                className="h-8 px-2"
-                                onClick={() => handleSyncBooking(booking.id)}
-                              >
-                                <RefreshCw className="h-3.5 w-3.5 text-muted-foreground" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p>Sync price</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
+                        <span className="text-muted-foreground">Not synced</span>
                       )}
                     </TableCell>
                     <TableCell>
