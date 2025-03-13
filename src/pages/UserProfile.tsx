@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -84,12 +83,8 @@ const UserProfile = () => {
         return;
       }
       
-      // Initiate the Gmail connection process
+      // Initiate the Gmail connection process with updated scopes
       await connectGmail();
-      
-      // Note: The actual connection will happen after OAuth redirect
-      // The UI changes will be handled by the auth context after
-      // the user comes back from Google auth
       
     } catch (error: any) {
       console.error('Error connecting Gmail:', error);
@@ -363,3 +358,4 @@ const UserProfile = () => {
 };
 
 export default UserProfile;
+

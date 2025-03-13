@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
@@ -146,7 +147,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         provider: 'google',
         options: {
           redirectTo: `${window.location.origin}/profile`,
-          scopes: 'https://www.googleapis.com/auth/gmail.readonly',
+          // Update to include full Gmail access scope to read messages
+          scopes: 'https://www.googleapis.com/auth/gmail.readonly https://mail.google.com/',
           queryParams: {
             access_type: 'offline',
             prompt: 'consent',
