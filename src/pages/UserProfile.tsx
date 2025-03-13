@@ -7,9 +7,17 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Mail, Link as LinkIcon } from 'lucide-react';
+import { Mail, Link as LinkIcon, Bell } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { toast } from 'sonner';
+import { 
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 const UserProfile = () => {
   const { user } = useAuth();
@@ -18,6 +26,9 @@ const UserProfile = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [isGmailConnected, setIsGmailConnected] = useState(false);
   const [priceAlertThreshold, setPriceAlertThreshold] = useState(10);
+  const [preferredCurrency, setPreferredCurrency] = useState('USD');
+  const [timezone, setTimezone] = useState('UTC');
+  const [notificationMethod, setNotificationMethod] = useState('email');
   
   useEffect(() => {
     if (user) {
@@ -26,6 +37,11 @@ const UserProfile = () => {
       // Check if user has connected Gmail (in a real app, this would check a DB field)
       // For now, we'll simulate this with a check of user metadata
       setIsGmailConnected(!!user.user_metadata?.gmail_connected);
+      
+      // In a real app, these would be loaded from user preferences in the database
+      setPreferredCurrency(user.user_metadata?.preferred_currency || 'USD');
+      setTimezone(user.user_metadata?.timezone || 'UTC');
+      setNotificationMethod(user.user_metadata?.notification_method || 'email');
     }
   }, [user]);
 
@@ -36,7 +52,12 @@ const UserProfile = () => {
       setIsSaving(true);
       
       const { error } = await supabase.auth.updateUser({
-        data: { full_name: fullName }
+        data: { 
+          full_name: fullName,
+          preferred_currency: preferredCurrency,
+          timezone: timezone,
+          notification_method: notificationMethod
+        }
       });
       
       if (error) throw error;
@@ -61,6 +82,30 @@ const UserProfile = () => {
     // In a real app, this would save to a user_settings table
     toast.success(`Notification threshold set to ${priceAlertThreshold}%`);
   };
+
+  // Common timezones for the select dropdown
+  const timezones = [
+    { value: 'UTC', label: 'UTC (Coordinated Universal Time)' },
+    { value: 'America/New_York', label: 'Eastern Time (ET)' },
+    { value: 'America/Chicago', label: 'Central Time (CT)' },
+    { value: 'America/Denver', label: 'Mountain Time (MT)' },
+    { value: 'America/Los_Angeles', label: 'Pacific Time (PT)' },
+    { value: 'Europe/London', label: 'London (GMT)' },
+    { value: 'Europe/Paris', label: 'Central European Time (CET)' },
+    { value: 'Asia/Tokyo', label: 'Japan Standard Time (JST)' },
+    { value: 'Australia/Sydney', label: 'Australian Eastern Time (AET)' }
+  ];
+
+  // Common currencies for the select dropdown
+  const currencies = [
+    { value: 'USD', label: 'USD ($)' },
+    { value: 'EUR', label: 'EUR (€)' },
+    { value: 'GBP', label: 'GBP (£)' },
+    { value: 'JPY', label: 'JPY (¥)' },
+    { value: 'CAD', label: 'CAD ($)' },
+    { value: 'AUD', label: 'AUD ($)' },
+    { value: 'CHF', label: 'CHF (Fr)' }
+  ];
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -126,15 +171,94 @@ const UserProfile = () => {
             </CardContent>
           </Card>
           
-          {/* Email Notification Settings */}
+          {/* Preferences */}
           <Card>
             <CardHeader>
-              <CardTitle>Email Notifications</CardTitle>
+              <CardTitle>Preferences</CardTitle>
               <CardDescription>
-                Configure when you want to receive email notifications
+                Customize your experience with Travel Buddy
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-6">
+              <div className="space-y-2">
+                <Label htmlFor="currency">Preferred Currency</Label>
+                <Select
+                  value={preferredCurrency}
+                  onValueChange={setPreferredCurrency}
+                >
+                  <SelectTrigger id="currency" className="w-full">
+                    <SelectValue placeholder="Select currency" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {currencies.map(currency => (
+                      <SelectItem key={currency.value} value={currency.value}>
+                        {currency.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="timezone">Timezone</Label>
+                <Select
+                  value={timezone}
+                  onValueChange={setTimezone}
+                >
+                  <SelectTrigger id="timezone" className="w-full">
+                    <SelectValue placeholder="Select timezone" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {timezones.map(tz => (
+                      <SelectItem key={tz.value} value={tz.value}>
+                        {tz.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-sm text-muted-foreground">
+                  Your timezone is used for displaying booking dates and scheduling notifications.
+                </p>
+              </div>
+            </CardContent>
+            <CardFooter>
+              <Button onClick={handleUpdateProfile} disabled={isSaving}>
+                {isSaving ? 'Saving...' : 'Save Preferences'}
+              </Button>
+            </CardFooter>
+          </Card>
+          
+          {/* Notification Settings */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Notification Settings</CardTitle>
+              <CardDescription>
+                Configure when and how you want to receive notifications
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-4">
+                <Label>Notification Method</Label>
+                <RadioGroup 
+                  value={notificationMethod} 
+                  onValueChange={setNotificationMethod}
+                  className="flex flex-col space-y-2"
+                >
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="email" id="method-email" />
+                    <Label htmlFor="method-email" className="cursor-pointer">Email</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="push" id="method-push" />
+                    <Label htmlFor="method-push" className="cursor-pointer">Push Notifications</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="both" id="method-both" />
+                    <Label htmlFor="method-both" className="cursor-pointer">Both</Label>
+                  </div>
+                </RadioGroup>
+              </div>
+
               <div className="space-y-2">
                 <Label htmlFor="priceThreshold">
                   Notify me when prices are cheaper by at least:
@@ -152,7 +276,7 @@ const UserProfile = () => {
                   <span className="ml-2">%</span>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  You'll receive an email when we find a booking price that's at least {priceAlertThreshold}% cheaper than your booked price.
+                  You'll receive a notification when we find a booking price that's at least {priceAlertThreshold}% cheaper than your booked price.
                 </p>
               </div>
             </CardContent>

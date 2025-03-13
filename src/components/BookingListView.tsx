@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { format } from 'date-fns';
-import { MoreHorizontal, RefreshCw, Trash, Edit, Loader2 } from 'lucide-react';
+import { MoreHorizontal, RefreshCw, Trash, Edit, Loader2, AlertCircle } from 'lucide-react';
 import { 
   Table, 
   TableBody, 
@@ -35,6 +35,7 @@ interface Booking {
   check_out_date: string;
   fetched_price?: number;
   isLoading?: boolean;
+  fetchError?: string;
 }
 
 interface BookingListViewProps {
@@ -76,42 +77,10 @@ const BookingListView: React.FC<BookingListViewProps> = ({
     }
   };
 
-  const handleForceSync = async () => {
-    toast.info("Syncing all bookings...");
-    
-    try {
-      // Create a map of all booking IDs with loading state true
-      const loadingMap = bookings.reduce((acc, booking) => {
-        acc[booking.id] = true;
-        return acc;
-      }, {} as Record<string, boolean>);
-      
-      setLoadingBookings(loadingMap);
-      
-      // Simulate fetching all prices
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      toast.success("All bookings synced successfully");
-    } catch (error: any) {
-      toast.error(`Failed to sync all bookings: ${error.message}`);
-    } finally {
-      // Reset all loading states
-      setLoadingBookings({});
-    }
-  };
-
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <h2 className="text-xl font-semibold">Your Bookings</h2>
-        <Button 
-          onClick={handleForceSync} 
-          variant="outline" 
-          className="flex items-center gap-2"
-        >
-          <RefreshCw className="h-4 w-4" />
-          Force Sync All
-        </Button>
       </div>
       
       <div className="rounded-md border">
@@ -152,6 +121,28 @@ const BookingListView: React.FC<BookingListViewProps> = ({
                         <div className="flex justify-end items-center">
                           <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                         </div>
+                      ) : booking.fetchError ? (
+                        <div className="flex justify-end items-center text-amber-500 gap-1.5">
+                          <AlertCircle className="h-4 w-4" />
+                          <span className="text-sm">Price unavailable</span>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm" 
+                                  className="h-7 px-2 ml-1"
+                                  onClick={() => handleSyncBooking(booking.id)}
+                                >
+                                  <RefreshCw className="h-3.5 w-3.5" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Try again</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </div>
                       ) : booking.fetched_price !== undefined ? (
                         <div className="flex justify-end items-center gap-3">
                           <span className={
@@ -164,6 +155,8 @@ const BookingListView: React.FC<BookingListViewProps> = ({
                             <RebookHotelButton 
                               hotelName={booking.hotel_name}
                               cheaperPrice={true}
+                              checkInDate={booking.check_in_date}
+                              checkOutDate={booking.check_out_date}
                             />
                           )}
                         </div>
