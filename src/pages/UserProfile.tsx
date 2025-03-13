@@ -7,8 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Mail, Link as LinkIcon, Bell } from 'lucide-react';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Mail, Bell } from 'lucide-react';
 import { toast } from 'sonner';
 import { 
   Select,
@@ -20,11 +19,10 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 const UserProfile = () => {
-  const { user } = useAuth();
+  const { user, isGmailConnected, connectGmail } = useAuth();
   const [fullName, setFullName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [isGmailConnected, setIsGmailConnected] = useState(false);
   const [priceAlertThreshold, setPriceAlertThreshold] = useState(10);
   const [preferredCurrency, setPreferredCurrency] = useState('USD');
   const [timezone, setTimezone] = useState('UTC');
@@ -34,14 +32,11 @@ const UserProfile = () => {
     if (user) {
       setFullName(user.user_metadata?.full_name || '');
       
-      // Check if user has connected Gmail (in a real app, this would check a DB field)
-      // For now, we'll simulate this with a check of user metadata
-      setIsGmailConnected(!!user.user_metadata?.gmail_connected);
-      
-      // In a real app, these would be loaded from user preferences in the database
+      // Load user preferences from metadata
       setPreferredCurrency(user.user_metadata?.preferred_currency || 'USD');
       setTimezone(user.user_metadata?.timezone || 'UTC');
       setNotificationMethod(user.user_metadata?.notification_method || 'email');
+      setPriceAlertThreshold(user.user_metadata?.price_alert_threshold || 10);
     }
   }, [user]);
 
@@ -56,7 +51,8 @@ const UserProfile = () => {
           full_name: fullName,
           preferred_currency: preferredCurrency,
           timezone: timezone,
-          notification_method: notificationMethod
+          notification_method: notificationMethod,
+          price_alert_threshold: priceAlertThreshold
         }
       });
       
@@ -71,16 +67,37 @@ const UserProfile = () => {
     }
   };
 
-  const handleConnectGmail = () => {
-    // This would actually initiate OAuth with Gmail
-    toast.info('Gmail integration coming soon!');
-    // For demo purposes, we'll simulate a successful connection
-    setIsGmailConnected(true);
+  const handleConnectGmail = async () => {
+    if (isGmailConnected) {
+      toast.info('Gmail already connected');
+      return;
+    }
+    
+    await connectGmail();
   };
 
-  const handleSaveNotificationSettings = () => {
-    // In a real app, this would save to a user_settings table
-    toast.success(`Notification threshold set to ${priceAlertThreshold}%`);
+  const handleSaveNotificationSettings = async () => {
+    if (!user) return;
+    
+    try {
+      setIsSaving(true);
+      
+      const { error } = await supabase.auth.updateUser({
+        data: { 
+          notification_method: notificationMethod,
+          price_alert_threshold: priceAlertThreshold
+        }
+      });
+      
+      if (error) throw error;
+      
+      toast.success(`Notification settings saved successfully`);
+    } catch (error: any) {
+      console.error('Error saving notification settings:', error.message);
+      toast.error('Failed to save notification settings');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   // Common timezones for the select dropdown
@@ -158,6 +175,11 @@ const UserProfile = () => {
                     <p className="text-sm text-muted-foreground">
                       {isGmailConnected ? 'Connected' : 'Not connected'}
                     </p>
+                    {isGmailConnected && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        We will automatically scan for booking.com confirmation emails
+                      </p>
+                    )}
                   </div>
                 </div>
                 <Button 
@@ -165,7 +187,7 @@ const UserProfile = () => {
                   onClick={handleConnectGmail}
                   disabled={isGmailConnected}
                 >
-                  {isGmailConnected ? 'Connected' : 'Connect'}
+                  {isGmailConnected ? 'Connected' : 'Connect Gmail'}
                 </Button>
               </div>
             </CardContent>

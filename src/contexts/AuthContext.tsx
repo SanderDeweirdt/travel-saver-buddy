@@ -10,9 +10,11 @@ interface AuthContextType {
   user: User | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
-  signInWithGoogle: () => Promise<void>;
+  signInWithGoogle: (requestGmailAccess?: boolean) => Promise<void>;
   signUp: (email: string, password: string, fullName: string) => Promise<void>;
   signOut: () => Promise<void>;
+  connectGmail: () => Promise<void>;
+  isGmailConnected: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -21,6 +23,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isGmailConnected, setIsGmailConnected] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -57,6 +60,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
+      
+      // Check if Gmail is connected
+      if (session?.user) {
+        const gmailConnected = session.user.user_metadata?.gmail_connected || false;
+        setIsGmailConnected(gmailConnected);
+      }
+      
       setLoading(false);
     });
 
@@ -65,6 +75,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       (_event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
+        
+        // Check if Gmail is connected
+        if (session?.user) {
+          const gmailConnected = session.user.user_metadata?.gmail_connected || false;
+          setIsGmailConnected(gmailConnected);
+        } else {
+          setIsGmailConnected(false);
+        }
+        
         setLoading(false);
         
         // Navigate to home page when user signs in
@@ -97,14 +116,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const signInWithGoogle = async () => {
+  const signInWithGoogle = async (requestGmailAccess = false) => {
     try {
       setLoading(true);
+      let options = {
+        redirectTo: `${window.location.origin}`,
+      };
+      
+      if (requestGmailAccess) {
+        // Add additional Gmail scopes for accessing emails
+        options = {
+          ...options,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+            scope: 'https://www.googleapis.com/auth/gmail.readonly',
+          },
+        };
+      }
+      
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options: {
-          redirectTo: `${window.location.origin}`,
-        },
+        options,
       });
       
       if (error) {
@@ -115,6 +148,46 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (error: any) {
       toast.error(error.message || 'Error signing in with Google');
       console.error('Error signing in with Google:', error);
+      setLoading(false);
+    }
+  };
+
+  const connectGmail = async () => {
+    try {
+      setLoading(true);
+      
+      // Use a separate function for Gmail connection to request specific scopes
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/profile`,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+            scope: 'https://www.googleapis.com/auth/gmail.readonly',
+            client_id: '891502742038-7or08pgkf2ljstmv5l7j1pf8sjurb29q.apps.googleusercontent.com',
+          },
+        },
+      });
+      
+      if (error) {
+        throw error;
+      }
+      
+      // We'll handle the connection in the redirect callback
+      toast.info('Connecting to Gmail...');
+      
+      // Update metadata to indicate Gmail is connected
+      await supabase.auth.updateUser({
+        data: { gmail_connected: true }
+      });
+      
+      setIsGmailConnected(true);
+      
+    } catch (error: any) {
+      toast.error(error.message || 'Error connecting Gmail');
+      console.error('Error connecting Gmail:', error);
+    } finally {
       setLoading(false);
     }
   };
@@ -166,7 +239,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ session, user, loading, signIn, signInWithGoogle, signUp, signOut }}>
+    <AuthContext.Provider value={{ 
+      session, 
+      user, 
+      loading, 
+      signIn, 
+      signInWithGoogle, 
+      signUp, 
+      signOut,
+      connectGmail,
+      isGmailConnected
+    }}>
       {children}
     </AuthContext.Provider>
   );
