@@ -39,17 +39,17 @@ const FetchBookingsButton: React.FC<FetchBookingsButtonProps> = ({ onFetchComple
           parsingRules: {
             match: {
               from: "noreply@booking.com",
-              subjectContains: "Thanks! Your booking is confirmed"
+              subjectContains: "Your booking is confirmed"
             },
             extract: {
               confirmation_number: "regex:Confirmation:\\s*(\\d+)",
-              hotel_name: "regex:Thanks, .*? Your booking in .*? is\\s*confirmed\\.\\s*(.*?)\\s*is expecting you",
-              hotel_url: "regex:https:\\/\\/www\\.booking\\.com\\/hotel\\/[^\\s]+",
+              hotel_name: "regex:Your booking is confirmed at\\s*(.*)",
+              hotel_url: "regex:https:\\/\\/www\\.booking\\.com\\/hotel\\/de\\/[^\\s\"\\)]+",
               price_paid: "regex:Total Price\\s*€\\s*(\\d+\\.\\d{2})",
-              room_type: "regex:Your reservation.*?\\n.*?,\\s*(.*?)\\n",
-              check_in_date: "regex:Check-in\\s*(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\\s*(\\w+ \\d{1,2}, \\d{4})",
-              check_out_date: "regex:Check-out\\s*(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\\s*(\\w+ \\d{1,2}, \\d{4})",
-              cancellation_date: "regex:cancel for FREE until\\s*(\\w+ \\d{1,2}, \\d{4} \\d{2}:\\d{2} [AP]M)"
+              room_type: "regex:Your reservation\\s*\\d+ night[s]*,\\s*(.*?)\\n",
+              check_in_date_raw: "regex:Check-in\\s*\\w+,\\s*(\\w+ \\d{1,2}, \\d{4})",
+              check_out_date_raw: "regex:Check-out\\s*\\w+,\\s*(\\w+ \\d{1,2}, \\d{4})",
+              cancellation_date_raw: "regex:cancel for FREE until\\s*(\\w+ \\d{1,2}, \\d{4} \\d{2}:\\d{2} [AP]M)"
             }
           }
         }
