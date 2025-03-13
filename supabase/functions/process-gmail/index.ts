@@ -94,15 +94,15 @@ function extractBookingInfo(body: string, emailId: string, parsingRules?: Parsin
       priceRegex = extractRegex(parsingRules.extract.price_paid);
       hotelUrlRegex = extractRegex(parsingRules.extract.hotel_url);
     } else {
-      // Fallback to default patterns
-      bookingRefRegex = /Booking number:?\s*([A-Z0-9]+)/i;
-      hotelNameRegex = /(?:Your booking at|Your booking is confirmed at)\s*(.+?)(?:\s*\(|\s*\n|\.)/i;
-      roomTypeRegex = /Room type:?\s*(.+?)(?:\n|$)/i;
-      checkInRegex = /Check-?in:?\s*(\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]+\s+\d{4})/i;
-      checkOutRegex = /Check-?out:?\s*(\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]+\s+\d{4})/i;
-      cancellationRegex = /(?:Free cancellation until|Cancel for free until):?\s*(\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]+\s+\d{4})/i;
-      priceRegex = /(?:Total price|Total cost):?\s*(?:(?:US|€|£|\$))?(\d+[.,]\d+)(?:\s*(?:US|€|£|\$))?/i;
-      hotelUrlRegex = /(https:\/\/(?:www\.)?booking\.com\/(?:hotel\/\w+\/)?[a-z0-9-]+\.html)/i;
+      // Updated default patterns based on user request
+      bookingRefRegex = /Confirmation:\s*(\d+)/i;
+      hotelNameRegex = /Thanks,.*?Your booking in.*?is\s*confirmed\.\s*(.*?)\s*is expecting you/i;
+      roomTypeRegex = /Your reservation.*?\n.*?,\s*(.*?)\n/i;
+      checkInRegex = /Check-in\s*(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s*(\w+ \d{1,2}, \d{4})/i;
+      checkOutRegex = /Check-out\s*(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s*(\w+ \d{1,2}, \d{4})/i;
+      cancellationRegex = /cancel for FREE until\s*(\w+ \d{1,2}, \d{4} \d{2}:\d{2} [AP]M)/i;
+      priceRegex = /Total Price\s*€\s*(\d+\.\d{2})/i;
+      hotelUrlRegex = /https:\/\/www\.booking\.com\/hotel\/[^\s]+/i;
     }
 
     // Match the patterns in the email body
@@ -123,7 +123,7 @@ function extractBookingInfo(body: string, emailId: string, parsingRules?: Parsin
       checkOut: checkOutMatch?.[1] || 'Not found',
       cancellation: cancellationMatch?.[1] || 'Not found',
       price: priceMatch?.[1] || 'Not found',
-      hotelUrl: hotelUrlMatch?.[1] || 'Not found'
+      hotelUrl: hotelUrlMatch?.[0] || 'Not found' // Note: using [0] for full match
     });
 
     // If we couldn't match the essential info, return null
@@ -132,23 +132,36 @@ function extractBookingInfo(body: string, emailId: string, parsingRules?: Parsin
       return null;
     }
 
-    // Parse the dates
-    const parseDate = (dateStr: string): string => {
+    // Parse the dates with timezone conversion to CET/CEST (+01:00)
+    const parseDateToCET = (dateStr: string): string => {
       try {
-        // Remove ordinal indicators (st, nd, rd, th)
-        const cleanDate = dateStr.replace(/(\d+)(?:st|nd|rd|th)/, '$1');
-        const date = new Date(cleanDate);
-        return date.toISOString();
+        // Parse date string to Date object
+        const date = new Date(dateStr);
+        
+        // Check if the date is valid
+        if (isNaN(date.getTime())) {
+          console.error("Invalid date:", dateStr);
+          return new Date().toISOString();
+        }
+        
+        // Format as ISO 8601 with CET timezone (+01:00)
+        // This is a simplification - proper timezone handling would consider DST
+        const isoDate = new Date(date.getTime()).toISOString().replace('Z', '+01:00');
+        return isoDate;
       } catch (e) {
         console.error("Date parsing failed for:", dateStr, e);
-        // Fallback to original string if parsing fails
-        return new Date().toISOString();
+        // Fallback to current date in ISO format with CET timezone
+        return new Date().toISOString().replace('Z', '+01:00');
       }
     };
 
-    const checkInDate = parseDate(checkInMatch[1]);
-    const checkOutDate = parseDate(checkOutMatch[1]);
-    const cancellationDate = cancellationMatch ? parseDate(cancellationMatch[1]) : checkInDate; // Default to check-in date if not specified
+    const checkInDate = parseDateToCET(checkInMatch[1]);
+    const checkOutDate = parseDateToCET(checkOutMatch[1]);
+    
+    // For cancellation date, use the match if available, otherwise use check-in date
+    const cancellationDate = cancellationMatch 
+      ? parseDateToCET(cancellationMatch[1])
+      : checkInDate; 
 
     // Parse the price - replace any comma with a period for consistency
     const price = parseFloat(priceMatch[1].replace(',', '.'));
@@ -156,7 +169,7 @@ function extractBookingInfo(body: string, emailId: string, parsingRules?: Parsin
     return {
       booking_reference: bookingRefMatch ? bookingRefMatch[1] : 'UNKNOWN',
       hotel_name: hotelNameMatch[1].trim(),
-      hotel_url: hotelUrlMatch ? hotelUrlMatch[1] : null,
+      hotel_url: hotelUrlMatch ? hotelUrlMatch[0] : null, // Using [0] for the full match
       price_paid: price,
       room_type: roomTypeMatch ? roomTypeMatch[1].trim() : null,
       check_in_date: checkInDate,

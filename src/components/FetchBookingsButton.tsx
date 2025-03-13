@@ -47,9 +47,9 @@ const FetchBookingsButton: React.FC<FetchBookingsButtonProps> = ({ onFetchComple
               hotel_url: "regex:https:\\/\\/www\\.booking\\.com\\/hotel\\/[^\\s]+",
               price_paid: "regex:Total Price\\s*€\\s*(\\d+\\.\\d{2})",
               room_type: "regex:Your reservation.*?\\n.*?,\\s*(.*?)\\n",
-              check_in_date: "regex:Check-in\\s*(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),\\s*(.*?)\\s\\(from",
-              check_out_date: "regex:Check-out\\s*(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),\\s*(.*?)\\s\\(until",
-              cancellation_date: "regex:You can cancel for FREE until (.*?) \\[CET\\]"
+              check_in_date: "regex:Check-in\\s*(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\\s*(\\w+ \\d{1,2}, \\d{4})",
+              check_out_date: "regex:Check-out\\s*(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\\s*(\\w+ \\d{1,2}, \\d{4})",
+              cancellation_date: "regex:cancel for FREE until\\s*(\\w+ \\d{1,2}, \\d{4} \\d{2}:\\d{2} [AP]M)"
             }
           }
         }
