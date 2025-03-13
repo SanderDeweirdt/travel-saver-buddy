@@ -78,7 +78,7 @@ const GmailBookingImport: React.FC<GmailBookingImportProps> = ({
             extract: {
               confirmation_number: "regex:Confirmation:\\s*(\\d+)",
               hotel_name: "regex:Your booking is confirmed at\\s*(.*)",
-              "hotel_url": "regex:https://www\\.booking\\.com/hotel/.*?\\.html",
+              hotel_url: "linkContains:/hotel/",
               price_paid: "regex:Total Price\\s*€\\s*(\\d+\\.\\d{2})",
               room_type: "regex:Your reservation\\s*\\d+ night[s]*,\\s*(.*?)\\n",
               check_in_date_raw: "regex:Check-in\\s*\\w+,\\s*(\\w+ \\d{1,2}, \\d{4})",

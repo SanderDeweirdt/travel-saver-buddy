@@ -67,10 +67,90 @@ interface BookingInfo {
   email_id: string;
 }
 
+// Extract hotel information from HTML content
+function extractHotelInfoFromHtml(htmlContent: string): { hotelName: string | null; hotelUrl: string | null } {
+  try {
+    console.log("Extracting hotel info from HTML content");
+    
+    // Look for anchor tags with hotel links
+    const hotelAnchorRegex = /<a\s+[^>]*?href=["']([^"']*?\/hotel\/[^"']*?)["'][^>]*?>([^<]+)<\/a>/i;
+    const match = htmlContent.match(hotelAnchorRegex);
+    
+    if (match && match[1] && match[2]) {
+      console.log("Found hotel anchor tag:", match[0]);
+      return {
+        hotelUrl: match[1],
+        hotelName: match[2].trim()
+      };
+    }
+    
+    // Fallback: look for any booking.com hotel URLs
+    const hotelUrlRegex = /https:\/\/www\.booking\.com\/hotel\/[^"'\s]+\.html/i;
+    const urlMatch = htmlContent.match(hotelUrlRegex);
+    
+    if (urlMatch && urlMatch[0]) {
+      console.log("Found hotel URL in text:", urlMatch[0]);
+      // Extract hotel name from URL slug
+      const hotelNameFromUrl = extractHotelNameFromUrl(urlMatch[0]);
+      return {
+        hotelUrl: urlMatch[0],
+        hotelName: hotelNameFromUrl
+      };
+    }
+    
+    return { hotelName: null, hotelUrl: null };
+  } catch (error) {
+    console.error("Error extracting hotel info from HTML:", error);
+    return { hotelName: null, hotelUrl: null };
+  }
+}
+
+// Extract hotel name from URL slug
+function extractHotelNameFromUrl(url: string): string {
+  try {
+    // Extract the slug part
+    const urlPath = url.split('/hotel/')[1];
+    if (!urlPath) return "Unknown Hotel";
+    
+    // Get the last part of the URL path which usually contains the hotel name
+    let hotelSlug = "";
+    if (urlPath.includes('/')) {
+      // If there are more path segments, get the last one
+      const segments = urlPath.split('/');
+      hotelSlug = segments[segments.length - 1].split('.html')[0];
+    } else {
+      hotelSlug = urlPath.split('.html')[0];
+    }
+    
+    // Special case for a&o hotels
+    hotelSlug = hotelSlug.replace(/aundo/g, "a&o");
+    
+    // Convert slug to readable name
+    return hotelSlug
+      .split('-')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  } catch (error) {
+    console.error("Error extracting hotel name from URL:", error);
+    return "Unknown Hotel";
+  }
+}
+
 // Extract booking information from email content using the provided parsing rules
 function extractBookingInfo(body: string, emailId: string, parsingRules?: ParsingRules): BookingInfo | null {
   try {
     console.log("Extracting booking info from email");
+    
+    // Check if content is HTML
+    const isHtml = body.includes('<html') || body.includes('<body') || body.includes('<div') || body.includes('<a ');
+    console.log("Content appears to be HTML:", isHtml);
+    
+    // Try to extract hotel information from HTML first
+    let hotelInfo = { hotelName: null, hotelUrl: null };
+    if (isHtml) {
+      hotelInfo = extractHotelInfoFromHtml(body);
+      console.log("Extracted hotel info from HTML:", hotelInfo);
+    }
     
     // Define regex patterns based on provided parsing rules or use defaults
     const extractRegex = (pattern: string): RegExp => {
@@ -114,7 +194,7 @@ function extractBookingInfo(body: string, emailId: string, parsingRules?: Parsin
           
       priceRegex = extractRegex(parsingRules.extract.price_paid);
       
-      // Enhanced hotel URL extraction with "linkContains:/hotel/" pattern
+      // Enhanced hotel URL extraction
       if (parsingRules.extract.hotel_url.includes("linkContains:/hotel/")) {
         hotelUrlRegex = /https:\/\/www\.booking\.com\/hotel\/[^\s"\)]+/i;
       } else {
@@ -141,35 +221,7 @@ function extractBookingInfo(body: string, emailId: string, parsingRules?: Parsin
     const checkOutMatch = body.match(checkOutRegex);
     const cancellationMatch = body.match(cancellationRegex);
     const priceMatch = body.match(priceRegex);
-    const hotelUrlMatch = body.match(hotelUrlRegex);
-
-    // Extract hotel name from URL if needed
-    let hotelNameFromUrl = "";
-    if (hotelUrlMatch) {
-      const urlPath = hotelUrlMatch[0].split('/hotel/')[1];
-      if (urlPath) {
-        // Get the last part of the URL path which is usually the hotel slug
-        const hotelSlug = urlPath.split('/').pop() || urlPath.split('/')[1] || "";
-        // Convert slug to readable name (replace hyphens with spaces and capitalize)
-        hotelNameFromUrl = hotelSlug
-          .split('-')
-          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-          .join(' ');
-      }
-    }
-
-    console.log("Regex matches:", {
-      bookingRef: bookingRefMatch?.[1] || 'Not found',
-      hotelName: hotelNameMatch?.[1] || 'Not found',
-      hotelNameFallback: hotelNameFallbackMatch?.[1] || 'Not found',
-      hotelNameFromUrl: hotelNameFromUrl || 'Not found',
-      roomType: roomTypeMatch?.[1] || 'Not found',
-      checkIn: checkInMatch?.[1] || 'Not found',
-      checkOut: checkOutMatch?.[1] || 'Not found',
-      cancellation: cancellationMatch?.[1] || 'Not found',
-      price: priceMatch?.[1] || 'Not found',
-      hotelUrl: hotelUrlMatch?.[0] || 'Not found'
-    });
+    const hotelUrlMatch = !hotelInfo.hotelUrl ? body.match(hotelUrlRegex) : null;
 
     // Parse the dates with timezone conversion to CET/CEST (+01:00)
     const parseDateToCET = (dateStr: string, isCheckIn = false, isCheckOut = false): string => {
@@ -218,17 +270,24 @@ function extractBookingInfo(body: string, emailId: string, parsingRules?: Parsin
       return now.toISOString().replace('Z', '+01:00');
     };
     
-    // Determine hotel name with fallback strategy
+    // Determine hotel name with prioritized strategy
     let hotelNameValue: string;
-    if (hotelNameMatch && hotelNameMatch[1]?.trim()) {
+    if (hotelInfo.hotelName) {
+      // Priority 1: HTML anchor content
+      hotelNameValue = hotelInfo.hotelName;
+    } else if (hotelNameMatch && hotelNameMatch[1]?.trim()) {
+      // Priority 2: Regex from body
       hotelNameValue = hotelNameMatch[1].trim();
     } else if (hotelNameFallbackMatch && hotelNameFallbackMatch[1]?.trim()) {
+      // Priority 3: Fallback regex
       hotelNameValue = hotelNameFallbackMatch[1].trim();
-    } else if (hotelNameFromUrl) {
-      hotelNameValue = hotelNameFromUrl;
     } else {
+      // Priority 4: Default to "Unknown Hotel"
       hotelNameValue = 'Unknown Hotel';
     }
+    
+    // Determine hotel URL
+    const hotelUrlValue = hotelInfo.hotelUrl || (hotelUrlMatch ? hotelUrlMatch[0] : null);
     
     // Set reasonable fallback for check-in (today) and check-out (tomorrow)
     const checkInDate = checkInMatch ? 
@@ -249,10 +308,18 @@ function extractBookingInfo(body: string, emailId: string, parsingRules?: Parsin
       parseFloat(priceMatch[1].replace(',', '.')) : 
       0; // Use 0 as fallback
 
+    console.log("Final extracted values:", {
+      booking_reference: bookingRefMatch ? bookingRefMatch[1] : 'UNKNOWN-' + Date.now(),
+      hotel_name: hotelNameValue,
+      hotel_url: hotelUrlValue,
+      price_paid: priceValue,
+      room_type: roomTypeMatch ? roomTypeMatch[1].trim() : null
+    });
+
     return {
       booking_reference: bookingRefMatch ? bookingRefMatch[1] : 'UNKNOWN-' + Date.now(),
       hotel_name: hotelNameValue,
-      hotel_url: hotelUrlMatch ? hotelUrlMatch[0] : null, // Using [0] for the full match
+      hotel_url: hotelUrlValue,
       price_paid: priceValue,
       room_type: roomTypeMatch ? roomTypeMatch[1].trim() : null,
       check_in_date: checkInDate,
@@ -294,34 +361,55 @@ function base64UrlDecode(base64Url: string): string {
   return new TextDecoder().decode(bytes);
 }
 
-// Extract the plain text from a MIME message
-function extractPlainText(message: GmailMessage): string {
-  // Try to find plain text part
-  const findPlainTextPart = (parts: any[]): string | null => {
+// Extract the content from a MIME message
+function extractEmailContent(message: GmailMessage): { text: string, html: string | null } {
+  const result = { text: '', html: null };
+  
+  // Helper to find parts by MIME type
+  const findParts = (parts: any[], mimeType: string): string[] => {
+    const contents: string[] = [];
+    
     for (const part of parts) {
-      if (part.mimeType === 'text/plain' && part.body?.data) {
-        return base64UrlDecode(part.body.data);
-      } else if (part.parts) {
-        const text = findPlainTextPart(part.parts);
-        if (text) return text;
+      if (part.mimeType === mimeType && part.body?.data) {
+        contents.push(base64UrlDecode(part.body.data));
+      }
+      
+      if (part.parts) {
+        contents.push(...findParts(part.parts, mimeType));
       }
     }
-    return null;
+    
+    return contents;
   };
-
-  // First, check if the message has parts
+  
+  // First, check for HTML parts
   if (message.payload.parts) {
-    const text = findPlainTextPart(message.payload.parts);
-    if (text) return text;
+    const htmlContents = findParts(message.payload.parts, 'text/html');
+    if (htmlContents.length > 0) {
+      result.html = htmlContents.join('\n');
+    }
+    
+    const textContents = findParts(message.payload.parts, 'text/plain');
+    if (textContents.length > 0) {
+      result.text = textContents.join('\n');
+    }
   }
-
-  // If no plain text was found in parts, try the body directly
-  if (message.payload.mimeType === 'text/plain' && message.payload.body?.data) {
-    return base64UrlDecode(message.payload.body.data);
+  
+  // If we have direct content in the payload
+  if (!result.html && message.payload.mimeType === 'text/html' && message.payload.body?.data) {
+    result.html = base64UrlDecode(message.payload.body.data);
   }
-
+  
+  if (!result.text && message.payload.mimeType === 'text/plain' && message.payload.body?.data) {
+    result.text = base64UrlDecode(message.payload.body.data);
+  }
+  
   // If we still don't have text, use the snippet as a fallback
-  return message.snippet || '';
+  if (!result.text && !result.html) {
+    result.text = message.snippet || '';
+  }
+  
+  return result;
 }
 
 // Process Gmail messages to extract booking information
@@ -397,11 +485,14 @@ async function processGmailMessages(accessToken: string, userId: string, parsing
         continue;
       }
       
-      // Extract the plain text content from the email
-      const emailContent = extractPlainText(message);
+      // Extract the content from the email
+      const emailContent = extractEmailContent(message);
+      
+      // Prefer HTML content for extraction if available
+      const contentToProcess = emailContent.html || emailContent.text;
       
       // Extract booking information from the email content using parsing rules
-      const bookingInfo = extractBookingInfo(emailContent, message.id, parsingRules);
+      const bookingInfo = extractBookingInfo(contentToProcess, message.id, parsingRules);
       
       if (bookingInfo) {
         console.log(`Successfully extracted booking info for ${bookingInfo.hotel_name}`);
