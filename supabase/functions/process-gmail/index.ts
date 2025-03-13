@@ -65,6 +65,11 @@ interface BookingInfo {
   check_out_date: string;
   cancellation_date: string;
   email_id: string;
+  currency: string;
+  cancellation_policy?: string;
+  source: string;
+  imported_from_gmail: boolean;
+  import_timestamp: string;
 }
 
 // Extract hotel information from HTML content
@@ -167,6 +172,7 @@ function extractBookingInfo(body: string, emailId: string, parsingRules?: Parsin
     let cancellationRegex: RegExp;
     let priceRegex: RegExp;
     let hotelUrlRegex: RegExp;
+    let cancellationPolicyRegex: RegExp = /Free cancellation until ([^<]+)/i;
     
     if (parsingRules) {
       bookingRefRegex = extractRegex(parsingRules.extract.confirmation_number);
@@ -208,7 +214,7 @@ function extractBookingInfo(body: string, emailId: string, parsingRules?: Parsin
       checkInRegex = /Check-in\s*\w+,\s*(\w+ \d{1,2}, \d{4})/i;
       checkOutRegex = /Check-out\s*\w+,\s*(\w+ \d{1,2}, \d{4})/i;
       cancellationRegex = /cancel for FREE until\s*(\w+ \d{1,2}, \d{4} \d{2}:\d{2} [AP]M)/i;
-      priceRegex = /Total Price\s*€\s*(\d+\.\d{2})/i;
+      priceRegex = /Total price<\/div>\s*<div><span>€\s*(\d+\.\d{2})<\/span>/i;
       hotelUrlRegex = /https:\/\/www\.booking\.com\/hotel\/[^\s"\)]+/i;
     }
 
@@ -222,6 +228,7 @@ function extractBookingInfo(body: string, emailId: string, parsingRules?: Parsin
     const cancellationMatch = body.match(cancellationRegex);
     const priceMatch = body.match(priceRegex);
     const hotelUrlMatch = !hotelInfo.hotelUrl ? body.match(hotelUrlRegex) : null;
+    const cancellationPolicyMatch = body.match(cancellationPolicyRegex);
 
     // Parse the dates with timezone conversion to CET/CEST (+01:00)
     const parseDateToCET = (dateStr: string, isCheckIn = false, isCheckOut = false): string => {
@@ -308,8 +315,16 @@ function extractBookingInfo(body: string, emailId: string, parsingRules?: Parsin
       parseFloat(priceMatch[1].replace(',', '.')) : 
       0; // Use 0 as fallback
 
+    // Get booking reference
+    const bookingReference = bookingRefMatch ? bookingRefMatch[1] : `UNKNOWN-${Date.now()}`;
+
+    // Extract cancellation policy
+    const cancellationPolicy = cancellationPolicyMatch ? 
+      `Free cancellation until ${cancellationPolicyMatch[1]}` : 
+      null;
+
     console.log("Final extracted values:", {
-      booking_reference: bookingRefMatch ? bookingRefMatch[1] : 'UNKNOWN-' + Date.now(),
+      booking_reference: bookingReference,
       hotel_name: hotelNameValue,
       hotel_url: hotelUrlValue,
       price_paid: priceValue,
@@ -317,7 +332,7 @@ function extractBookingInfo(body: string, emailId: string, parsingRules?: Parsin
     });
 
     return {
-      booking_reference: bookingRefMatch ? bookingRefMatch[1] : 'UNKNOWN-' + Date.now(),
+      booking_reference: bookingReference,
       hotel_name: hotelNameValue,
       hotel_url: hotelUrlValue,
       price_paid: priceValue,
@@ -325,13 +340,18 @@ function extractBookingInfo(body: string, emailId: string, parsingRules?: Parsin
       check_in_date: checkInDate,
       check_out_date: checkOutDate,
       cancellation_date: cancellationDate,
-      email_id: emailId
+      email_id: emailId,
+      currency: 'EUR', // Default to EUR for Booking.com
+      cancellation_policy: cancellationPolicy || undefined,
+      source: 'gmail',
+      imported_from_gmail: true,
+      import_timestamp: new Date().toISOString()
     };
   } catch (error) {
     console.error('Error extracting booking info:', error);
     // Return fallback data in case of error to avoid crashes
     return {
-      booking_reference: 'ERROR-' + Date.now(),
+      booking_reference: `ERROR-${Date.now()}`,
       hotel_name: 'Error Processing Booking',
       hotel_url: null,
       price_paid: 0,
@@ -339,7 +359,11 @@ function extractBookingInfo(body: string, emailId: string, parsingRules?: Parsin
       check_in_date: new Date().toISOString().replace('Z', '+01:00'),
       check_out_date: new Date(new Date().setDate(new Date().getDate() + 1)).toISOString().replace('Z', '+01:00'),
       cancellation_date: new Date().toISOString().replace('Z', '+01:00'),
-      email_id: emailId
+      email_id: emailId,
+      currency: 'EUR',
+      source: 'gmail',
+      imported_from_gmail: true,
+      import_timestamp: new Date().toISOString()
     };
   }
 }
@@ -498,7 +522,7 @@ async function processGmailMessages(accessToken: string, userId: string, parsing
         console.log(`Successfully extracted booking info for ${bookingInfo.hotel_name}`);
         bookings.push(bookingInfo);
         
-        // Save the booking to the user's bookings in the database
+        // Save the booking to the user's bookings in the database using upsert
         const { error } = await supabase
           .from('bookings')
           .upsert(
@@ -513,16 +537,24 @@ async function processGmailMessages(accessToken: string, userId: string, parsing
               check_out_date: bookingInfo.check_out_date,
               cancellation_date: bookingInfo.cancellation_date,
               email_id: bookingInfo.email_id,
+              currency: bookingInfo.currency,
+              cancellation_policy: bookingInfo.cancellation_policy,
+              source: bookingInfo.source,
+              imported_from_gmail: bookingInfo.imported_from_gmail,
+              import_timestamp: bookingInfo.import_timestamp,
               created_at: new Date().toISOString(),
               updated_at: new Date().toISOString(),
             },
-            { onConflict: 'email_id' }
+            { 
+              onConflict: 'booking_reference',
+              ignoreDuplicates: false // Update if exists
+            }
           );
         
         if (error) {
           console.error('Error saving booking to database:', error);
         } else {
-          console.log(`Saved booking for ${bookingInfo.hotel_name} to database`);
+          console.log(`Saved booking for ${bookingInfo.hotel_name} to database (confirmation #${bookingInfo.booking_reference})`);
         }
       } else {
         console.log(`Could not extract booking info from message ID ${messageInfo.id}`);

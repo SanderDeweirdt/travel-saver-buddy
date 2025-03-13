@@ -11,41 +11,62 @@ export type Database = {
     Tables: {
       bookings: {
         Row: {
+          booking_reference: string | null
           cancellation_date: string
+          cancellation_policy: string | null
           check_in_date: string
           check_out_date: string
           created_at: string
+          currency: string | null
+          email_id: string | null
           hotel_name: string
           hotel_url: string | null
           id: string
+          import_timestamp: string | null
+          imported_from_gmail: boolean | null
           price_paid: number
           room_type: string | null
+          source: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
+          booking_reference?: string | null
           cancellation_date: string
+          cancellation_policy?: string | null
           check_in_date: string
           check_out_date: string
           created_at?: string
+          currency?: string | null
+          email_id?: string | null
           hotel_name: string
           hotel_url?: string | null
           id?: string
+          import_timestamp?: string | null
+          imported_from_gmail?: boolean | null
           price_paid: number
           room_type?: string | null
+          source?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
+          booking_reference?: string | null
           cancellation_date?: string
+          cancellation_policy?: string | null
           check_in_date?: string
           check_out_date?: string
           created_at?: string
+          currency?: string | null
+          email_id?: string | null
           hotel_name?: string
           hotel_url?: string | null
           id?: string
+          import_timestamp?: string | null
+          imported_from_gmail?: boolean | null
           price_paid?: number
           room_type?: string | null
+          source?: string | null
           updated_at?: string
           user_id?: string
         }
