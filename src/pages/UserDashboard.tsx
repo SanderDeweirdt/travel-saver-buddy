@@ -9,6 +9,7 @@ import { PlusCircle } from 'lucide-react';
 import AddBookingModal from '@/components/AddBookingModal';
 import BookingListView from '@/components/BookingListView';
 import Header from '@/components/layout/Header';
+import FetchBookingsButton from '@/components/FetchBookingsButton';
 import { toast } from 'sonner';
 
 interface Booking {
@@ -121,16 +122,19 @@ const UserDashboard = () => {
       <div className="container max-w-7xl mx-auto px-4 py-8 flex-1">
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-3xl font-bold">Your Bookings</h1>
-          <Button 
-            onClick={() => {
-              setEditingBooking(null);
-              setIsModalOpen(true);
-            }}
-            className="flex items-center"
-          >
-            <PlusCircle className="mr-2 h-4 w-4" />
-            Add Booking
-          </Button>
+          <div className="flex items-center gap-2">
+            <FetchBookingsButton onFetchComplete={fetchBookings} />
+            <Button 
+              onClick={() => {
+                setEditingBooking(null);
+                setIsModalOpen(true);
+              }}
+              className="flex items-center"
+            >
+              <PlusCircle className="mr-2 h-4 w-4" />
+              Add Booking
+            </Button>
+          </div>
         </div>
 
         {isLoading ? (
