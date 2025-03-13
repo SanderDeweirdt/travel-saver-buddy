@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus, TrendingDown, Search, Filter, Clock, ArrowUpRight } from 'lucide-react';
@@ -6,6 +7,7 @@ import NavigationBar from '@/components/layout/NavigationBar';
 import PriceAlert from '@/components/ui/PriceAlert';
 import BookingCard from '@/components/ui/BookingCard';
 import RecentSavings from '@/components/ui/RecentSavings';
+import FetchBookingsButton from '@/components/FetchBookingsButton';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -100,6 +102,11 @@ const Dashboard = () => {
   const rebookHotel = (alertId: string) => {
     console.log(`Rebooking for alert ${alertId}`);
     // Would implement actual rebooking logic here
+  };
+  
+  const handleRefreshDashboard = () => {
+    // This function would fetch updated data
+    console.log('Refreshing dashboard data');
   };
   
   return (
@@ -228,9 +235,16 @@ const Dashboard = () => {
                   />
                 </div>
                 
-                <Button variant="outline" size="icon" className="h-10 w-10">
-                  <Filter className="h-4 w-4" />
-                </Button>
+                <div className="flex space-x-2">
+                  <FetchBookingsButton onFetchComplete={handleRefreshDashboard} />
+                  <Button 
+                    variant="outline" 
+                    size="icon" 
+                    className="h-10 w-10"
+                  >
+                    <Filter className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
             </div>
             
