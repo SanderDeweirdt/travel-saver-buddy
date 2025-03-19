@@ -112,7 +112,7 @@ const BookingListView: React.FC<BookingListViewProps> = ({
           ) : (
             <>
               <RefreshCw className="h-4 w-4" />
-              Force Sync All
+              Check prices
             </>
           )}
         </Button>
