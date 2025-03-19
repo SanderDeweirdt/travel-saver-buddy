@@ -122,6 +122,31 @@ const UserProfile = () => {
     }
   };
 
+  // Add the missing handleSaveNotificationSettings function
+  const handleSaveNotificationSettings = async () => {
+    if (!user) return;
+    
+    try {
+      setIsSaving(true);
+      
+      const { error } = await supabase.auth.updateUser({
+        data: { 
+          notification_method: notificationMethod,
+          price_alert_threshold: priceAlertThreshold
+        }
+      });
+      
+      if (error) throw error;
+      
+      toast.success('Notification settings updated successfully');
+    } catch (error: any) {
+      console.error('Error updating notification settings:', error.message);
+      toast.error('Failed to update notification settings');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   // Common timezones for the select dropdown
   const timezones = [
     { value: 'UTC', label: 'UTC (Coordinated Universal Time)' },
@@ -350,8 +375,8 @@ const UserProfile = () => {
               </div>
             </CardContent>
             <CardFooter>
-              <Button onClick={handleSaveNotificationSettings}>
-                Save Notification Settings
+              <Button onClick={handleSaveNotificationSettings} disabled={isSaving}>
+                {isSaving ? 'Saving...' : 'Save Notification Settings'}
               </Button>
             </CardFooter>
           </Card>
