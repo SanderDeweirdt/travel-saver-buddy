@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -6,6 +5,24 @@ import { Mail, RefreshCw, AlertCircle } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+
+/**
+ * Function to check if a Gmail account is connected
+ * @param user The user object from auth context
+ * @returns Boolean indicating if Gmail is connected
+ */
+const isGmailAccountConnected = (user: any): boolean => {
+  if (!user) return false;
+  
+  // Check if user has an email (basic validation)
+  if (!user.email) {
+    console.warn('User context missing email property');
+    return false;
+  }
+  
+  // Check if the user has explicitly connected Gmail
+  return user.user_metadata?.gmail_connected === true;
+};
 
 interface GmailIntegrationStatusProps {
   onNewBookingsFound?: (count: number) => void;
@@ -17,9 +34,12 @@ const GmailIntegrationStatus: React.FC<GmailIntegrationStatusProps> = ({
   const { user, isGmailConnected, connectGmail } = useAuth();
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncDate, setLastSyncDate] = useState<string | null>(null);
+  
+  // Use our dedicated function to check Gmail connection
+  const gmailConnected = isGmailAccountConnected(user);
 
   const handleConnectGmail = async () => {
-    if (isGmailConnected) {
+    if (gmailConnected) {
       toast.info('Gmail already connected');
       return;
     }
@@ -28,7 +48,7 @@ const GmailIntegrationStatus: React.FC<GmailIntegrationStatusProps> = ({
   };
 
   const handleSyncGmail = async () => {
-    if (!isGmailConnected || !user) {
+    if (!gmailConnected || !user) {
       toast.error('Gmail not connected. Please connect Gmail first.');
       return;
     }
@@ -99,7 +119,7 @@ const GmailIntegrationStatus: React.FC<GmailIntegrationStatusProps> = ({
               <div>
                 <p className="font-medium">Gmail Account</p>
                 <p className="text-sm text-muted-foreground">
-                  {isGmailConnected ? 'Connected' : 'Not connected'}
+                  {gmailConnected ? 'Connected' : 'Not connected'}
                 </p>
                 {lastSyncDate && (
                   <p className="text-xs text-muted-foreground mt-1">
@@ -109,15 +129,15 @@ const GmailIntegrationStatus: React.FC<GmailIntegrationStatusProps> = ({
               </div>
             </div>
             <Button 
-              variant={isGmailConnected ? "secondary" : "default"}
+              variant={gmailConnected ? "secondary" : "default"}
               onClick={handleConnectGmail}
-              disabled={isGmailConnected}
+              disabled={gmailConnected}
             >
-              {isGmailConnected ? 'Connected' : 'Connect Gmail'}
+              {gmailConnected ? 'Connected' : 'Connect Gmail'}
             </Button>
           </div>
           
-          {isGmailConnected && (
+          {gmailConnected && (
             <div className="pt-3">
               <Button 
                 onClick={handleSyncGmail} 
@@ -143,7 +163,7 @@ const GmailIntegrationStatus: React.FC<GmailIntegrationStatusProps> = ({
             </div>
           )}
           
-          {!isGmailConnected && (
+          {!gmailConnected && (
             <div className="flex items-start mt-4 p-3 bg-amber-50 border border-amber-100 rounded-md">
               <AlertCircle className="h-5 w-5 text-amber-500 mt-0.5 mr-2 flex-shrink-0" />
               <div className="text-sm text-amber-800">

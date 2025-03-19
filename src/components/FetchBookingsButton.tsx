@@ -1,9 +1,28 @@
+
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Inbox, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
+
+/**
+ * Function to check if a Gmail account is connected
+ * @param user The user object from auth context
+ * @returns Boolean indicating if Gmail is connected
+ */
+const isGmailAccountConnected = (user: any): boolean => {
+  if (!user) return false;
+  
+  // Check if user has an email (basic validation)
+  if (!user.email) {
+    console.warn('User context missing email property');
+    return false;
+  }
+  
+  // Check if the user has explicitly connected Gmail
+  return user.user_metadata?.gmail_connected === true;
+};
 
 interface FetchBookingsButtonProps {
   onFetchComplete?: () => void;
@@ -14,9 +33,12 @@ const FetchBookingsButton: React.FC<FetchBookingsButtonProps> = ({ onFetchComple
   const { user, isGmailConnected, connectGmail } = useAuth();
   const [retryCount, setRetryCount] = useState(0);
   const MAX_RETRIES = 2;
+  
+  // Use our dedicated function to check Gmail connection
+  const gmailConnected = isGmailAccountConnected(user);
 
   const handleFetchBookings = async () => {
-    if (!isGmailConnected || !user) {
+    if (!gmailConnected || !user) {
       toast.error('Gmail not connected. Please connect Gmail in your profile.');
       return;
     }
@@ -139,7 +161,7 @@ const FetchBookingsButton: React.FC<FetchBookingsButtonProps> = ({ onFetchComple
     <Button 
       onClick={handleFetchBookings}
       variant="outline"
-      disabled={isFetching || !isGmailConnected}
+      disabled={isFetching || !gmailConnected}
       className="flex items-center gap-2"
     >
       {isFetching ? (

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -17,6 +18,24 @@ import {
 } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
+/**
+ * Function to check if a Gmail account is connected
+ * @param user The user object from auth context
+ * @returns Boolean indicating if Gmail is connected
+ */
+const isGmailAccountConnected = (user: any): boolean => {
+  if (!user) return false;
+  
+  // Check if user has an email (basic validation)
+  if (!user.email) {
+    console.warn('User context missing email property');
+    return false;
+  }
+  
+  // Check if the user has explicitly connected Gmail
+  return user.user_metadata?.gmail_connected === true;
+};
+
 const UserProfile = () => {
   const { user, isGmailConnected, connectGmail } = useAuth();
   const [fullName, setFullName] = useState('');
@@ -27,6 +46,9 @@ const UserProfile = () => {
   const [preferredCurrency, setPreferredCurrency] = useState('USD');
   const [timezone, setTimezone] = useState('UTC');
   const [notificationMethod, setNotificationMethod] = useState('email');
+  
+  // Use our new function to get Gmail connection status
+  const gmailConnected = isGmailAccountConnected(user);
   
   useEffect(() => {
     if (user) {
@@ -69,7 +91,7 @@ const UserProfile = () => {
 
   const handleConnectGmail = async () => {
     // If Gmail is already connected, just show a notification
-    if (isGmailConnected) {
+    if (gmailConnected) {
       toast.info('Gmail is already connected to your account');
       return;
     }
@@ -83,6 +105,12 @@ const UserProfile = () => {
         return;
       }
       
+      // Check if user has a valid email
+      if (!user.email) {
+        toast.error('User account does not have a valid email');
+        return;
+      }
+      
       // Initiate the Gmail connection process with updated scopes
       await connectGmail();
       
@@ -91,30 +119,6 @@ const UserProfile = () => {
       toast.error('Failed to connect Gmail. Please try again.');
     } finally {
       setIsConnectingGmail(false);
-    }
-  };
-
-  const handleSaveNotificationSettings = async () => {
-    if (!user) return;
-    
-    try {
-      setIsSaving(true);
-      
-      const { error } = await supabase.auth.updateUser({
-        data: { 
-          notification_method: notificationMethod,
-          price_alert_threshold: priceAlertThreshold
-        }
-      });
-      
-      if (error) throw error;
-      
-      toast.success(`Notification settings saved successfully`);
-    } catch (error: any) {
-      console.error('Error saving notification settings:', error.message);
-      toast.error('Failed to save notification settings');
-    } finally {
-      setIsSaving(false);
     }
   };
 
@@ -191,9 +195,9 @@ const UserProfile = () => {
                   <div>
                     <p className="font-medium">Gmail Account</p>
                     <p className="text-sm text-muted-foreground">
-                      {isGmailConnected ? 'Connected' : 'Not connected'}
+                      {gmailConnected ? 'Connected' : 'Not connected'}
                     </p>
-                    {isGmailConnected && (
+                    {gmailConnected && (
                       <p className="text-xs text-muted-foreground mt-1">
                         We will automatically scan for booking.com confirmation emails
                       </p>
@@ -201,16 +205,16 @@ const UserProfile = () => {
                   </div>
                 </div>
                 <Button 
-                  variant={isGmailConnected ? "secondary" : "default"}
+                  variant={gmailConnected ? "secondary" : "default"}
                   onClick={handleConnectGmail}
-                  disabled={isConnectingGmail || isGmailConnected}
+                  disabled={isConnectingGmail || gmailConnected}
                 >
                   {isConnectingGmail ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       Connecting...
                     </>
-                  ) : isGmailConnected ? (
+                  ) : gmailConnected ? (
                     'Connected'
                   ) : (
                     'Connect Gmail'
@@ -218,7 +222,7 @@ const UserProfile = () => {
                 </Button>
               </div>
               
-              {!isGmailConnected && !isConnectingGmail && (
+              {!gmailConnected && !isConnectingGmail && (
                 <div className="mt-4 p-3 bg-amber-50 border border-amber-100 rounded-md">
                   <div className="flex">
                     <AlertCircle className="h-5 w-5 text-amber-500 mt-0.5 mr-2 flex-shrink-0" />
@@ -358,4 +362,3 @@ const UserProfile = () => {
 };
 
 export default UserProfile;
-
