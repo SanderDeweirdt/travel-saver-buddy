@@ -143,16 +143,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       setLoading(true);
       
+      const { data: { session: currentSession } } = await supabase.auth.getSession();
+      
+      // If we have a valid session but need to refresh the Gmail token
+      if (currentSession?.user && isGmailConnected) {
+        console.log('Refreshing Gmail token...');
+      }
+      
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
           redirectTo: `${window.location.origin}/profile`,
-          // Update to include full Gmail access scope to read messages
+          // Update to include full Gmail access scope to read messages and specifically request offline access
           scopes: 'https://www.googleapis.com/auth/gmail.readonly https://mail.google.com/',
           queryParams: {
             access_type: 'offline',
             prompt: 'consent',
-            client_id: '891502742038-7or08pgkf2ljstmv5l7j1pf8sjurb29q.apps.googleusercontent.com',
+            // Force approval prompt to get a refresh token every time
+            approval_prompt: 'force',
           } as any,
         },
       });

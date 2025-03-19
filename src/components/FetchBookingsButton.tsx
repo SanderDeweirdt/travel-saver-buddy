@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Inbox, Loader2 } from 'lucide-react';
@@ -12,7 +11,9 @@ interface FetchBookingsButtonProps {
 
 const FetchBookingsButton: React.FC<FetchBookingsButtonProps> = ({ onFetchComplete }) => {
   const [isFetching, setIsFetching] = useState(false);
-  const { user, isGmailConnected } = useAuth();
+  const { user, isGmailConnected, connectGmail } = useAuth();
+  const [retryCount, setRetryCount] = useState(0);
+  const MAX_RETRIES = 2;
 
   const handleFetchBookings = async () => {
     if (!isGmailConnected || !user) {
@@ -32,10 +33,50 @@ const FetchBookingsButton: React.FC<FetchBookingsButtonProps> = ({ onFetchComple
       }
       
       // Call our edge function to process Gmail messages with the enhanced parsing rules
+      const response = await processGmailWithRetry(session.provider_token, user.id);
+      
+      if (response.error) {
+        throw new Error(response.error);
+      }
+      
+      const newBookings = response.data?.bookings?.length || 0;
+      
+      if (newBookings > 0) {
+        toast.success(`Imported ${newBookings} bookings from your Gmail`);
+      } else {
+        toast.info('No new Booking.com confirmations found in your Gmail');
+      }
+      
+      // Store the last import date in user metadata
+      await supabase.auth.updateUser({
+        data: { 
+          last_gmail_import: new Date().toISOString(),
+          gmail_imported_bookings: (user.user_metadata?.gmail_imported_bookings || 0) + newBookings
+        }
+      });
+      
+      // Reset retry count on successful operation
+      setRetryCount(0);
+      
+      // Notify parent component that fetch is complete
+      if (onFetchComplete) {
+        onFetchComplete();
+      }
+      
+    } catch (error: any) {
+      console.error('Error fetching bookings from Gmail:', error);
+      toast.error(error.message || 'Error fetching bookings');
+    } finally {
+      setIsFetching(false);
+    }
+  };
+
+  const processGmailWithRetry = async (accessToken: string, userId: string, currentRetry = 0): Promise<any> => {
+    try {
       const { data, error } = await supabase.functions.invoke('process-gmail', {
         body: {
-          accessToken: session.provider_token,
-          userId: user.id,
+          accessToken,
+          userId,
           parsingRules: {
             match: {
               from: "noreply@booking.com",
@@ -54,37 +95,43 @@ const FetchBookingsButton: React.FC<FetchBookingsButtonProps> = ({ onFetchComple
           }
         }
       });
-      
+
       if (error) {
-        throw new Error(error.message);
-      }
-      
-      const newBookings = data?.bookings?.length || 0;
-      
-      if (newBookings > 0) {
-        toast.success(`Imported ${newBookings} bookings from your Gmail`);
-      } else {
-        toast.info('No new Booking.com confirmations found in your Gmail');
-      }
-      
-      // Store the last import date in user metadata
-      await supabase.auth.updateUser({
-        data: { 
-          last_gmail_import: new Date().toISOString(),
-          gmail_imported_bookings: (user.user_metadata?.gmail_imported_bookings || 0) + newBookings
+        // Check if the error is related to authentication
+        if (error.message?.includes('403 Forbidden') && currentRetry < MAX_RETRIES) {
+          console.log(`Gmail API authentication error, attempt ${currentRetry + 1}/${MAX_RETRIES}. Refreshing token...`);
+          
+          // Refresh token by reconnecting to Gmail
+          await connectGmail();
+          
+          // Get updated session
+          const { data: { session: refreshedSession } } = await supabase.auth.getSession();
+          
+          if (!refreshedSession?.provider_token) {
+            throw new Error('Failed to refresh token. Please try reconnecting your Gmail account.');
+          }
+          
+          // Retry with new token
+          return processGmailWithRetry(refreshedSession.provider_token, userId, currentRetry + 1);
         }
-      });
-      
-      // Notify parent component that fetch is complete
-      if (onFetchComplete) {
-        onFetchComplete();
+        
+        throw error;
       }
       
-    } catch (error: any) {
-      console.error('Error fetching bookings from Gmail:', error);
-      toast.error(error.message || 'Error fetching bookings');
-    } finally {
-      setIsFetching(false);
+      return { data, error: null };
+      
+    } catch (error) {
+      // If we've reached max retries, give up
+      if (currentRetry >= MAX_RETRIES) {
+        return { 
+          data: null, 
+          error: `Gmail API error: ${error instanceof Error ? error.message : 'Unknown error'}. Please reconnect your Gmail account.` 
+        };
+      }
+      
+      // Otherwise retry
+      console.log(`Error in Gmail API call, attempt ${currentRetry + 1}/${MAX_RETRIES}. Retrying...`);
+      return processGmailWithRetry(accessToken, userId, currentRetry + 1);
     }
   };
 
