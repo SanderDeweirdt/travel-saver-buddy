@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Inbox, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth, GMAIL_API_SCOPES } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 
 /**
@@ -32,7 +32,7 @@ const FetchBookingsButton: React.FC<FetchBookingsButtonProps> = ({ onFetchComple
   const [isFetching, setIsFetching] = useState(false);
   const { user, isGmailConnected, connectGmail } = useAuth();
   const [retryCount, setRetryCount] = useState(0);
-  const MAX_RETRIES = 2;
+  const MAX_RETRIES = 3;
   
   // Use our dedicated function to check Gmail connection
   const gmailConnected = isGmailAccountConnected(user);
@@ -50,7 +50,9 @@ const FetchBookingsButton: React.FC<FetchBookingsButtonProps> = ({ onFetchComple
       const { data: { session } } = await supabase.auth.getSession();
       
       if (!session?.provider_token) {
+        console.error('No provider token available');
         toast.error('Unable to access Gmail. Please reconnect your account.');
+        await reconnectGmail();
         return;
       }
       
@@ -87,14 +89,32 @@ const FetchBookingsButton: React.FC<FetchBookingsButtonProps> = ({ onFetchComple
       
     } catch (error: any) {
       console.error('Error fetching bookings from Gmail:', error);
+      
+      if (error.message?.includes('reconnect') || error.message?.includes('token')) {
+        await reconnectGmail();
+      }
+      
       toast.error(error.message || 'Error fetching bookings');
     } finally {
       setIsFetching(false);
     }
   };
 
+  const reconnectGmail = async () => {
+    toast.info('Reconnecting to Gmail...');
+    try {
+      await connectGmail();
+      toast.success('Gmail reconnected. Please try fetching bookings again.');
+    } catch (error) {
+      console.error('Failed to reconnect Gmail:', error);
+      toast.error('Failed to reconnect Gmail. Please try again later.');
+    }
+  };
+
   const processGmailWithRetry = async (accessToken: string, userId: string, currentRetry = 0): Promise<any> => {
     try {
+      console.log(`Attempt ${currentRetry + 1}/${MAX_RETRIES + 1} to process Gmail`);
+      
       const { data, error } = await supabase.functions.invoke('process-gmail', {
         body: {
           accessToken,
@@ -119,12 +139,21 @@ const FetchBookingsButton: React.FC<FetchBookingsButtonProps> = ({ onFetchComple
       });
 
       if (error) {
+        console.error(`Gmail API error (attempt ${currentRetry + 1}):`, error);
+        
         // Check if the error is related to authentication
-        if (error.message?.includes('403 Forbidden') && currentRetry < MAX_RETRIES) {
-          console.log(`Gmail API authentication error, attempt ${currentRetry + 1}/${MAX_RETRIES}. Refreshing token...`);
+        if ((error.message?.includes('403') || 
+             error.message?.includes('401') || 
+             error.message?.includes('authentication')) && 
+            currentRetry < MAX_RETRIES) {
+            
+          console.log(`Token issue detected, attempt ${currentRetry + 1}/${MAX_RETRIES}. Refreshing token...`);
           
           // Refresh token by reconnecting to Gmail
           await connectGmail();
+          
+          // Wait a moment for the token to be refreshed
+          await new Promise(resolve => setTimeout(resolve, 1000));
           
           // Get updated session
           const { data: { session: refreshedSession } } = await supabase.auth.getSession();
@@ -132,6 +161,8 @@ const FetchBookingsButton: React.FC<FetchBookingsButtonProps> = ({ onFetchComple
           if (!refreshedSession?.provider_token) {
             throw new Error('Failed to refresh token. Please try reconnecting your Gmail account.');
           }
+          
+          console.log('Token refreshed, retrying with new token');
           
           // Retry with new token
           return processGmailWithRetry(refreshedSession.provider_token, userId, currentRetry + 1);
@@ -142,7 +173,9 @@ const FetchBookingsButton: React.FC<FetchBookingsButtonProps> = ({ onFetchComple
       
       return { data, error: null };
       
-    } catch (error) {
+    } catch (error: any) {
+      console.error(`Error in Gmail API call (attempt ${currentRetry + 1}):`, error);
+      
       // If we've reached max retries, give up
       if (currentRetry >= MAX_RETRIES) {
         return { 
@@ -153,6 +186,11 @@ const FetchBookingsButton: React.FC<FetchBookingsButtonProps> = ({ onFetchComple
       
       // Otherwise retry
       console.log(`Error in Gmail API call, attempt ${currentRetry + 1}/${MAX_RETRIES}. Retrying...`);
+      
+      // Wait with exponential backoff before retrying
+      const backoffTime = Math.pow(2, currentRetry) * 1000;
+      await new Promise(resolve => setTimeout(resolve, backoffTime));
+      
       return processGmailWithRetry(accessToken, userId, currentRetry + 1);
     }
   };

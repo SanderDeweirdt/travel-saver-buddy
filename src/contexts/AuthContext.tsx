@@ -1,9 +1,10 @@
-
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+
+const GMAIL_SCOPES = 'https://www.googleapis.com/auth/gmail.readonly';
 
 interface AuthContextType {
   session: Session | null;
@@ -116,7 +117,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
       
       if (requestGmailAccess) {
-        options.scopes = 'https://www.googleapis.com/auth/gmail.readonly';
+        options.scopes = GMAIL_SCOPES;
         options.queryParams = {
           access_type: 'offline',
           prompt: 'consent',
@@ -143,25 +144,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       setLoading(true);
       
-      const { data: { session: currentSession } } = await supabase.auth.getSession();
-      
-      // If we have a valid session but need to refresh the Gmail token
-      if (currentSession?.user && isGmailConnected) {
-        console.log('Refreshing Gmail token...');
-      }
+      console.log('Connecting Gmail with consistent scopes:', GMAIL_SCOPES);
       
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
           redirectTo: `${window.location.origin}/profile`,
-          // Update to include full Gmail access scope to read messages and specifically request offline access
-          scopes: 'https://www.googleapis.com/auth/gmail.readonly https://mail.google.com/',
+          scopes: GMAIL_SCOPES,
           queryParams: {
             access_type: 'offline',
             prompt: 'consent',
-            // Force approval prompt to get a refresh token every time
-            approval_prompt: 'force',
-          } as any,
+          },
         },
       });
       
@@ -255,3 +248,5 @@ export const useAuth = () => {
   }
   return context;
 };
+
+export const GMAIL_API_SCOPES = GMAIL_SCOPES;
