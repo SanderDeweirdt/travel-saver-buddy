@@ -136,7 +136,7 @@ function extractBookingInfo(body: string, emailId: string, parsingRules?: Parsin
     
     const isHtml = body.includes('<html') || body.includes('<body') || body.includes('<div') || body.includes('<a ');
     console.log("Content appears to be HTML:", isHtml);
-    
+    console.log("HTML Content Body:", body);
     let hotelInfo = { hotelName: null, hotelUrl: null };
     if (isHtml) {
       hotelInfo = extractHotelInfoFromHtml(body);
