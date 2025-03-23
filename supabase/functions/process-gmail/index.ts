@@ -51,6 +51,7 @@ interface ParsingRules {
     check_in_date?: string;
     check_out_date?: string;
     cancellation_date?: string;
+    group_adults?: string;
   };
 }
 
@@ -69,6 +70,8 @@ interface BookingInfo {
   source: string;
   imported_from_gmail: boolean;
   import_timestamp: string;
+  group_adults?: number;
+  booking_url?: string;
 }
 
 function extractHotelInfoFromHtml(htmlContent: string): { hotelName: string | null; hotelUrl: string | null } {
@@ -158,6 +161,7 @@ function extractBookingInfo(body: string, emailId: string, parsingRules?: Parsin
     let priceRegex: RegExp;
     let hotelUrlRegex: RegExp;
     let cancellationPolicyRegex: RegExp = /Free cancellation until ([^<]+)/i;
+    let groupAdultsRegex: RegExp = /(\d+) adult[s]?/i;
     
     if (parsingRules) {
       bookingRefRegex = extractRegex(parsingRules.extract.confirmation_number);
@@ -189,6 +193,10 @@ function extractBookingInfo(body: string, emailId: string, parsingRules?: Parsin
       } else {
         hotelUrlRegex = extractRegex(parsingRules.extract.hotel_url);
       }
+      
+      if (parsingRules.extract.group_adults) {
+        groupAdultsRegex = extractRegex(parsingRules.extract.group_adults);
+      }
     } else {
       bookingRefRegex = /Confirmation:\s*(\d+)/i;
       hotelNameRegex = /Your booking is confirmed at\s*(.*)/i;
@@ -210,6 +218,7 @@ function extractBookingInfo(body: string, emailId: string, parsingRules?: Parsin
     const priceMatch = body.match(priceRegex);
     const hotelUrlMatch = !hotelInfo.hotelUrl ? body.match(hotelUrlRegex) : null;
     const cancellationPolicyMatch = body.match(cancellationPolicyRegex);
+    const groupAdultsMatch = body.match(groupAdultsRegex);
 
     const parseDateToCET = (dateStr: string, isCheckIn = false, isCheckOut = false): string => {
       try {
@@ -284,13 +293,55 @@ function extractBookingInfo(body: string, emailId: string, parsingRules?: Parsin
     const cancellationPolicy = cancellationPolicyMatch ? 
       `Free cancellation until ${cancellationPolicyMatch[1]}` : 
       null;
+      
+    const groupAdults = groupAdultsMatch ? parseInt(groupAdultsMatch[1], 10) : 2; // Default to 2 adults if not found
+
+    let bookingUrl = null;
+    try {
+      if (hotelUrlValue || hotelNameValue) {
+        const formatDateForUrl = (isoDateString: string): string => {
+          try {
+            const date = new Date(isoDateString);
+            return date.toISOString().split('T')[0]; // Gets YYYY-MM-DD format
+          } catch (error) {
+            console.error('Error formatting date for URL:', error);
+            return '';
+          }
+        };
+        
+        const checkinFormatted = formatDateForUrl(checkInDate);
+        const checkoutFormatted = formatDateForUrl(checkOutDate);
+        
+        const hotelIdentifier = hotelUrlValue || hotelNameValue;
+        let baseUrl: string;
+        
+        if (hotelUrlValue && hotelUrlValue.includes('/hotel/')) {
+          baseUrl = hotelUrlValue;
+        } else {
+          const encodedHotelName = encodeURIComponent(hotelNameValue);
+          baseUrl = `https://www.booking.com/searchresults.html?ss=${encodedHotelName}`;
+        }
+        
+        const params = new URLSearchParams();
+        params.append('checkin', checkinFormatted);
+        params.append('checkout', checkoutFormatted);
+        params.append('group_adults', groupAdults.toString());
+        
+        bookingUrl = `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}${params.toString()}`;
+        console.log("Generated booking URL:", bookingUrl);
+      }
+    } catch (urlError) {
+      console.error('Error generating booking URL:', urlError);
+    }
 
     console.log("Final extracted values:", {
       booking_reference: bookingReference,
       hotel_name: hotelNameValue,
       hotel_url: hotelUrlValue,
+      booking_url: bookingUrl,
       price_paid: priceValue,
-      room_type: roomTypeMatch ? roomTypeMatch[1].trim() : null
+      room_type: roomTypeMatch ? roomTypeMatch[1].trim() : null,
+      group_adults: groupAdults
     });
 
     return {
@@ -307,7 +358,9 @@ function extractBookingInfo(body: string, emailId: string, parsingRules?: Parsin
       cancellation_policy: cancellationPolicy || undefined,
       source: 'gmail',
       imported_from_gmail: true,
-      import_timestamp: new Date().toISOString()
+      import_timestamp: new Date().toISOString(),
+      group_adults: groupAdults,
+      booking_url: bookingUrl
     };
   } catch (error) {
     console.error('Error extracting booking info:', error);
@@ -324,7 +377,8 @@ function extractBookingInfo(body: string, emailId: string, parsingRules?: Parsin
       currency: 'EUR',
       source: 'gmail',
       imported_from_gmail: true,
-      import_timestamp: new Date().toISOString()
+      import_timestamp: new Date().toISOString(),
+      group_adults: 2
     };
   }
 }
@@ -494,6 +548,7 @@ async function processGmailMessages(accessToken: string, userId: string, parsing
                 import_timestamp: bookingInfo.import_timestamp,
                 created_at: new Date().toISOString(),
                 updated_at: new Date().toISOString(),
+                group_adults: bookingInfo.group_adults || 2,
               },
               { 
                 onConflict: 'booking_reference',

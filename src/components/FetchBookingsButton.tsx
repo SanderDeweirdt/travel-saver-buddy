@@ -132,7 +132,8 @@ const FetchBookingsButton: React.FC<FetchBookingsButtonProps> = ({ onFetchComple
               room_type: "regex:Your reservation<\\/strong><\\/div>\\s*<div>\\d+ night[s]*, ([^<]+)",
               check_in_date_raw: "regex:Check-in\\s*\\w+,\\s*(\\w+ \\d{1,2}, \\d{4})",
               check_out_date_raw: "regex:Check-out\\s*\\w+,\\s*(\\w+ \\d{1,2}, \\d{4})",
-              cancellation_date_raw: "regex:cancel for FREE until\\s*(\\w+ \\d{1,2}, \\d{4} \\d{2}:\\d{2} [AP]M)"
+              cancellation_date_raw: "regex:cancel for FREE until\\s*(\\w+ \\d{1,2}, \\d{4} \\d{2}:\\d{2} [AP]M)",
+              group_adults: "regex:(\\d+) adult[s]?"
             }
           }
         }
