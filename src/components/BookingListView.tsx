@@ -174,6 +174,7 @@ const BookingListView: React.FC<BookingListViewProps> = ({
                               cheaperPrice={true}
                               checkInDate={booking.check_in_date}
                               checkOutDate={booking.check_out_date}
+                              groupAdults={2} // Default to 2 adults
                             />
                           )}
                         </div>
