@@ -75,6 +75,62 @@ interface BookingInfo {
   booking_url?: string;
 }
 
+function base64UrlDecode(base64Url: string): string {
+  const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+  const binaryStr = atob(base64);
+  const bytes = new Uint8Array(binaryStr.length);
+  for (let i = 0; i < binaryStr.length; i++) {
+    bytes[i] = binaryStr.charCodeAt(i);
+  }
+  return new TextDecoder().decode(bytes);
+}
+
+function extractEmailContent(message: GmailMessage): { text: string, html: string | null } {
+  const result = { text: '', html: null };
+  
+  const findParts = (parts: any[], mimeType: string): string[] => {
+    const contents: string[] = [];
+    
+    for (const part of parts) {
+      if (part.mimeType === mimeType && part.body?.data) {
+        contents.push(base64UrlDecode(part.body.data));
+      }
+      
+      if (part.parts) {
+        contents.push(...findParts(part.parts, mimeType));
+      }
+    }
+    
+    return contents;
+  };
+  
+  if (message.payload.parts) {
+    const htmlContents = findParts(message.payload.parts, 'text/html');
+    if (htmlContents.length > 0) {
+      result.html = htmlContents.join('\n');
+    }
+    
+    const textContents = findParts(message.payload.parts, 'text/plain');
+    if (textContents.length > 0) {
+      result.text = textContents.join('\n');
+    }
+  }
+  
+  if (!result.html && message.payload.mimeType === 'text/html' && message.payload.body?.data) {
+    result.html = base64UrlDecode(message.payload.body.data);
+  }
+  
+  if (!result.text && message.payload.mimeType === 'text/plain' && message.payload.body?.data) {
+    result.text = base64UrlDecode(message.payload.body.data);
+  }
+  
+  if (!result.text && !result.html) {
+    result.text = message.snippet || '';
+  }
+  
+  return result;
+}
+
 function extractHotelInfoFromHtml(htmlContent: string): { hotelName: string | null; hotelUrl: string | null } {
   try {
     console.log("Extracting hotel info from HTML content");
@@ -384,62 +440,6 @@ function extractBookingInfo(body: string, emailId: string, parsingRules?: Parsin
   }
 }
 
-function base64UrlDecode(base64Url: string): string {
-  const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-  const binaryStr = atob(base64);
-  const bytes = new Uint8Array(binaryStr.length);
-  for (let i = 0; i < binaryStr.length; i++) {
-    bytes[i] = binaryStr.charCodeAt(i);
-  }
-  return new TextDecoder().decode(bytes);
-}
-
-function extractEmailContent(message: GmailMessage): { text: string, html: string | null } {
-  const result = { text: '', html: null };
-  
-  const findParts = (parts: any[], mimeType: string): string[] => {
-    const contents: string[] = [];
-    
-    for (const part of parts) {
-      if (part.mimeType === mimeType && part.body?.data) {
-        contents.push(base64UrlDecode(part.body.data));
-      }
-      
-      if (part.parts) {
-        contents.push(...findParts(part.parts, mimeType));
-      }
-    }
-    
-    return contents;
-  };
-  
-  if (message.payload.parts) {
-    const htmlContents = findParts(message.payload.parts, 'text/html');
-    if (htmlContents.length > 0) {
-      result.html = htmlContents.join('\n');
-    }
-    
-    const textContents = findParts(message.payload.parts, 'text/plain');
-    if (textContents.length > 0) {
-      result.text = textContents.join('\n');
-    }
-  }
-  
-  if (!result.html && message.payload.mimeType === 'text/html' && message.payload.body?.data) {
-    result.html = base64UrlDecode(message.payload.body.data);
-  }
-  
-  if (!result.text && message.payload.mimeType === 'text/plain' && message.payload.body?.data) {
-    result.text = base64UrlDecode(message.payload.body.data);
-  }
-  
-  if (!result.text && !result.html) {
-    result.text = message.snippet || '';
-  }
-  
-  return result;
-}
-
 async function processGmailMessages(accessToken: string, userId: string, parsingRules?: ParsingRules): Promise<BookingInfo[]> {
   try {
     let query = 'from:booking.com subject:"Your booking is confirmed"';
@@ -575,62 +575,6 @@ async function processGmailMessages(accessToken: string, userId: string, parsing
     console.error('Error processing Gmail messages:', error);
     throw error;
   }
-}
-
-function base64UrlDecode(base64Url: string): string {
-  const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-  const binaryStr = atob(base64);
-  const bytes = new Uint8Array(binaryStr.length);
-  for (let i = 0; i < binaryStr.length; i++) {
-    bytes[i] = binaryStr.charCodeAt(i);
-  }
-  return new TextDecoder().decode(bytes);
-}
-
-function extractEmailContent(message: GmailMessage): { text: string, html: string | null } {
-  const result = { text: '', html: null };
-  
-  const findParts = (parts: any[], mimeType: string): string[] => {
-    const contents: string[] = [];
-    
-    for (const part of parts) {
-      if (part.mimeType === mimeType && part.body?.data) {
-        contents.push(base64UrlDecode(part.body.data));
-      }
-      
-      if (part.parts) {
-        contents.push(...findParts(part.parts, mimeType));
-      }
-    }
-    
-    return contents;
-  };
-  
-  if (message.payload.parts) {
-    const htmlContents = findParts(message.payload.parts, 'text/html');
-    if (htmlContents.length > 0) {
-      result.html = htmlContents.join('\n');
-    }
-    
-    const textContents = findParts(message.payload.parts, 'text/plain');
-    if (textContents.length > 0) {
-      result.text = textContents.join('\n');
-    }
-  }
-  
-  if (!result.html && message.payload.mimeType === 'text/html' && message.payload.body?.data) {
-    result.html = base64UrlDecode(message.payload.body.data);
-  }
-  
-  if (!result.text && message.payload.mimeType === 'text/plain' && message.payload.body?.data) {
-    result.text = base64UrlDecode(message.payload.body.data);
-  }
-  
-  if (!result.text && !result.html) {
-    result.text = message.snippet || '';
-  }
-  
-  return result;
 }
 
 serve(async (req) => {
