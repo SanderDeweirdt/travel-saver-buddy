@@ -15,15 +15,15 @@ import { toast } from 'sonner';
 interface Booking {
   id: string;
   hotel_name: string;
-  hotel_url: string;
+  hotel_url: string | null;
   price_paid: number;
-  room_type: string;
+  room_type: string | null;
   check_in_date: string;
   check_out_date: string;
   cancellation_date: string;
   created_at: string;
-  fetched_price?: number;
-  fetched_price_updated_at?: string;
+  fetched_price: number | null;
+  fetched_price_updated_at: string | null;
 }
 
 const UserDashboard = () => {

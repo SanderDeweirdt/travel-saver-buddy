@@ -33,8 +33,8 @@ interface Booking {
   price_paid: number;
   check_in_date: string;
   check_out_date: string;
-  fetched_price?: number;
-  fetched_price_updated_at?: string;
+  fetched_price?: number | null;
+  fetched_price_updated_at?: string | null;
   isLoading?: boolean;
   fetchError?: string;
 }
@@ -59,6 +59,12 @@ const BookingListView: React.FC<BookingListViewProps> = ({
   const formatDate = (dateString: string) => {
     if (!dateString) return 'N/A';
     return format(new Date(dateString), 'MMM d, yyyy');
+  };
+
+  // Format price with two decimal places, safely handling null/undefined values
+  const formatPrice = (price: number | null | undefined): string => {
+    if (price === null || price === undefined) return 'N/A';
+    return price.toFixed(2);
   };
 
   const handleSyncBooking = async (id: string) => {
@@ -180,8 +186,12 @@ const BookingListView: React.FC<BookingListViewProps> = ({
               </TableRow>
             ) : (
               bookings.map((booking) => {
-                const isCheaper = booking.fetched_price !== undefined && booking.fetched_price < booking.price_paid;
-                const isMoreExpensive = booking.fetched_price !== undefined && booking.fetched_price > booking.price_paid;
+                const isCheaper = booking.fetched_price !== undefined && 
+                                 booking.fetched_price !== null && 
+                                 booking.fetched_price < booking.price_paid;
+                const isMoreExpensive = booking.fetched_price !== undefined && 
+                                      booking.fetched_price !== null && 
+                                      booking.fetched_price > booking.price_paid;
                 
                 return (
                   <TableRow key={booking.id}>
@@ -190,7 +200,7 @@ const BookingListView: React.FC<BookingListViewProps> = ({
                       {formatDate(booking.check_in_date)} - {formatDate(booking.check_out_date)}
                     </TableCell>
                     <TableCell className="text-right">
-                      ${booking.price_paid.toFixed(2)}
+                      ${formatPrice(booking.price_paid)}
                     </TableCell>
                     <TableCell className="text-right">
                       {loadingBookings[booking.id] ? (
@@ -202,13 +212,13 @@ const BookingListView: React.FC<BookingListViewProps> = ({
                           <AlertCircle className="h-4 w-4" />
                           <span className="text-sm">Price unavailable</span>
                         </div>
-                      ) : booking.fetched_price !== undefined ? (
+                      ) : booking.fetched_price !== undefined && booking.fetched_price !== null ? (
                         <div className="flex justify-end items-center gap-3">
                           <span className={
                             isCheaper ? "text-green-600 font-medium" : 
                             isMoreExpensive ? "text-red-600 font-medium" : ""
                           }>
-                            ${booking.fetched_price.toFixed(2)}
+                            ${formatPrice(booking.fetched_price)}
                           </span>
                           {booking.fetched_price_updated_at && (
                             <TooltipProvider>
