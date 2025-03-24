@@ -19,6 +19,7 @@ export type Database = {
           created_at: string
           currency: string | null
           email_id: string | null
+          group_adults: number | null
           hotel_name: string
           hotel_url: string | null
           id: string
@@ -39,6 +40,7 @@ export type Database = {
           created_at?: string
           currency?: string | null
           email_id?: string | null
+          group_adults?: number | null
           hotel_name: string
           hotel_url?: string | null
           id?: string
@@ -59,6 +61,7 @@ export type Database = {
           created_at?: string
           currency?: string | null
           email_id?: string | null
+          group_adults?: number | null
           hotel_name?: string
           hotel_url?: string | null
           id?: string
