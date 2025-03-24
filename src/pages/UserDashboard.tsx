@@ -23,6 +23,7 @@ interface Booking {
   cancellation_date: string;
   created_at: string;
   fetched_price?: number;
+  fetched_price_updated_at?: string;
 }
 
 const UserDashboard = () => {
@@ -45,7 +46,6 @@ const UserDashboard = () => {
   const fetchBookings = async () => {
     try {
       setIsLoading(true);
-      // Type-safe query that won't be in the types until after a server restart
       const { data, error } = await supabase
         .from('bookings')
         .select('*')
@@ -55,24 +55,7 @@ const UserDashboard = () => {
         throw error;
       }
 
-      // Add random fetched prices to some bookings for demonstration
-      const enrichedData = data?.map(booking => {
-        // 70% chance of having a fetched price
-        if (Math.random() > 0.3) {
-          // Randomize price difference: 80% chance cheaper, 20% more expensive
-          const priceDiff = Math.random() > 0.2 
-            ? -(Math.random() * 50) // cheaper
-            : (Math.random() * 20);  // more expensive
-          
-          return {
-            ...booking,
-            fetched_price: Math.max(0, booking.price_paid + priceDiff)
-          };
-        }
-        return booking;
-      });
-
-      setBookings(enrichedData || []);
+      setBookings(data || []);
     } catch (error: any) {
       console.error('Error fetching bookings:', error.message);
       toast.error('Failed to load bookings. Please try again.');

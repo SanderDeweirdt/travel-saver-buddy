@@ -19,6 +19,8 @@ export type Database = {
           created_at: string
           currency: string | null
           email_id: string | null
+          fetched_price: number | null
+          fetched_price_updated_at: string | null
           group_adults: number | null
           hotel_name: string
           hotel_url: string | null
@@ -40,6 +42,8 @@ export type Database = {
           created_at?: string
           currency?: string | null
           email_id?: string | null
+          fetched_price?: number | null
+          fetched_price_updated_at?: string | null
           group_adults?: number | null
           hotel_name: string
           hotel_url?: string | null
@@ -61,6 +65,8 @@ export type Database = {
           created_at?: string
           currency?: string | null
           email_id?: string | null
+          fetched_price?: number | null
+          fetched_price_updated_at?: string | null
           group_adults?: number | null
           hotel_name?: string
           hotel_url?: string | null

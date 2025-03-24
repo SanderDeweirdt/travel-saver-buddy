@@ -34,6 +34,7 @@ interface Booking {
   check_in_date: string;
   check_out_date: string;
   fetched_price?: number;
+  fetched_price_updated_at?: string;
   isLoading?: boolean;
   fetchError?: string;
 }
@@ -68,9 +69,34 @@ const BookingListView: React.FC<BookingListViewProps> = ({
       // Simulate fetching updated price
       await new Promise(resolve => setTimeout(resolve, 1500));
       
-      // In a real app, here you would update the fetched price in the database
-      // For now we'll just show a success message
-      toast.success(`Successfully synced booking ${id}`);
+      // Generate a random price with 70% chance to be cheaper
+      const booking = bookings.find(b => b.id === id);
+      if (!booking) {
+        throw new Error('Booking not found');
+      }
+      
+      // Randomize price difference: 80% chance cheaper, 20% more expensive
+      const priceDiff = Math.random() > 0.2 
+        ? -(Math.random() * 50) // cheaper
+        : (Math.random() * 20);  // more expensive
+      
+      const fetched_price = Math.max(0, booking.price_paid + priceDiff);
+      
+      // Update the fetched price in the database
+      const { error } = await supabase
+        .from('bookings')
+        .update({ 
+          fetched_price, 
+          fetched_price_updated_at: new Date().toISOString() 
+        })
+        .eq('id', id);
+      
+      if (error) {
+        throw error;
+      }
+      
+      toast.success(`Successfully synced booking for ${booking.hotel_name}`);
+      onRefresh(); // Refresh the booking list
     } catch (error: any) {
       toast.error(`Failed to sync: ${error.message}`);
     } finally {
@@ -81,11 +107,27 @@ const BookingListView: React.FC<BookingListViewProps> = ({
   const handleSyncAll = async () => {
     setIsSyncingAll(true);
     try {
-      // Simulate fetching all prices
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Update all bookings with random prices
+      const updates = bookings.map(async (booking) => {
+        // Randomize price difference: 80% chance cheaper, 20% more expensive
+        const priceDiff = Math.random() > 0.2 
+          ? -(Math.random() * 50) // cheaper
+          : (Math.random() * 20);  // more expensive
+        
+        const fetched_price = Math.max(0, booking.price_paid + priceDiff);
+        
+        return supabase
+          .from('bookings')
+          .update({ 
+            fetched_price, 
+            fetched_price_updated_at: new Date().toISOString() 
+          })
+          .eq('id', booking.id);
+      });
       
-      // In a real app, this would update all bookings
-      onRefresh();
+      await Promise.all(updates);
+      
+      onRefresh(); // Refresh all bookings
       toast.success('All bookings synced successfully');
     } catch (error: any) {
       toast.error(`Failed to sync all bookings: ${error.message}`);
@@ -168,6 +210,20 @@ const BookingListView: React.FC<BookingListViewProps> = ({
                           }>
                             ${booking.fetched_price.toFixed(2)}
                           </span>
+                          {booking.fetched_price_updated_at && (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="text-xs text-muted-foreground">
+                                    (Updated {format(new Date(booking.fetched_price_updated_at), 'MMM d, h:mm a')})
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  Price last checked on {format(new Date(booking.fetched_price_updated_at), 'PPpp')}
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
                           {isCheaper && (
                             <RebookHotelButton 
                               hotelName={booking.hotel_name}
@@ -179,7 +235,15 @@ const BookingListView: React.FC<BookingListViewProps> = ({
                           )}
                         </div>
                       ) : (
-                        <span className="text-muted-foreground">Not synced</span>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleSyncBooking(booking.id)}
+                          className="text-muted-foreground"
+                        >
+                          <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+                          Check price
+                        </Button>
                       )}
                     </TableCell>
                     <TableCell>
@@ -191,6 +255,10 @@ const BookingListView: React.FC<BookingListViewProps> = ({
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => handleSyncBooking(booking.id)}>
+                            <RefreshCw className="mr-2 h-4 w-4" />
+                            <span>Check price</span>
+                          </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => onUpdate(booking.id)}>
                             <Edit className="mr-2 h-4 w-4" />
                             <span>Update</span>
