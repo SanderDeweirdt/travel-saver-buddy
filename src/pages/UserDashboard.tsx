@@ -112,7 +112,6 @@ const UserDashboard = () => {
                 setEditingBooking(null);
                 setIsModalOpen(true);
               }}
-              className="flex items-center"
             >
               <PlusCircle className="mr-2 h-4 w-4" />
               Add Booking

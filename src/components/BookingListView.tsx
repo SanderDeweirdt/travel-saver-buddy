@@ -30,11 +30,13 @@ import { toast } from 'sonner';
 interface Booking {
   id: string;
   hotel_name: string;
+  hotel_url: string | null;
   price_paid: number;
+  room_type: string | null;
   check_in_date: string;
   check_out_date: string;
-  fetched_price?: number | null;
-  fetched_price_updated_at?: string | null;
+  fetched_price: number | null;
+  fetched_price_updated_at: string | null;
   isLoading?: boolean;
   fetchError?: string;
 }
@@ -150,16 +152,15 @@ const BookingListView: React.FC<BookingListViewProps> = ({
           onClick={handleSyncAll}
           variant="outline"
           disabled={isSyncingAll}
-          className="flex items-center gap-2"
         >
           {isSyncingAll ? (
             <>
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
               Syncing...
             </>
           ) : (
             <>
-              <RefreshCw className="h-4 w-4" />
+              <RefreshCw className="h-4 w-4 mr-2" />
               Check prices
             </>
           )}
@@ -186,12 +187,10 @@ const BookingListView: React.FC<BookingListViewProps> = ({
               </TableRow>
             ) : (
               bookings.map((booking) => {
-                const isCheaper = booking.fetched_price !== undefined && 
-                                 booking.fetched_price !== null && 
-                                 booking.fetched_price < booking.price_paid;
-                const isMoreExpensive = booking.fetched_price !== undefined && 
-                                      booking.fetched_price !== null && 
-                                      booking.fetched_price > booking.price_paid;
+                const isCheaper = booking.fetched_price !== null && 
+                                  booking.fetched_price < booking.price_paid;
+                const isMoreExpensive = booking.fetched_price !== null && 
+                                       booking.fetched_price > booking.price_paid;
                 
                 return (
                   <TableRow key={booking.id}>
@@ -212,7 +211,7 @@ const BookingListView: React.FC<BookingListViewProps> = ({
                           <AlertCircle className="h-4 w-4" />
                           <span className="text-sm">Price unavailable</span>
                         </div>
-                      ) : booking.fetched_price !== undefined && booking.fetched_price !== null ? (
+                      ) : booking.fetched_price !== null ? (
                         <div className="flex justify-end items-center gap-3">
                           <span className={
                             isCheaper ? "text-green-600 font-medium" : 
