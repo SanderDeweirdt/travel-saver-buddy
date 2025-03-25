@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { format } from 'date-fns';
 import { MoreHorizontal, RefreshCw, Trash, Edit, Loader2, AlertCircle } from 'lucide-react';
@@ -74,36 +73,16 @@ const BookingListView: React.FC<BookingListViewProps> = ({
     setLoadingBookings(prev => ({ ...prev, [id]: true }));
     
     try {
-      // Simulate fetching updated price
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      // Call the edge function to fetch the price
+      const response = await supabase.functions.invoke('fetch-hotel-prices', {
+        body: { bookingId: id }
+      });
       
-      // Generate a random price with 70% chance to be cheaper
-      const booking = bookings.find(b => b.id === id);
-      if (!booking) {
-        throw new Error('Booking not found');
+      if (!response.data.success) {
+        throw new Error(response.data.error || 'Failed to sync booking');
       }
       
-      // Randomize price difference: 80% chance cheaper, 20% more expensive
-      const priceDiff = Math.random() > 0.2 
-        ? -(Math.random() * 50) // cheaper
-        : (Math.random() * 20);  // more expensive
-      
-      const fetched_price = Math.max(0, booking.price_paid + priceDiff);
-      
-      // Update the fetched price in the database
-      const { error } = await supabase
-        .from('bookings')
-        .update({ 
-          fetched_price, 
-          fetched_price_updated_at: new Date().toISOString() 
-        })
-        .eq('id', id);
-      
-      if (error) {
-        throw error;
-      }
-      
-      toast.success(`Successfully synced booking for ${booking.hotel_name}`);
+      toast.success(response.data.message || 'Price updated successfully');
       onRefresh(); // Refresh the booking list
     } catch (error: any) {
       toast.error(`Failed to sync: ${error.message}`);
@@ -115,28 +94,17 @@ const BookingListView: React.FC<BookingListViewProps> = ({
   const handleSyncAll = async () => {
     setIsSyncingAll(true);
     try {
-      // Update all bookings with random prices
-      const updates = bookings.map(async (booking) => {
-        // Randomize price difference: 80% chance cheaper, 20% more expensive
-        const priceDiff = Math.random() > 0.2 
-          ? -(Math.random() * 50) // cheaper
-          : (Math.random() * 20);  // more expensive
-        
-        const fetched_price = Math.max(0, booking.price_paid + priceDiff);
-        
-        return supabase
-          .from('bookings')
-          .update({ 
-            fetched_price, 
-            fetched_price_updated_at: new Date().toISOString() 
-          })
-          .eq('id', booking.id);
+      // Call the edge function to process all bookings
+      const response = await supabase.functions.invoke('fetch-hotel-prices', {
+        body: { processAll: true }
       });
       
-      await Promise.all(updates);
+      if (!response.data.success) {
+        throw new Error(response.data.error || 'Failed to sync all bookings');
+      }
       
       onRefresh(); // Refresh all bookings
-      toast.success('All bookings synced successfully');
+      toast.success(response.data.message || 'All bookings synced successfully');
     } catch (error: any) {
       toast.error(`Failed to sync all bookings: ${error.message}`);
     } finally {
