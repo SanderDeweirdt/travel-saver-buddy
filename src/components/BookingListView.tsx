@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { format } from 'date-fns';
 import { MoreHorizontal, RefreshCw, Trash, Edit, Loader2, AlertCircle } from 'lucide-react';
@@ -55,6 +56,7 @@ const BookingListView: React.FC<BookingListViewProps> = ({
 }) => {
   const [loadingBookings, setLoadingBookings] = useState<Record<string, boolean>>({});
   const [isSyncingAll, setIsSyncingAll] = useState(false);
+  const [isCheckingUrls, setIsCheckingUrls] = useState(false);
 
   // Format date string to a readable format
   const formatDate = (dateString: string) => {
@@ -104,7 +106,15 @@ const BookingListView: React.FC<BookingListViewProps> = ({
       }
       
       onRefresh(); // Refresh all bookings
-      toast.success(response.data.message || 'All bookings synced successfully');
+      
+      // Show more detailed message
+      const result = response.data.result;
+      toast.success(`Processed ${result.total} bookings, ${result.successful} updated successfully`);
+      
+      // If there are invalid URLs, show a warning
+      if (result.urlIntegrity && result.urlIntegrity.invalid > 0) {
+        toast.warning(`Found ${result.urlIntegrity.invalid} invalid hotel URLs. Some bookings may not sync correctly.`);
+      }
     } catch (error: any) {
       toast.error(`Failed to sync all bookings: ${error.message}`);
     } finally {
@@ -112,27 +122,73 @@ const BookingListView: React.FC<BookingListViewProps> = ({
     }
   };
 
+  const handleCheckUrlIntegrity = async () => {
+    setIsCheckingUrls(true);
+    try {
+      // Call the edge function to check URL integrity
+      const response = await supabase.functions.invoke('fetch-hotel-prices', {
+        body: { checkUrlIntegrity: true }
+      });
+      
+      if (!response.data.success) {
+        throw new Error(response.data.error || 'Failed to check URL integrity');
+      }
+      
+      const integrity = response.data.urlIntegrity;
+      
+      if (integrity.invalid > 0) {
+        toast.warning(`Found ${integrity.invalid} invalid hotel URLs out of ${integrity.valid + integrity.invalid} total.`);
+      } else {
+        toast.success(`All ${integrity.valid} hotel URLs are valid.`);
+      }
+    } catch (error: any) {
+      toast.error(`Failed to check URL integrity: ${error.message}`);
+    } finally {
+      setIsCheckingUrls(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <h2 className="text-xl font-semibold">Your Bookings</h2>
-        <Button 
-          onClick={handleSyncAll}
-          variant="outline"
-          disabled={isSyncingAll}
-        >
-          {isSyncingAll ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              Syncing...
-            </>
-          ) : (
-            <>
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Check prices
-            </>
-          )}
-        </Button>
+        <div className="flex gap-2">
+          <Button 
+            onClick={handleCheckUrlIntegrity}
+            variant="outline"
+            disabled={isCheckingUrls}
+            size="sm"
+          >
+            {isCheckingUrls ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                Checking URLs...
+              </>
+            ) : (
+              <>
+                <AlertCircle className="h-4 w-4 mr-2" />
+                Verify URLs
+              </>
+            )}
+          </Button>
+          <Button 
+            onClick={handleSyncAll}
+            variant="outline"
+            disabled={isSyncingAll}
+          >
+            {isSyncingAll ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                Syncing...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Check prices
+              </>
+            )}
+          </Button>
+        </div>
       </div>
       
       <div className="rounded-md border">
@@ -162,7 +218,14 @@ const BookingListView: React.FC<BookingListViewProps> = ({
                 
                 return (
                   <TableRow key={booking.id}>
-                    <TableCell className="font-medium">{booking.hotel_name}</TableCell>
+                    <TableCell className="font-medium">
+                      {booking.hotel_name}
+                      {booking.hotel_url && (
+                        <div className="text-xs text-muted-foreground truncate max-w-[250px]">
+                          {booking.hotel_url}
+                        </div>
+                      )}
+                    </TableCell>
                     <TableCell>
                       {formatDate(booking.check_in_date)} - {formatDate(booking.check_out_date)}
                     </TableCell>

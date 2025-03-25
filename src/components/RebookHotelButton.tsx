@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { ExternalLink } from 'lucide-react';
@@ -31,8 +32,20 @@ export const createBookingUrl = (
   // First check if it contains 'hotel/' to determine if it's a specific hotel URL
   let url: string;
   if (hotelName.includes('/')) {
-    // If it already appears to be a URL, use it as is but ensure proper encoding
-    url = `https://www.booking.com/hotel/${encodeURIComponent(hotelName.split('/').pop() || hotelName)}`;
+    // If it already appears to be a URL, ensure proper encoding and protocol
+    if (!hotelName.startsWith('http://') && !hotelName.startsWith('https://')) {
+      url = `https://${hotelName}`;
+    } else {
+      url = hotelName;
+    }
+    
+    // Validate the URL is properly formed
+    try {
+      new URL(url);
+    } catch (e) {
+      // If invalid URL, fall back to search
+      url = `https://www.booking.com/searchresults.html?ss=${encodedHotelName}`;
+    }
   } else {
     // Otherwise create a search URL with the hotel name
     url = `https://www.booking.com/searchresults.html?ss=${encodedHotelName}`;
@@ -54,14 +67,32 @@ export const createBookingUrl = (
     }
   };
   
-  // Add parameters to URL
-  const params = new URLSearchParams();
-  params.append('checkin', formatDateForBooking(checkIn));
-  params.append('checkout', formatDateForBooking(checkOut));
-  params.append('group_adults', groupAdults.toString());
-  
-  // Add parameters to the URL
-  return `${url}${url.includes('?') ? '&' : '?'}${params.toString()}`;
+  try {
+    // Create a URL object for proper parameter handling
+    const urlObj = new URL(url);
+    
+    // Add parameters to URL
+    urlObj.searchParams.set('checkin', formatDateForBooking(checkIn));
+    urlObj.searchParams.set('checkout', formatDateForBooking(checkOut));
+    urlObj.searchParams.set('group_adults', groupAdults.toString());
+    
+    // Generate the final URL
+    const finalUrl = urlObj.toString();
+    console.log(`Generated booking URL: ${finalUrl}`);
+    
+    return finalUrl;
+  } catch (error) {
+    console.error('Error creating URL object:', error);
+    
+    // Fallback to manual string concatenation
+    const params = new URLSearchParams();
+    params.append('checkin', formatDateForBooking(checkIn));
+    params.append('checkout', formatDateForBooking(checkOut));
+    params.append('group_adults', groupAdults.toString());
+    
+    // Add parameters to the URL
+    return `${url}${url.includes('?') ? '&' : '?'}${params.toString()}`;
+  }
 };
 
 const RebookHotelButton = ({ 
