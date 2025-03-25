@@ -6,7 +6,6 @@ verify_jwt = false
 
 [functions.fetch-hotel-prices]
 verify_jwt = false
-timeout_seconds = 60
 
 [functions.scheduler]
 verify_jwt = false
