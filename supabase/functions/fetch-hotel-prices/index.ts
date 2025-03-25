@@ -341,12 +341,30 @@ async function fetchHotelPrice(
       return {price: null, error: `HTTP error: ${response.status} ${response.statusText}`};
     }
 
+    // Check for HTML response (which would indicate an error or redirection)
+    const contentType = response.headers.get('content-type');
+    if (contentType && contentType.includes('text/html')) {
+      console.error('Received HTML response instead of JSON');
+      return {price: null, error: 'Received HTML instead of JSON response'};
+    }
+
     // Try to parse response data
     let data: any;
     try {
-      data = await response.json();
-      console.log(`GraphQL raw response for booking ${booking.id}:`, JSON.stringify(data).substring(0, 500) + '...');
+      const text = await response.text();
+      
+      // Log the raw response for debugging
+      console.log(`Raw response for booking ${booking.id}:`, text.substring(0, 500) + '...');
+      
+      // Check if it starts with HTML doctype
+      if (text.trim().toLowerCase().startsWith('<!doctype')) {
+        return {price: null, error: 'Received HTML document instead of JSON'};
+      }
+      
+      // Parse the JSON
+      data = JSON.parse(text);
     } catch (parseError) {
+      console.error(`Failed to parse JSON response for booking ${booking.id}:`, parseError);
       return {price: null, error: `Failed to parse JSON response: ${parseError.message}`};
     }
     
@@ -392,19 +410,35 @@ async function fetchHotelPrice(
               return {price: null, error: `Final attempt failed: ${finalResponse.status}`};
             }
             
-            const finalData = await finalResponse.json();
-            const finalCards = finalData?.data?.propertyCards?.cards;
-            
-            if (!finalCards || !finalCards.length) {
-              return {price: null, error: "No property cards found in final response"};
+            // Check for HTML response
+            const finalContentType = finalResponse.headers.get('content-type');
+            if (finalContentType && finalContentType.includes('text/html')) {
+              return {price: null, error: 'Final attempt returned HTML instead of JSON'};
             }
             
-            const finalPrice = finalCards[0]?.priceInfo?.displayPrice?.perStay?.value;
-            if (typeof finalPrice === 'number') {
-              console.log(`Successfully extracted price in final attempt for booking ${booking.id}: ${finalPrice}`);
-              return {price: finalPrice};
-            } else {
-              return {price: null, error: "Price not found in final response"};
+            try {
+              const finalText = await finalResponse.text();
+              // Check if it's HTML
+              if (finalText.trim().toLowerCase().startsWith('<!doctype')) {
+                return {price: null, error: 'Final attempt returned HTML document'};
+              }
+              
+              const finalData = JSON.parse(finalText);
+              const finalCards = finalData?.data?.propertyCards?.cards;
+              
+              if (!finalCards || !finalCards.length) {
+                return {price: null, error: "No property cards found in final response"};
+              }
+              
+              const finalPrice = finalCards[0]?.priceInfo?.displayPrice?.perStay?.value;
+              if (typeof finalPrice === 'number') {
+                console.log(`Successfully extracted price in final attempt for booking ${booking.id}: ${finalPrice}`);
+                return {price: finalPrice};
+              } else {
+                return {price: null, error: "Price not found in final response"};
+              }
+            } catch (finalParseError) {
+              return {price: null, error: `Error parsing final response: ${finalParseError.message}`};
             }
           } catch (finalError) {
             return {price: null, error: `Error in final attempt: ${finalError.message}`};
@@ -677,7 +711,18 @@ serve(async (req) => {
     let params: any = {};
     
     if (req.method === 'POST') {
-      params = await req.json();
+      try {
+        params = await req.json();
+      } catch (parseError) {
+        console.error('Error parsing request body:', parseError);
+        return new Response(JSON.stringify({ 
+          success: false, 
+          error: `Invalid JSON in request body: ${parseError.message}` 
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
     } else {
       const url = new URL(req.url);
       params = {
@@ -690,6 +735,7 @@ serve(async (req) => {
 
     // Test authentication if requested
     if (params.testAuth) {
+      console.log('Testing authentication...');
       const authSuccess = await refreshAuthentication(true);
       return new Response(JSON.stringify({
         success: true,
@@ -706,6 +752,7 @@ serve(async (req) => {
 
     // Check URL integrity if requested
     if (params.checkUrlIntegrity) {
+      console.log('Checking URL integrity...');
       const integrity = await checkBookingUrlIntegrity();
       return new Response(JSON.stringify({
         success: true,
@@ -717,6 +764,7 @@ serve(async (req) => {
     
     // Process based on parameters
     if (params.processAll) {
+      console.log('Processing all bookings...');
       const result = await processAllBookings();
       return new Response(JSON.stringify({
         success: true,
@@ -728,6 +776,7 @@ serve(async (req) => {
       });
     } else if (params.bookingId) {
       // Process a single booking
+      console.log(`Processing single booking: ${params.bookingId}`);
       const { data: booking, error } = await supabase
         .from('bookings')
         .select('*')

@@ -57,8 +57,30 @@ const FetchBookingsButton = ({ onFetchComplete }: FetchBookingsButtonProps) => {
         .join('&');
         
       // Trigger the edge function with params
+      console.log(`Calling edge function: ${endpoint}?${queryString}`);
       const response = await fetch(`${endpoint}?${queryString}`);
-      const data = await response.json();
+      
+      // Check for HTML response (error case)
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('text/html')) {
+        console.error('Received HTML response instead of JSON');
+        throw new Error('Received HTML instead of JSON. The server might be returning an error page.');
+      }
+      
+      if (!response.ok) {
+        console.error(`HTTP error: ${response.status} ${response.statusText}`);
+        throw new Error(`HTTP error: ${response.status} ${response.statusText}`);
+      }
+      
+      // Handle the response
+      let data;
+      try {
+        data = await response.json();
+      } catch (parseError) {
+        console.error('JSON parsing error:', parseError);
+        console.error('Response text:', await response.text());
+        throw new Error('Failed to parse response as JSON. Check console for details.');
+      }
 
       if (data.success) {
         if (option === 'test-auth') {
@@ -86,7 +108,7 @@ const FetchBookingsButton = ({ onFetchComplete }: FetchBookingsButtonProps) => {
       }
     } catch (error: any) {
       console.error('Error:', error);
-      toast.error('Failed to execute operation. Please try again.');
+      toast.error(`Failed to execute operation: ${error.message}`);
     } finally {
       setIsLoading(false);
       setAction('');
