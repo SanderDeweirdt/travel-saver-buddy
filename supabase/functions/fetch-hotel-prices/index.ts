@@ -8,6 +8,7 @@ const BOOKING_COM_GRAPHQL_ENDPOINT = "https://www.booking.com/dml/graphql";
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 2000;
 const BATCH_SIZE = 5; // Process bookings in batches to avoid rate limiting
+const AUTH_RETRY_DELAY_MS = 5000; // Delay before retrying with auth
 
 // Headers to mimic a browser request
 const BROWSER_HEADERS = {
@@ -29,6 +30,12 @@ const corsHeaders = {
 const supabaseUrl = Deno.env.get("SUPABASE_URL") as string;
 const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") as string;
 const supabase = createClient(supabaseUrl, supabaseKey);
+
+// Authentication state management
+let authCookies: string | null = null;
+let authTokens: Record<string, string> = {};
+let lastAuthAttempt = 0;
+const AUTH_EXPIRY_MS = 3600000; // 1 hour
 
 // GraphQL query to fetch hotel prices
 const PRICE_QUERY = `
@@ -173,13 +180,90 @@ function extractHotelId(url: string): string | null {
   }
 }
 
-// Function to fetch price from Booking.com using GraphQL
+// Function to detect if authentication is needed based on API response
+function isAuthenticationNeeded(response: Response, responseBody: any): boolean {
+  // Check for HTTP status codes indicating auth issues
+  if (response.status === 401 || response.status === 403) {
+    console.log('Authentication required based on HTTP status code:', response.status);
+    return true;
+  }
+
+  // Check for specific error messages in response body
+  if (responseBody?.errors?.some((error: any) => 
+    error?.message?.toLowerCase().includes('auth') || 
+    error?.message?.toLowerCase().includes('login') || 
+    error?.message?.toLowerCase().includes('permission') ||
+    error?.message?.toLowerCase().includes('unauthorized')
+  )) {
+    console.log('Authentication required based on error message:', JSON.stringify(responseBody.errors));
+    return true;
+  }
+
+  // Check for empty data that could indicate auth issues
+  if (responseBody?.data?.propertyCards?.cards?.length === 0) {
+    console.log('Possible authentication issue: empty results returned');
+    return true;
+  }
+
+  return false;
+}
+
+// Function to refresh authentication credentials
+async function refreshAuthentication(forceRefresh = false): Promise<boolean> {
+  const now = Date.now();
+  
+  // Skip refresh if we've attempted recently, unless forced
+  if (!forceRefresh && now - lastAuthAttempt < AUTH_RETRY_DELAY_MS) {
+    console.log('Skipping auth refresh - attempted too recently');
+    return false;
+  }
+  
+  lastAuthAttempt = now;
+  
+  try {
+    console.log('Attempting to refresh authentication credentials');
+    
+    // For now, we'll use a simple method to obtain some basic cookies
+    // In a production environment, you might:
+    // 1. Use Puppeteer in a serverless function to log in and extract cookies
+    // 2. Use a stored API key if Booking.com offers this option
+    // 3. Implement OAuth if available
+    
+    // Simulate getting a session by visiting the homepage
+    const response = await fetch('https://www.booking.com/', {
+      method: 'GET',
+      headers: BROWSER_HEADERS,
+    });
+
+    if (!response.ok) {
+      console.error('Failed to get initial session:', response.status);
+      return false;
+    }
+
+    // Extract cookies from response
+    const cookies = response.headers.get('set-cookie');
+    if (cookies) {
+      console.log('Obtained new session cookies');
+      authCookies = cookies;
+      return true;
+    }
+
+    console.error('No cookies found in response');
+    return false;
+  } catch (error) {
+    console.error('Error refreshing authentication:', error);
+    return false;
+  }
+}
+
+// Function to fetch price from Booking.com using GraphQL with authentication support
 async function fetchHotelPrice(
   bookingUrl: string,
-  retryCount = 0
+  retryCount = 0,
+  useAuth = false
 ): Promise<number | null> {
   try {
-    console.log(`Fetching price for URL: ${bookingUrl}`);
+    console.log(`Fetching price for URL: ${bookingUrl} (retry: ${retryCount}, auth: ${useAuth})`);
     
     // Validate the booking URL
     if (!isValidUrl(bookingUrl)) {
@@ -236,11 +320,18 @@ async function fetchHotelPrice(
     };
 
     console.log(`GraphQL request payload:`, JSON.stringify(graphqlInput, null, 2));
+    
+    // Prepare headers, including auth if available
+    const headers = { ...BROWSER_HEADERS };
+    if (useAuth && authCookies) {
+      console.log('Using authentication cookies for request');
+      headers['Cookie'] = authCookies;
+    }
 
     // Make GraphQL request
     const response = await fetch(BOOKING_COM_GRAPHQL_ENDPOINT, {
       method: 'POST',
-      headers: BROWSER_HEADERS,
+      headers: headers,
       body: JSON.stringify({
         operationName: 'SearchQueries',
         query: PRICE_QUERY,
@@ -248,19 +339,53 @@ async function fetchHotelPrice(
       })
     });
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! Status: ${response.status}`);
-    }
+    // Log the complete response for debugging authentication issues
+    console.log(`Response status: ${response.status}, statusText: ${response.statusText}`);
+    const responseHeaders = Object.fromEntries(response.headers.entries());
+    console.log('Response headers:', JSON.stringify(responseHeaders));
 
+    // Parse response data
     const data = await response.json();
     
-    // Log the response structure for debugging
-    console.log('GraphQL response cards length:', data?.data?.propertyCards?.cards?.length || 0);
+    // Log the raw response data for debugging
+    console.log('GraphQL raw response:', JSON.stringify(data).substring(0, 500) + '...');
+    
+    // Check if we need authentication
+    if (isAuthenticationNeeded(response, data)) {
+      console.log('Authentication required for this request');
+      
+      if (!useAuth) {
+        // Try to refresh auth and retry with auth
+        const authRefreshed = await refreshAuthentication();
+        if (authRefreshed) {
+          console.log('Auth refreshed, retrying request with authentication');
+          return fetchHotelPrice(bookingUrl, retryCount, true);
+        }
+      } else if (retryCount < MAX_RETRIES) {
+        // If already using auth but still failing, force refresh and retry
+        console.log('Authentication failed, forcing refresh and retry');
+        const authRefreshed = await refreshAuthentication(true);
+        if (authRefreshed) {
+          return fetchHotelPrice(bookingUrl, retryCount + 1, true);
+        }
+      }
+      
+      console.error('Authentication attempts exhausted');
+      return null;
+    }
     
     // Extract the price from the response
     const cards = data?.data?.propertyCards?.cards;
     if (!cards || !cards.length) {
       console.error('No property cards found in response');
+      
+      // If this is our first try without auth, try with auth
+      if (!useAuth && retryCount < 1) {
+        console.log('Retrying with authentication to see if it helps');
+        await refreshAuthentication();
+        return fetchHotelPrice(bookingUrl, retryCount + 1, true);
+      }
+      
       return null;
     }
 
@@ -279,7 +404,7 @@ async function fetchHotelPrice(
     if (retryCount < MAX_RETRIES) {
       console.log(`Retrying (${retryCount + 1}/${MAX_RETRIES}) after ${RETRY_DELAY_MS}ms...`);
       await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
-      return fetchHotelPrice(bookingUrl, retryCount + 1);
+      return fetchHotelPrice(bookingUrl, retryCount + 1, useAuth);
     }
     
     return null;
@@ -362,7 +487,8 @@ async function processBooking(booking: any): Promise<boolean> {
       return false;
     }
 
-    // Fetch the price
+    // Fetch the price (initially without authentication)
+    // The function will automatically try with auth if needed
     const price = await fetchHotelPrice(bookingUrl);
     
     if (price === null) {
@@ -476,7 +602,23 @@ serve(async (req) => {
         bookingId: url.searchParams.get('bookingId'),
         processAll: url.searchParams.get('processAll') === 'true',
         checkUrlIntegrity: url.searchParams.get('checkUrlIntegrity') === 'true',
+        testAuth: url.searchParams.get('testAuth') === 'true',
       };
+    }
+
+    // Test authentication if requested
+    if (params.testAuth) {
+      const authSuccess = await refreshAuthentication(true);
+      return new Response(JSON.stringify({
+        success: true,
+        authTest: {
+          success: authSuccess,
+          hasCookies: !!authCookies,
+          lastAttempt: new Date(lastAuthAttempt).toISOString()
+        }
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     // Check URL integrity if requested
@@ -520,7 +662,7 @@ serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     } else {
-      throw new Error('Missing required parameters: bookingId, processAll, or checkUrlIntegrity');
+      throw new Error('Missing required parameters: bookingId, processAll, testAuth, or checkUrlIntegrity');
     }
   } catch (error) {
     console.error('Error in fetch-hotel-prices function:', error);
