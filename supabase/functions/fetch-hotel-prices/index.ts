@@ -5,8 +5,6 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
 
 // Constants and configuration
 const BOOKING_COM_GRAPHQL_ENDPOINT = "https://www.booking.com/dml/graphql";
-const MAX_RETRIES = 3;
-const RETRY_DELAY_MS = 2000;
 const BATCH_SIZE = 5; // Process bookings in batches to avoid rate limiting
 const AUTH_RETRY_DELAY_MS = 5000; // Delay before retrying with auth
 
@@ -259,11 +257,10 @@ async function refreshAuthentication(forceRefresh = false): Promise<boolean> {
 // Function to fetch price from Booking.com using GraphQL with authentication support
 async function fetchHotelPrice(
   bookingUrl: string,
-  retryCount = 0,
   useAuth = false
 ): Promise<number | null> {
   try {
-    console.log(`Fetching price for URL: ${bookingUrl} (retry: ${retryCount}, auth: ${useAuth})`);
+    console.log(`Fetching price for URL: ${bookingUrl} (auth: ${useAuth})`);
     
     // Validate the booking URL
     if (!isValidUrl(bookingUrl)) {
@@ -359,14 +356,52 @@ async function fetchHotelPrice(
         const authRefreshed = await refreshAuthentication();
         if (authRefreshed) {
           console.log('Auth refreshed, retrying request with authentication');
-          return fetchHotelPrice(bookingUrl, retryCount, true);
+          return fetchHotelPrice(bookingUrl, true);
         }
-      } else if (retryCount < MAX_RETRIES) {
-        // If already using auth but still failing, force refresh and retry
-        console.log('Authentication failed, forcing refresh and retry');
+      } else {
+        // If already using auth but still failing, force refresh
+        console.log('Authentication failed, forcing refresh');
         const authRefreshed = await refreshAuthentication(true);
         if (authRefreshed) {
-          return fetchHotelPrice(bookingUrl, retryCount + 1, true);
+          console.log('Auth refreshed with force, making one final attempt');
+          // We don't retry after this to avoid too many requests
+          // Just try one more time with the fresh auth
+          
+          // Prepare headers with fresh auth
+          const freshHeaders = { ...BROWSER_HEADERS };
+          if (authCookies) {
+            freshHeaders['Cookie'] = authCookies;
+          }
+          
+          // Make final attempt with fresh auth
+          const finalResponse = await fetch(BOOKING_COM_GRAPHQL_ENDPOINT, {
+            method: 'POST',
+            headers: freshHeaders,
+            body: JSON.stringify({
+              operationName: 'SearchQueries',
+              query: PRICE_QUERY,
+              variables: graphqlInput
+            })
+          });
+          
+          if (!finalResponse.ok) {
+            console.error('Final attempt failed:', finalResponse.status);
+            return null;
+          }
+          
+          const finalData = await finalResponse.json();
+          const finalCards = finalData?.data?.propertyCards?.cards;
+          
+          if (!finalCards || !finalCards.length) {
+            console.error('No property cards found in final response');
+            return null;
+          }
+          
+          const finalPrice = finalCards[0]?.priceInfo?.displayPrice?.perStay?.value;
+          if (typeof finalPrice === 'number') {
+            console.log(`Successfully extracted price in final attempt: ${finalPrice}`);
+            return finalPrice;
+          }
         }
       }
       
@@ -378,14 +413,6 @@ async function fetchHotelPrice(
     const cards = data?.data?.propertyCards?.cards;
     if (!cards || !cards.length) {
       console.error('No property cards found in response');
-      
-      // If this is our first try without auth, try with auth
-      if (!useAuth && retryCount < 1) {
-        console.log('Retrying with authentication to see if it helps');
-        await refreshAuthentication();
-        return fetchHotelPrice(bookingUrl, retryCount + 1, true);
-      }
-      
       return null;
     }
 
@@ -399,14 +426,6 @@ async function fetchHotelPrice(
     return null;
   } catch (error) {
     console.error(`Error fetching hotel price: ${error.message}`);
-    
-    // Implement retry logic
-    if (retryCount < MAX_RETRIES) {
-      console.log(`Retrying (${retryCount + 1}/${MAX_RETRIES}) after ${RETRY_DELAY_MS}ms...`);
-      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
-      return fetchHotelPrice(bookingUrl, retryCount + 1, useAuth);
-    }
-    
     return null;
   }
 }
