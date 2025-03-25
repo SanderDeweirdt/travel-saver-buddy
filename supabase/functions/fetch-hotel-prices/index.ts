@@ -241,7 +241,7 @@ async function refreshAuthentication(forceRefresh = false): Promise<boolean> {
     // Extract cookies from response
     const cookies = response.headers.get('set-cookie');
     if (cookies) {
-      console.log('Obtained new session cookies');
+      console.log('Obtained new session cookies:', cookies.substring(0, 50) + '...');
       authCookies = cookies;
       return true;
     }
@@ -257,15 +257,15 @@ async function refreshAuthentication(forceRefresh = false): Promise<boolean> {
 // Function to fetch price from Booking.com using GraphQL with authentication support
 async function fetchHotelPrice(
   bookingUrl: string,
+  booking: any,
   useAuth = false
-): Promise<number | null> {
+): Promise<{price: number | null, error?: string}> {
   try {
-    console.log(`Fetching price for URL: ${bookingUrl} (auth: ${useAuth})`);
+    console.log(`Fetching price for booking ${booking.id} with URL: ${bookingUrl} (auth: ${useAuth})`);
     
     // Validate the booking URL
     if (!isValidUrl(bookingUrl)) {
-      console.error(`Invalid booking URL: ${bookingUrl}`);
-      return null;
+      return {price: null, error: `Invalid booking URL: ${bookingUrl}`};
     }
 
     // Ensure URL has a protocol
@@ -278,15 +278,13 @@ async function fetchHotelPrice(
     try {
       url = new URL(bookingUrl);
     } catch (error) {
-      console.error(`Invalid URL format: ${bookingUrl}`, error);
-      return null;
+      return {price: null, error: `Invalid URL format: ${bookingUrl} - ${error.message}`};
     }
     
     const hotelId = extractHotelId(bookingUrl);
     
     if (!hotelId) {
-      console.error(`Could not extract hotel ID from URL: ${bookingUrl}`);
-      return null;
+      return {price: null, error: `Could not extract hotel ID from URL: ${bookingUrl}`};
     }
 
     // Get check-in/check-out dates from URL
@@ -295,8 +293,7 @@ async function fetchHotelPrice(
     const group_adults = parseInt(url.searchParams.get('group_adults') || '2');
     
     if (!checkin || !checkout) {
-      console.error(`Missing check-in/check-out dates in URL: ${bookingUrl}`);
-      return null;
+      return {price: null, error: `Missing check-in/check-out dates in URL: ${bookingUrl}`};
     }
 
     // Prepare GraphQL request
@@ -316,12 +313,12 @@ async function fetchHotelPrice(
       }
     };
 
-    console.log(`GraphQL request payload:`, JSON.stringify(graphqlInput, null, 2));
+    console.log(`GraphQL request payload for booking ${booking.id}:`, JSON.stringify(graphqlInput, null, 2));
     
     // Prepare headers, including auth if available
     const headers = { ...BROWSER_HEADERS };
     if (useAuth && authCookies) {
-      console.log('Using authentication cookies for request');
+      console.log(`Using authentication cookies for booking ${booking.id} request`);
       headers['Cookie'] = authCookies;
     }
 
@@ -336,36 +333,42 @@ async function fetchHotelPrice(
       })
     });
 
-    // Log the complete response for debugging authentication issues
-    console.log(`Response status: ${response.status}, statusText: ${response.statusText}`);
-    const responseHeaders = Object.fromEntries(response.headers.entries());
-    console.log('Response headers:', JSON.stringify(responseHeaders));
-
-    // Parse response data
-    const data = await response.json();
+    // Log the response status
+    console.log(`Response for booking ${booking.id}: status: ${response.status}, statusText: ${response.statusText}`);
     
-    // Log the raw response data for debugging
-    console.log('GraphQL raw response:', JSON.stringify(data).substring(0, 500) + '...');
+    // Check if we got a successful response
+    if (!response.ok) {
+      return {price: null, error: `HTTP error: ${response.status} ${response.statusText}`};
+    }
+
+    // Try to parse response data
+    let data: any;
+    try {
+      data = await response.json();
+      console.log(`GraphQL raw response for booking ${booking.id}:`, JSON.stringify(data).substring(0, 500) + '...');
+    } catch (parseError) {
+      return {price: null, error: `Failed to parse JSON response: ${parseError.message}`};
+    }
     
     // Check if we need authentication
     if (isAuthenticationNeeded(response, data)) {
-      console.log('Authentication required for this request');
+      console.log(`Authentication required for booking ${booking.id}`);
       
       if (!useAuth) {
         // Try to refresh auth and retry with auth
         const authRefreshed = await refreshAuthentication();
         if (authRefreshed) {
-          console.log('Auth refreshed, retrying request with authentication');
-          return fetchHotelPrice(bookingUrl, true);
+          console.log(`Auth refreshed, retrying request for booking ${booking.id} with authentication`);
+          return fetchHotelPrice(bookingUrl, booking, true);
+        } else {
+          return {price: null, error: "Failed to refresh authentication"};
         }
       } else {
         // If already using auth but still failing, force refresh
-        console.log('Authentication failed, forcing refresh');
+        console.log(`Authentication failed for booking ${booking.id}, forcing refresh`);
         const authRefreshed = await refreshAuthentication(true);
         if (authRefreshed) {
-          console.log('Auth refreshed with force, making one final attempt');
-          // We don't retry after this to avoid too many requests
-          // Just try one more time with the fresh auth
+          console.log(`Auth refreshed with force for booking ${booking.id}, making one final attempt`);
           
           // Prepare headers with fresh auth
           const freshHeaders = { ...BROWSER_HEADERS };
@@ -374,59 +377,59 @@ async function fetchHotelPrice(
           }
           
           // Make final attempt with fresh auth
-          const finalResponse = await fetch(BOOKING_COM_GRAPHQL_ENDPOINT, {
-            method: 'POST',
-            headers: freshHeaders,
-            body: JSON.stringify({
-              operationName: 'SearchQueries',
-              query: PRICE_QUERY,
-              variables: graphqlInput
-            })
-          });
-          
-          if (!finalResponse.ok) {
-            console.error('Final attempt failed:', finalResponse.status);
-            return null;
+          try {
+            const finalResponse = await fetch(BOOKING_COM_GRAPHQL_ENDPOINT, {
+              method: 'POST',
+              headers: freshHeaders,
+              body: JSON.stringify({
+                operationName: 'SearchQueries',
+                query: PRICE_QUERY,
+                variables: graphqlInput
+              })
+            });
+            
+            if (!finalResponse.ok) {
+              return {price: null, error: `Final attempt failed: ${finalResponse.status}`};
+            }
+            
+            const finalData = await finalResponse.json();
+            const finalCards = finalData?.data?.propertyCards?.cards;
+            
+            if (!finalCards || !finalCards.length) {
+              return {price: null, error: "No property cards found in final response"};
+            }
+            
+            const finalPrice = finalCards[0]?.priceInfo?.displayPrice?.perStay?.value;
+            if (typeof finalPrice === 'number') {
+              console.log(`Successfully extracted price in final attempt for booking ${booking.id}: ${finalPrice}`);
+              return {price: finalPrice};
+            } else {
+              return {price: null, error: "Price not found in final response"};
+            }
+          } catch (finalError) {
+            return {price: null, error: `Error in final attempt: ${finalError.message}`};
           }
-          
-          const finalData = await finalResponse.json();
-          const finalCards = finalData?.data?.propertyCards?.cards;
-          
-          if (!finalCards || !finalCards.length) {
-            console.error('No property cards found in final response');
-            return null;
-          }
-          
-          const finalPrice = finalCards[0]?.priceInfo?.displayPrice?.perStay?.value;
-          if (typeof finalPrice === 'number') {
-            console.log(`Successfully extracted price in final attempt: ${finalPrice}`);
-            return finalPrice;
-          }
+        } else {
+          return {price: null, error: "Failed to refresh authentication on force attempt"};
         }
       }
-      
-      console.error('Authentication attempts exhausted');
-      return null;
     }
     
     // Extract the price from the response
     const cards = data?.data?.propertyCards?.cards;
     if (!cards || !cards.length) {
-      console.error('No property cards found in response');
-      return null;
+      return {price: null, error: "No property cards found in response"};
     }
 
     const price = cards[0]?.priceInfo?.displayPrice?.perStay?.value;
     if (typeof price === 'number') {
-      console.log(`Successfully extracted price: ${price}`);
-      return price;
+      console.log(`Successfully extracted price for booking ${booking.id}: ${price}`);
+      return {price};
     }
     
-    console.error('Price not found in response structure:', JSON.stringify(cards[0]?.priceInfo || 'No priceInfo'));
-    return null;
+    return {price: null, error: "Price not found in response structure"};
   } catch (error) {
-    console.error(`Error fetching hotel price: ${error.message}`);
-    return null;
+    return {price: null, error: `Error fetching hotel price: ${error.message}`};
   }
 }
 
@@ -477,11 +480,11 @@ async function checkBookingUrlIntegrity(): Promise<{
 }
 
 // Function to process a single booking
-async function processBooking(booking: any): Promise<boolean> {
+async function processBooking(booking: any): Promise<{success: boolean, error?: string}> {
   try {
     if (!booking.hotel_url) {
       console.log(`Booking ${booking.id} has no hotel_url, skipping`);
-      return false;
+      return {success: false, error: "No hotel URL"};
     }
 
     console.log(`Processing booking ${booking.id} with URL: ${booking.hotel_url}`);
@@ -489,7 +492,7 @@ async function processBooking(booking: any): Promise<boolean> {
     // Validate hotel_url format before proceeding
     if (!isValidUrl(booking.hotel_url)) {
       console.error(`Invalid hotel_url format for booking ${booking.id}: ${booking.hotel_url}`);
-      return false;
+      return {success: false, error: "Invalid hotel URL format"};
     }
 
     // Create the complete booking URL with dates and adults
@@ -503,20 +506,33 @@ async function processBooking(booking: any): Promise<boolean> {
       );
     } catch (error) {
       console.error(`Failed to create booking URL for booking ${booking.id}:`, error);
-      return false;
+      return {success: false, error: `Failed to create booking URL: ${error.message}`};
     }
 
     // Fetch the price (initially without authentication)
     // The function will automatically try with auth if needed
-    const price = await fetchHotelPrice(bookingUrl);
+    const {price, error} = await fetchHotelPrice(bookingUrl, booking);
     
     if (price === null) {
-      console.log(`Could not fetch price for booking ${booking.id}`);
-      return false;
+      console.log(`Could not fetch price for booking ${booking.id}: ${error}`);
+      // Update booking with error information
+      const { error: updateError } = await supabase
+        .from('bookings')
+        .update({
+          fetched_price: null,
+          fetched_price_updated_at: new Date().toISOString()
+        })
+        .eq('id', booking.id);
+        
+      if (updateError) {
+        console.error(`Error updating booking ${booking.id} with error:`, updateError);
+      }
+      
+      return {success: false, error};
     }
 
     // Update the booking with the fetched price
-    const { error } = await supabase
+    const { error: updateError } = await supabase
       .from('bookings')
       .update({
         fetched_price: price,
@@ -524,21 +540,27 @@ async function processBooking(booking: any): Promise<boolean> {
       })
       .eq('id', booking.id);
 
-    if (error) {
-      console.error(`Error updating booking ${booking.id}:`, error);
-      return false;
+    if (updateError) {
+      console.error(`Error updating booking ${booking.id}:`, updateError);
+      return {success: false, error: `Database update error: ${updateError.message}`};
     }
 
     console.log(`Successfully updated booking ${booking.id} with price ${price}`);
-    return true;
+    return {success: true};
   } catch (error) {
     console.error(`Error processing booking ${booking.id}:`, error);
-    return false;
+    return {success: false, error: `Unhandled error: ${error.message}`};
   }
 }
 
 // Function to fetch and process bookings in batches
-async function processAllBookings(): Promise<{ total: number, successful: number, urlIntegrity: any }> {
+async function processAllBookings(): Promise<{ 
+  total: number, 
+  successful: number, 
+  failed: number,
+  failureReasons: Record<string, number>,
+  urlIntegrity: any 
+}> {
   try {
     // First, check URL integrity in the database
     const urlIntegrity = await checkBookingUrlIntegrity();
@@ -552,18 +574,32 @@ async function processAllBookings(): Promise<{ total: number, successful: number
 
     if (error) {
       console.error('Error fetching bookings:', error);
-      return { total: 0, successful: 0, urlIntegrity };
+      return { 
+        total: 0, 
+        successful: 0, 
+        failed: 0, 
+        failureReasons: {},
+        urlIntegrity 
+      };
     }
 
     if (!bookings || bookings.length === 0) {
       console.log('No active bookings found');
-      return { total: 0, successful: 0, urlIntegrity };
+      return { 
+        total: 0, 
+        successful: 0, 
+        failed: 0, 
+        failureReasons: {},
+        urlIntegrity 
+      };
     }
 
     console.log(`Processing ${bookings.length} bookings`);
     
     // Process bookings in batches to avoid rate limiting
     let successful = 0;
+    let failed = 0;
+    const failureReasons: Record<string, number> = {};
     
     for (let i = 0; i < bookings.length; i += BATCH_SIZE) {
       const batch = bookings.slice(i, i + BATCH_SIZE);
@@ -573,19 +609,46 @@ async function processAllBookings(): Promise<{ total: number, successful: number
         batch.map(booking => processBooking(booking))
       );
       
-      // Count successful updates
-      successful += results.filter(Boolean).length;
+      // Count successful updates and errors
+      results.forEach(result => {
+        if (result.success) {
+          successful++;
+        } else {
+          failed++;
+          // Categorize errors
+          const reason = result.error || "Unknown error";
+          failureReasons[reason] = (failureReasons[reason] || 0) + 1;
+        }
+      });
       
       // Add delay between batches to avoid rate limiting
       if (i + BATCH_SIZE < bookings.length) {
+        console.log(`Processed batch ${i / BATCH_SIZE + 1}/${Math.ceil(bookings.length / BATCH_SIZE)}, adding delay before next batch`);
         await new Promise(resolve => setTimeout(resolve, 5000));
       }
     }
 
-    return { total: bookings.length, successful, urlIntegrity };
+    // Log the most common failure reasons
+    if (failed > 0) {
+      console.log('Failure reasons:', failureReasons);
+    }
+
+    return { 
+      total: bookings.length, 
+      successful, 
+      failed,
+      failureReasons,
+      urlIntegrity 
+    };
   } catch (error) {
     console.error('Error processing bookings:', error);
-    return { total: 0, successful: 0, urlIntegrity: { valid: 0, invalid: 0, invalidUrls: [] } };
+    return { 
+      total: 0, 
+      successful: 0, 
+      failed: 0, 
+      failureReasons: {'Unhandled exception': 1},
+      urlIntegrity: { valid: 0, invalid: 0, invalidUrls: [] } 
+    };
   }
 }
 
@@ -633,7 +696,8 @@ serve(async (req) => {
         authTest: {
           success: authSuccess,
           hasCookies: !!authCookies,
-          lastAttempt: new Date(lastAuthAttempt).toISOString()
+          lastAttempt: new Date(lastAuthAttempt).toISOString(),
+          cookiePreview: authCookies ? authCookies.substring(0, 50) + '...' : null
         }
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -656,8 +720,9 @@ serve(async (req) => {
       const result = await processAllBookings();
       return new Response(JSON.stringify({
         success: true,
-        message: `Processed ${result.total} bookings, ${result.successful} successful`,
-        urlIntegrity: result.urlIntegrity
+        message: `Processed ${result.total} bookings, ${result.successful} successful, ${result.failed} failed`,
+        urlIntegrity: result.urlIntegrity,
+        failureReasons: result.failureReasons
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -673,10 +738,10 @@ serve(async (req) => {
         throw new Error(`Booking not found: ${error.message}`);
       }
       
-      const success = await processBooking(booking);
+      const result = await processBooking(booking);
       return new Response(JSON.stringify({
-        success,
-        message: success ? 'Price updated successfully' : 'Failed to update price'
+        success: result.success,
+        message: result.success ? 'Price updated successfully' : `Failed to update price: ${result.error}`
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
