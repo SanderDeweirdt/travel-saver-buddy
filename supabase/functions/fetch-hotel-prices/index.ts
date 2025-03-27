@@ -1,7 +1,9 @@
+
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
-import { load } from "https://deno.land/x/cheerio@1.0.7/mod.ts";
+// Fix the Cheerio import
+import * as cheerio from "https://esm.sh/cheerio@1.0.0-rc.12";
 
 // Constants and configuration
 const BATCH_SIZE = 5; // Process bookings in batches to avoid rate limiting
@@ -137,7 +139,8 @@ async function fetchHotelPrice(
     }
     
     // Parse HTML with cheerio
-    const $ = load(html);
+    // Updated to use the correct Cheerio method
+    const $ = cheerio.load(html);
     
     // Log the HTML for debugging
     console.log(`Received HTML length: ${html.length} characters`);
@@ -147,17 +150,17 @@ async function fetchHotelPrice(
     
     // First attempt: Look for text containing "Total price"
     const priceText = $('body').text();
-    const priceMatches = priceText.match(/Total price: [€$](\d+)/g);
+    const priceRegex = /Total price: [€$](\d+)/g;
+    let match;
     
-    if (priceMatches && priceMatches.length > 0) {
-      console.log(`Found ${priceMatches.length} price matches`);
-      
-      priceMatches.forEach(match => {
-        const priceValue = match.match(/\d+/);
-        if (priceValue && priceValue[0]) {
-          prices.push(parseInt(priceValue[0]));
-        }
-      });
+    while ((match = priceRegex.exec(priceText)) !== null) {
+      if (match[1]) {
+        prices.push(parseInt(match[1]));
+      }
+    }
+    
+    if (prices.length > 0) {
+      console.log(`Found ${prices.length} price matches using text search`);
     } else {
       console.log('No price matches found using text search');
       
