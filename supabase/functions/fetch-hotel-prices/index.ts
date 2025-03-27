@@ -1,4 +1,3 @@
-
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
@@ -126,21 +125,15 @@ async function fetchHotelPrice(
     let prices: number[] = [];
     
     const regexPatterns = [
-      /[Tt]otal\s*[Pp]rice:?\s*[€$£¥](\d+(?:\.\d+)?)/g,
-      /[Pp]rice:?\s*[€$£¥](\d+(?:\.\d+)?)/g,
-      /[€$£¥]\s*(\d+(?:,\d+)*(?:\.\d+)?)/g,
-      /(\d+(?:,\d+)*(?:\.\d+)?)\s*[€$£¥]/g,
-      /[€$£¥](\d+(?:,\d+)*(?:\.\d+)?)\s*(?:per\s+night|\/\s*night)/gi,
-      /(\d+(?:,\d+)*(?:\.\d+)?)\s*EUR/gi,
-      /[€$£¥]\s*(\d+(?:\.\d+)?(?:,\d+)?)/g,
-      // Specific patterns for harder to capture formats
-      /price[^\d]*?(\d+(?:[,.]\d+)?)/gi,
-      /(\d+)(?:\s*[,.]\s*(\d+))?\s*(?:€|EUR|USD|\$)/gi,
-      /(?:€|EUR|USD|\$)\s*(\d+)(?:\s*[,.]\s*(\d+))?/gi
+      /Total\s*[Pp]rice:?\s*[€$£¥]\s*(\d+(?:,\d+)*(?:\.\d+)?)/g,
+      /Total\s*[Pp]rice:?\s*(?:€|EUR|USD|\$)\s*(\d+(?:,\d+)*(?:\.\d+)?)/g,
+      /Total\s*[Pp]rice\s*[^\d]*?(\d+(?:[,.]\d+)?)/gi,
+      /Total\s*[Pp]rice<\/?[^>]*>[^<]*?[€$£¥]\s*(\d+(?:,\d+)*(?:\.\d+)?)/g,
+      /Total\s*[Pp]rice<\/?[^>]*>[^<]*?(\d+(?:,\d+)*(?:\.\d+)?)\s*[€$£¥]/g,
+      /Total\s*[Pp]rice[^\d]*?[€$£¥]\s*(\d+(?:,\d+)*(?:\.\d+)?)/g
     ];
     
     if (Deno.env.get("STAGE") === "development" || true) { // Always log in development and production
-      // Print a snippet of the full HTML for debugging
       console.log(`HTML snippet (first 300 chars): 
 ${html.substring(0, 300)}
 ...
@@ -151,7 +144,6 @@ ${html.substring(html.length - 300)}
       
       console.log("Searching for price elements in HTML...");
       
-      // Find and log price-related elements
       const priceElements = $('[class*="price"], [id*="price"], [class*="Price"], [id*="Price"]');
       console.log(`Found ${priceElements.length} elements with "price" in class or id`);
       priceElements.each((i, el) => {
@@ -161,7 +153,6 @@ ${html.substring(html.length - 300)}
           console.log(`Price element ${i} [${$(el).prop('tagName')}]: ${elementText}`);
           console.log(`Element HTML: ${elementHtml}`);
           
-          // Check for price matches in this element
           for (const pattern of regexPatterns) {
             pattern.lastIndex = 0;
             const matches = elementText.match(pattern);
@@ -172,12 +163,31 @@ ${html.substring(html.length - 300)}
         }
       });
       
+      console.log("Specifically searching for elements containing 'Total price'...");
+      const totalPriceElements = $('*:contains("Total price")');
+      console.log(`Found ${totalPriceElements.length} elements containing "Total price" text`);
+      totalPriceElements.each((i, el) => {
+        if (i < 10) {
+          const elementText = $(el).text().trim();
+          const elementHtml = $.html(el).substring(0, PRICE_DEBUG_CONTEXT);
+          console.log(`Total price element ${i} [${$(el).prop('tagName')}]: ${elementText}`);
+          console.log(`Total price element HTML: ${elementHtml}`);
+          
+          for (const pattern of regexPatterns) {
+            pattern.lastIndex = 0;
+            const matches = elementText.match(pattern);
+            if (matches) {
+              console.log(`TOTAL PRICE REGEX MATCH in element ${i}: ${matches[0]}`);
+            }
+          }
+        }
+      });
+      
       console.log("Searching for Trip.com specific price containers...");
       
       const tripPriceSelectors = [
         '.price-info', '.actual-price', '.m-price', '.price', '.J_PriceInfo',
         '.J_HotelPriceInfo', '.J_RoomPriceInfo', '.price_num', '.price-tag',
-        // Additional selectors that could contain price information
         '[data-testid*="price"]', '[data-test*="price"]', '[class*="rate"]', 
         '[class*="total"]', '.room-rate', '.best-price', '.total-amount'
       ];
@@ -193,12 +203,19 @@ ${html.substring(html.length - 300)}
               console.log(`${selector} element ${i} text: ${elementText}`);
               console.log(`${selector} element ${i} HTML: ${elementHtml}`);
               
-              // Check for price matches in this element
               for (const pattern of regexPatterns) {
                 pattern.lastIndex = 0;
-                const matches = elementText.match(pattern);
-                if (matches) {
-                  console.log(`REGEX MATCH in ${selector} element ${i}: ${matches[0]}`);
+                let match;
+                while ((match = pattern.exec(elementText)) !== null) {
+                  if (match[1]) {
+                    const cleanPrice = match[1].replace(/,/g, '');
+                    const price = parseFloat(cleanPrice);
+                    
+                    if (!isNaN(price) && price > 0) {
+                      console.log(`Found price in ${selector} element ${i}: ${price} (matched with ${pattern})`);
+                      prices.push(price);
+                    }
+                  }
                 }
               }
             }
@@ -209,50 +226,69 @@ ${html.substring(html.length - 300)}
     
     const bodyText = $('body').text();
     
-    const priceContainers = [
-      '.J_HotelPriceInfo', '.actual-price', '.m-price', '.price-info',
-      '.J_PriceSection', '.price_num', '.js-hotel-price',
-      // Additional containers to try
-      '.room-pricing', '.rate-container', '.total-price', 
-      '.price-display', '.booking-price'
-    ];
-    
-    let foundInContainer = false;
-    
-    priceContainers.forEach(container => {
-      if (foundInContainer) return;
-      
-      const priceEls = $(container);
-      if (priceEls.length > 0) {
-        console.log(`Found ${priceEls.length} elements with selector "${container}"`);
-        
-        priceEls.each((i, el) => {
-          const priceText = $(el).text().trim();
-          console.log(`Price container ${container} - element ${i} text: ${priceText}`);
-          console.log(`Container HTML context: ${$.html(el).substring(0, PRICE_DEBUG_CONTEXT)}`);
+    for (const pattern of regexPatterns) {
+      pattern.lastIndex = 0;
+      let match;
+      while ((match = pattern.exec(bodyText)) !== null) {
+        if (match[1]) {
+          const cleanPrice = match[1].replace(/,/g, '');
+          const price = parseFloat(cleanPrice);
           
-          for (const pattern of regexPatterns) {
-            pattern.lastIndex = 0;
-            let match;
-            while ((match = pattern.exec(priceText)) !== null) {
-              if (match[1]) {
-                const cleanPrice = match[1].replace(/,/g, '');
-                const price = parseFloat(cleanPrice);
-                
-                if (!isNaN(price) && price > 0) {
-                  console.log(`Found price in ${container}: ${price} (matched with ${pattern})`);
-                  prices.push(price);
-                  foundInContainer = true;
+          if (!isNaN(price) && price > 0) {
+            console.log(`Found "Total price" match: ${price} (matched with ${pattern})`);
+            console.log(`Text context: "${bodyText.substring(Math.max(0, match.index - 30), match.index + match[0].length + 30)}"`);
+            prices.push(price);
+          }
+        }
+      }
+    }
+    
+    if (prices.length > 0) {
+      console.log(`Found ${prices.length} "Total price" matches, skipping other searches`);
+    } else {
+      const priceContainers = [
+        '.J_HotelPriceInfo', '.actual-price', '.m-price', '.price-info',
+        '.J_PriceSection', '.price_num', '.js-hotel-price',
+        '.room-pricing', '.rate-container', '.total-price', 
+        '.price-display', '.booking-price'
+      ];
+      
+      let foundInContainer = false;
+      
+      priceContainers.forEach(container => {
+        if (foundInContainer) return;
+        
+        const priceEls = $(container);
+        if (priceEls.length > 0) {
+          console.log(`Found ${priceEls.length} elements with selector "${container}"`);
+          
+          priceEls.each((i, el) => {
+            const priceText = $(el).text().trim();
+            console.log(`Price container ${container} - element ${i} text: ${priceText}`);
+            console.log(`Container HTML context: ${$.html(el).substring(0, PRICE_DEBUG_CONTEXT)}`);
+            
+            for (const pattern of regexPatterns) {
+              pattern.lastIndex = 0;
+              let match;
+              while ((match = pattern.exec(priceText)) !== null) {
+                if (match[1]) {
+                  const cleanPrice = match[1].replace(/,/g, '');
+                  const price = parseFloat(cleanPrice);
+                  
+                  if (!isNaN(price) && price > 0) {
+                    console.log(`Found "Total price" in ${container}: ${price} (matched with ${pattern})`);
+                    prices.push(price);
+                    foundInContainer = true;
+                  }
                 }
               }
             }
-          }
-        });
-      }
-    });
+          });
+        }
+      });
+    }
     
     if (prices.length === 0) {
-      // Check text around currency symbols for prices
       const currencyContextRegex = /([^\n]{0,30}[€$£¥][^\n]{0,30})/g;
       const currencyMatches = bodyText.match(currencyContextRegex) || [];
       
@@ -277,7 +313,6 @@ ${html.substring(html.length - 300)}
         });
       }
       
-      // If still no prices, try general regex search on entire body text
       if (prices.length === 0) {
         for (const pattern of regexPatterns) {
           pattern.lastIndex = 0;
