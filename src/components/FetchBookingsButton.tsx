@@ -38,7 +38,7 @@ const FetchBookingsButton = ({ onFetchComplete }: FetchBookingsButtonProps) => {
           // Get the first booking id
           const { data: bookings, error: bookingError } = await supabase
             .from('bookings')
-            .select('id')
+            .select('id, trip_url')
             .limit(1);
             
           if (bookingError || !bookings || bookings.length === 0) {
@@ -46,6 +46,12 @@ const FetchBookingsButton = ({ onFetchComplete }: FetchBookingsButtonProps) => {
           }
           
           params = { bookingId: bookings[0].id };
+          
+          // Log if we have a Trip.com URL already
+          if (bookings[0].trip_url) {
+            console.log(`Using stored Trip.com URL: ${bookings[0].trip_url}`);
+          }
+          
           break;
         default:
           params = { processAll: true };
@@ -99,7 +105,15 @@ const FetchBookingsButton = ({ onFetchComplete }: FetchBookingsButtonProps) => {
         } else if (option === 'fetch-single') {
           toast.success('Single booking price fetch completed. Check logs for details.');
         } else {
-          toast.success('Booking prices fetched successfully!');
+          // If we have failure reasons, include them in the toast
+          if (data.failureReasons && Object.keys(data.failureReasons).length > 0) {
+            const reasons = Object.entries(data.failureReasons)
+              .map(([reason, count]) => `${reason} (${count})`)
+              .join(', ');
+            toast.success(`Booking prices fetched with some issues. Failures: ${reasons}`);
+          } else {
+            toast.success('Booking prices fetched successfully!');
+          }
         }
         
         onFetchComplete(); // Refresh bookings in the dashboard

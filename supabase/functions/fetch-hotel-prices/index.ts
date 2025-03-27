@@ -8,6 +8,7 @@ import * as cheerio from "https://esm.sh/cheerio@1.0.0-rc.12";
 // Constants and configuration
 const BATCH_SIZE = 5; // Process bookings in batches to avoid rate limiting
 const TEST_HOTEL_ID = "740887"; // For testing purposes
+const DEBUG_HTML_LENGTH = 1000; // Length of HTML sample to log in debug mode
 
 // Headers to mimic a browser request
 const BROWSER_HEADERS = {
@@ -139,37 +140,75 @@ async function fetchHotelPrice(
     }
     
     // Parse HTML with cheerio
-    // Updated to use the correct Cheerio method
     const $ = cheerio.load(html);
     
     // Log the HTML for debugging
     console.log(`Received HTML length: ${html.length} characters`);
     
-    // Extract prices using regex pattern for "Total price: €XXX"
+    // If in development mode, log a sample of the HTML for debugging
+    if (Deno.env.get("STAGE") === "development") {
+      console.log(`HTML sample (first ${DEBUG_HTML_LENGTH} chars): ${html.substring(0, DEBUG_HTML_LENGTH)}`);
+      
+      // Log specific sections that might contain prices
+      console.log("Searching for price elements in HTML...");
+      
+      // Log all elements containing "price" in their class or id
+      const priceElements = $('[class*="price"], [id*="price"]');
+      console.log(`Found ${priceElements.length} elements with "price" in class or id`);
+      priceElements.each((i, el) => {
+        if (i < 5) { // Log only first 5 to avoid too much output
+          console.log(`Price element ${i}: ${$(el).text().trim()}`);
+        }
+      });
+    }
+    
+    // Extract prices using multiple regex patterns
     let prices: number[] = [];
     
-    // First attempt: Look for text containing "Total price"
-    const priceText = $('body').text();
-    const priceRegex = /Total price: [€$](\d+)/g;
-    let match;
+    // More flexible regex patterns for price extraction
+    const regexPatterns = [
+      /[Tt]otal\s*[Pp]rice:?\s*[€$](\d+)/g,  // Total price: €123 or Total Price: $123
+      /[Pp]rice:?\s*[€$](\d+)/g,             // Price: €123
+      /[€$]\s*(\d+)/g,                       // €123 or $123
+      /(\d+)\s*[€$]/g                        // 123€ or 123$
+    ];
     
-    while ((match = priceRegex.exec(priceText)) !== null) {
-      if (match[1]) {
-        prices.push(parseInt(match[1]));
+    // Get the entire body text for regex matching
+    const bodyText = $('body').text();
+    
+    // Try each regex pattern in order
+    for (const pattern of regexPatterns) {
+      let match;
+      while ((match = pattern.exec(bodyText)) !== null) {
+        if (match[1]) {
+          const price = parseInt(match[1]);
+          if (!isNaN(price) && price > 0) {
+            prices.push(price);
+          }
+        }
+      }
+      
+      // If we found prices with this pattern, log and stop trying other patterns
+      if (prices.length > 0) {
+        console.log(`Found ${prices.length} prices using pattern: ${pattern}`);
+        break;
       }
     }
     
-    if (prices.length > 0) {
-      console.log(`Found ${prices.length} price matches using text search`);
-    } else {
-      console.log('No price matches found using text search');
+    // If no prices found via regex, try to find price elements directly
+    if (prices.length === 0) {
+      console.log('No price matches found using regex patterns, trying direct element search');
       
-      // Second attempt: Try to find price elements directly
-      $('div:contains("Total price")').each((_i, el) => {
+      // Look for elements containing price information
+      $('div:contains("Total price"), span:contains("Total price"), div:contains("price"), span:contains("price")').each((_i, el) => {
         const text = $(el).text();
         const priceMatch = text.match(/\d+/);
         if (priceMatch && priceMatch[0]) {
-          prices.push(parseInt(priceMatch[0]));
+          const price = parseInt(priceMatch[0]);
+          if (!isNaN(price) && price > 0) {
+            prices.push(price);
+            console.log(`Found price in element: ${price} (from text: ${text.trim().substring(0, 30)}...)`);
+          }
         }
       });
     }
@@ -250,22 +289,50 @@ async function processBooking(booking: any): Promise<{success: boolean, error?: 
   try {
     console.log(`Processing booking ${booking.id}`);
     
-    // Extract hotel ID from the booking's hotel_url or use the test ID
-    const hotelId = extractHotelId(booking.hotel_url);
-    
-    // Create the Trip.com URL with the extracted or default hotel ID
+    // Check if we already have a Trip.com URL for this booking
     let tripUrl: string;
-    try {
-      tripUrl = createTripUrl(
-        hotelId,
-        booking.check_in_date,
-        booking.check_out_date,
-        booking.group_adults || 2,
-        booking.currency || 'EUR'
-      );
-    } catch (error) {
-      console.error(`Failed to create Trip.com URL for booking ${booking.id}:`, error);
-      return {success: false, error: `Failed to create Trip.com URL: ${error.message}`};
+    let hotelId: string;
+    
+    if (booking.trip_url) {
+      // Use the existing Trip.com URL if available
+      tripUrl = booking.trip_url;
+      console.log(`Using stored Trip.com URL for booking ${booking.id}: ${tripUrl}`);
+      
+      // Extract the hotel ID from the stored Trip.com URL
+      hotelId = extractHotelId(tripUrl);
+    } else {
+      // Extract hotel ID from the booking's hotel_url or use the test ID
+      hotelId = extractHotelId(booking.hotel_url);
+      
+      // Create the Trip.com URL with the extracted or default hotel ID
+      try {
+        tripUrl = createTripUrl(
+          hotelId,
+          booking.check_in_date,
+          booking.check_out_date,
+          booking.group_adults || 2,
+          booking.currency || 'EUR'
+        );
+      } catch (error) {
+        console.error(`Failed to create Trip.com URL for booking ${booking.id}:`, error);
+        return {success: false, error: `Failed to create Trip.com URL: ${error.message}`};
+      }
+      
+      // Store the Trip.com URL and hotel ID for future use
+      const { error: updateUrlError } = await supabase
+        .from('bookings')
+        .update({
+          trip_url: tripUrl,
+          trip_hotel_id: hotelId
+        })
+        .eq('id', booking.id);
+        
+      if (updateUrlError) {
+        console.error(`Error updating Trip.com URL for booking ${booking.id}:`, updateUrlError);
+        // Continue anyway, as this is not critical
+      } else {
+        console.log(`Stored Trip.com URL and hotel ID for booking ${booking.id}`);
+      }
     }
 
     // Fetch the price

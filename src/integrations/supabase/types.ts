@@ -30,6 +30,8 @@ export type Database = {
           price_paid: number
           room_type: string | null
           source: string | null
+          trip_hotel_id: string | null
+          trip_url: string | null
           updated_at: string
           user_id: string
         }
@@ -53,6 +55,8 @@ export type Database = {
           price_paid: number
           room_type?: string | null
           source?: string | null
+          trip_hotel_id?: string | null
+          trip_url?: string | null
           updated_at?: string
           user_id: string
         }
@@ -76,6 +80,8 @@ export type Database = {
           price_paid?: number
           room_type?: string | null
           source?: string | null
+          trip_hotel_id?: string | null
+          trip_url?: string | null
           updated_at?: string
           user_id?: string
         }
