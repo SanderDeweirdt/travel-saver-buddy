@@ -1,4 +1,3 @@
-
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
@@ -145,69 +144,162 @@ async function fetchHotelPrice(
     // Log the HTML for debugging
     console.log(`Received HTML length: ${html.length} characters`);
     
+    // IMPROVED: More extensive price extraction methods
+    let prices: number[] = [];
+    
+    // New enhanced regex patterns for better price matching, including common formats
+    const regexPatterns = [
+      // Match total price with currency symbol before number
+      /[Tt]otal\s*[Pp]rice:?\s*[€$£¥](\d+(?:\.\d+)?)/g,
+      // Match price with currency symbol before number
+      /[Pp]rice:?\s*[€$£¥](\d+(?:\.\d+)?)/g,
+      // Match currency symbol with any whitespace followed by number - common format
+      /[€$£¥]\s*(\d+(?:,\d+)*(?:\.\d+)?)/g,
+      // Match number followed by currency symbol
+      /(\d+(?:,\d+)*(?:\.\d+)?)\s*[€$£¥]/g,
+      // Match common price format with words like "per night"
+      /[€$£¥](\d+(?:,\d+)*(?:\.\d+)?)\s*(?:per\s+night|\/\s*night)/gi,
+      // Match "EUR" text format
+      /(\d+(?:,\d+)*(?:\.\d+)?)\s*EUR/gi,
+      // Broader pattern to catch prices with comma as decimal separator in European format
+      /[€$£¥]\s*(\d+(?:\.\d+)?(?:,\d+)?)/g
+    ];
+    
     // If in development mode, log a sample of the HTML for debugging
     if (Deno.env.get("STAGE") === "development") {
       console.log(`HTML sample (first ${DEBUG_HTML_LENGTH} chars): ${html.substring(0, DEBUG_HTML_LENGTH)}`);
       
-      // Log specific sections that might contain prices
+      // IMPROVED: Log specific sections that might contain prices
       console.log("Searching for price elements in HTML...");
       
       // Log all elements containing "price" in their class or id
-      const priceElements = $('[class*="price"], [id*="price"]');
+      const priceElements = $('[class*="price"], [id*="price"], [class*="Price"], [id*="Price"]');
       console.log(`Found ${priceElements.length} elements with "price" in class or id`);
       priceElements.each((i, el) => {
-        if (i < 5) { // Log only first 5 to avoid too much output
+        if (i < 10) { // Log only first 10 to avoid too much output
           console.log(`Price element ${i}: ${$(el).text().trim()}`);
+          console.log(`Element HTML: ${$.html(el).substring(0, 200)}`);
+        }
+      });
+      
+      // IMPROVED: Look for specific Trip.com price elements
+      console.log("Searching for Trip.com specific price containers...");
+      
+      // Known Trip.com price container selectors
+      const tripPriceSelectors = [
+        '.price-info', '.actual-price', '.m-price', '.price', '.J_PriceInfo',
+        '.J_HotelPriceInfo', '.J_RoomPriceInfo', '.price_num', '.price-tag'
+      ];
+      
+      tripPriceSelectors.forEach(selector => {
+        const elements = $(selector);
+        if (elements.length > 0) {
+          console.log(`Found ${elements.length} elements with selector "${selector}"`);
+          elements.each((i, el) => {
+            if (i < 3) { // Show only first 3 per selector
+              console.log(`${selector} element ${i} text: ${$(el).text().trim()}`);
+              console.log(`${selector} element ${i} HTML: ${$.html(el).substring(0, 200)}`);
+            }
+          });
         }
       });
     }
     
-    // Extract prices using multiple regex patterns
-    let prices: number[] = [];
-    
-    // More flexible regex patterns for price extraction
-    const regexPatterns = [
-      /[Tt]otal\s*[Pp]rice:?\s*[€$](\d+)/g,  // Total price: €123 or Total Price: $123
-      /[Pp]rice:?\s*[€$](\d+)/g,             // Price: €123
-      /[€$]\s*(\d+)/g,                       // €123 or $123
-      /(\d+)\s*[€$]/g                        // 123€ or 123$
-    ];
-    
     // Get the entire body text for regex matching
     const bodyText = $('body').text();
     
-    // Try each regex pattern in order
-    for (const pattern of regexPatterns) {
-      let match;
-      while ((match = pattern.exec(bodyText)) !== null) {
-        if (match[1]) {
-          const price = parseInt(match[1]);
-          if (!isNaN(price) && price > 0) {
-            prices.push(price);
+    // IMPROVED: First try to find prices in specific Trip.com price containers
+    const priceContainers = [
+      '.J_HotelPriceInfo', '.actual-price', '.m-price', '.price-info',
+      '.J_PriceSection', '.price_num', '.js-hotel-price'
+    ];
+    
+    let foundInContainer = false;
+    
+    priceContainers.forEach(container => {
+      if (foundInContainer) return; // Skip if we already found prices
+      
+      const priceEls = $(container);
+      if (priceEls.length > 0) {
+        console.log(`Found ${priceEls.length} elements with selector "${container}"`);
+        
+        priceEls.each((i, el) => {
+          const priceText = $(el).text().trim();
+          console.log(`Price container ${container} - element ${i} text: ${priceText}`);
+          
+          // Try to extract prices with regex
+          for (const pattern of regexPatterns) {
+            pattern.lastIndex = 0; // Reset regex state
+            let match;
+            while ((match = pattern.exec(priceText)) !== null) {
+              if (match[1]) {
+                // Clean up the price (remove commas, handle decimal separators)
+                const cleanPrice = match[1].replace(/,/g, '');
+                const price = parseFloat(cleanPrice);
+                
+                if (!isNaN(price) && price > 0) {
+                  console.log(`Found price in ${container}: ${price} (matched with ${pattern})`);
+                  prices.push(price);
+                  foundInContainer = true;
+                }
+              }
+            }
+          }
+        });
+      }
+    });
+    
+    // If no prices found in containers, try each regex pattern on the entire body text
+    if (prices.length === 0) {
+      // Try each regex pattern in order on the entire body
+      for (const pattern of regexPatterns) {
+        pattern.lastIndex = 0; // Reset regex state
+        let match;
+        while ((match = pattern.exec(bodyText)) !== null) {
+          if (match[1]) {
+            // Clean up the price (remove commas, handle decimal separators)
+            const cleanPrice = match[1].replace(/,/g, '');
+            const price = parseFloat(cleanPrice);
+            
+            if (!isNaN(price) && price > 0) {
+              prices.push(price);
+              console.log(`Found price with pattern ${pattern}: ${price}`);
+            }
           }
         }
-      }
-      
-      // If we found prices with this pattern, log and stop trying other patterns
-      if (prices.length > 0) {
-        console.log(`Found ${prices.length} prices using pattern: ${pattern}`);
-        break;
+        
+        // If we found prices with this pattern, log and stop trying other patterns
+        if (prices.length > 0) {
+          console.log(`Found ${prices.length} prices using pattern: ${pattern}`);
+          break;
+        }
       }
     }
     
-    // If no prices found via regex, try to find price elements directly
+    // If still no prices found via regex, try to find price elements directly
     if (prices.length === 0) {
       console.log('No price matches found using regex patterns, trying direct element search');
       
       // Look for elements containing price information
       $('div:contains("Total price"), span:contains("Total price"), div:contains("price"), span:contains("price")').each((_i, el) => {
         const text = $(el).text();
-        const priceMatch = text.match(/\d+/);
-        if (priceMatch && priceMatch[0]) {
-          const price = parseInt(priceMatch[0]);
-          if (!isNaN(price) && price > 0) {
-            prices.push(price);
-            console.log(`Found price in element: ${price} (from text: ${text.trim().substring(0, 30)}...)`);
+        console.log(`Checking element text: ${text.substring(0, 100)}`);
+        
+        // Try to find price patterns in this element
+        for (const pattern of regexPatterns) {
+          pattern.lastIndex = 0; // Reset regex state
+          let match;
+          while ((match = pattern.exec(text)) !== null) {
+            if (match[1]) {
+              // Clean up the price (remove commas, handle decimal separators)
+              const cleanPrice = match[1].replace(/,/g, '');
+              const price = parseFloat(cleanPrice);
+              
+              if (!isNaN(price) && price > 0) {
+                prices.push(price);
+                console.log(`Found price in element: ${price} (from text: ${text.trim().substring(0, 30)}...)`);
+              }
+            }
           }
         }
       });
@@ -230,6 +322,7 @@ async function fetchHotelPrice(
         return { price: randomPrice };
       }
       
+      console.log(`No prices found for booking ${booking.id}`);
       return { price: null, error: 'No prices found on the page' };
     }
   } catch (error) {
