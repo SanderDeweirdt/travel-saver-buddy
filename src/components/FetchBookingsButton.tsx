@@ -8,7 +8,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger 
 } from '@/components/ui/dropdown-menu';
-import { ChevronDown, RefreshCw, Check, AlertCircle, Wrench } from 'lucide-react';
+import { ChevronDown, RefreshCw, AlertCircle, Wrench } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 
 interface FetchBookingsButtonProps {
@@ -30,9 +30,6 @@ const FetchBookingsButton = ({ onFetchComplete }: FetchBookingsButtonProps) => {
       switch(option) {
         case 'test-auth':
           params = { testAuth: true };
-          break;
-        case 'check-urls':
-          params = { checkUrlIntegrity: true };
           break;
         case 'fetch-single':
           // Get the first booking id
@@ -95,13 +92,6 @@ const FetchBookingsButton = ({ onFetchComplete }: FetchBookingsButtonProps) => {
           } else {
             toast.error(`Trip.com access test failed. Status: ${data.authTest?.status} ${data.authTest?.statusText}`);
           }
-        } else if (option === 'check-urls') {
-          const integrity = data.urlIntegrity;
-          if (integrity.invalid > 0) {
-            toast.warning(`Found ${integrity.invalid} invalid hotel URLs out of ${integrity.valid + integrity.invalid} total.`);
-          } else {
-            toast.success(`All ${integrity.valid} hotel URLs are valid.`);
-          }
         } else if (option === 'fetch-single') {
           toast.success('Single booking price fetch completed. Check logs for details.');
         } else {
@@ -150,10 +140,6 @@ const FetchBookingsButton = ({ onFetchComplete }: FetchBookingsButtonProps) => {
         <DropdownMenuItem onClick={() => handleFetchBookings()}>
           <RefreshCw className="h-4 w-4 mr-2" />
           Fetch All Prices
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => handleFetchBookings('check-urls')}>
-          <Check className="h-4 w-4 mr-2" />
-          Check URL Integrity
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => handleFetchBookings('test-auth')}>
           <AlertCircle className="h-4 w-4 mr-2" />

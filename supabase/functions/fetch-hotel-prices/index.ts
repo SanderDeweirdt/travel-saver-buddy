@@ -1,3 +1,4 @@
+
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
@@ -6,6 +7,7 @@ import * as cheerio from "https://esm.sh/cheerio@1.0.0-rc.12";
 const BATCH_SIZE = 5;
 const TEST_HOTEL_ID = "740887";
 const DEBUG_HTML_LENGTH = 1000;
+const PRICE_DEBUG_CONTEXT = 200; // Context length for price elements
 
 const BROWSER_HEADERS = {
   "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
@@ -130,20 +132,43 @@ async function fetchHotelPrice(
       /(\d+(?:,\d+)*(?:\.\d+)?)\s*[€$£¥]/g,
       /[€$£¥](\d+(?:,\d+)*(?:\.\d+)?)\s*(?:per\s+night|\/\s*night)/gi,
       /(\d+(?:,\d+)*(?:\.\d+)?)\s*EUR/gi,
-      /[€$£¥]\s*(\d+(?:\.\d+)?(?:,\d+)?)/g
+      /[€$£¥]\s*(\d+(?:\.\d+)?(?:,\d+)?)/g,
+      // Specific patterns for harder to capture formats
+      /price[^\d]*?(\d+(?:[,.]\d+)?)/gi,
+      /(\d+)(?:\s*[,.]\s*(\d+))?\s*(?:€|EUR|USD|\$)/gi,
+      /(?:€|EUR|USD|\$)\s*(\d+)(?:\s*[,.]\s*(\d+))?/gi
     ];
     
-    if (Deno.env.get("STAGE") === "development") {
-      console.log(`HTML sample (first ${DEBUG_HTML_LENGTH} chars): ${html.substring(0, DEBUG_HTML_LENGTH)}`);
+    if (Deno.env.get("STAGE") === "development" || true) { // Always log in development and production
+      // Print a snippet of the full HTML for debugging
+      console.log(`HTML snippet (first 300 chars): 
+${html.substring(0, 300)}
+...
+${html.substring(Math.floor(html.length/2), Math.floor(html.length/2) + 300)}
+...
+${html.substring(html.length - 300)}
+`);
       
       console.log("Searching for price elements in HTML...");
       
+      // Find and log price-related elements
       const priceElements = $('[class*="price"], [id*="price"], [class*="Price"], [id*="Price"]');
       console.log(`Found ${priceElements.length} elements with "price" in class or id`);
       priceElements.each((i, el) => {
         if (i < 10) {
-          console.log(`Price element ${i}: ${$(el).text().trim()}`);
-          console.log(`Element HTML: ${$.html(el).substring(0, 200)}`);
+          const elementText = $(el).text().trim();
+          const elementHtml = $.html(el).substring(0, PRICE_DEBUG_CONTEXT);
+          console.log(`Price element ${i} [${$(el).prop('tagName')}]: ${elementText}`);
+          console.log(`Element HTML: ${elementHtml}`);
+          
+          // Check for price matches in this element
+          for (const pattern of regexPatterns) {
+            pattern.lastIndex = 0;
+            const matches = elementText.match(pattern);
+            if (matches) {
+              console.log(`REGEX MATCH in element ${i}: ${matches[0]}`);
+            }
+          }
         }
       });
       
@@ -151,7 +176,10 @@ async function fetchHotelPrice(
       
       const tripPriceSelectors = [
         '.price-info', '.actual-price', '.m-price', '.price', '.J_PriceInfo',
-        '.J_HotelPriceInfo', '.J_RoomPriceInfo', '.price_num', '.price-tag'
+        '.J_HotelPriceInfo', '.J_RoomPriceInfo', '.price_num', '.price-tag',
+        // Additional selectors that could contain price information
+        '[data-testid*="price"]', '[data-test*="price"]', '[class*="rate"]', 
+        '[class*="total"]', '.room-rate', '.best-price', '.total-amount'
       ];
       
       tripPriceSelectors.forEach(selector => {
@@ -160,8 +188,19 @@ async function fetchHotelPrice(
           console.log(`Found ${elements.length} elements with selector "${selector}"`);
           elements.each((i, el) => {
             if (i < 3) {
-              console.log(`${selector} element ${i} text: ${$(el).text().trim()}`);
-              console.log(`${selector} element ${i} HTML: ${$.html(el).substring(0, 200)}`);
+              const elementText = $(el).text().trim();
+              const elementHtml = $.html(el).substring(0, PRICE_DEBUG_CONTEXT);
+              console.log(`${selector} element ${i} text: ${elementText}`);
+              console.log(`${selector} element ${i} HTML: ${elementHtml}`);
+              
+              // Check for price matches in this element
+              for (const pattern of regexPatterns) {
+                pattern.lastIndex = 0;
+                const matches = elementText.match(pattern);
+                if (matches) {
+                  console.log(`REGEX MATCH in ${selector} element ${i}: ${matches[0]}`);
+                }
+              }
             }
           });
         }
@@ -172,7 +211,10 @@ async function fetchHotelPrice(
     
     const priceContainers = [
       '.J_HotelPriceInfo', '.actual-price', '.m-price', '.price-info',
-      '.J_PriceSection', '.price_num', '.js-hotel-price'
+      '.J_PriceSection', '.price_num', '.js-hotel-price',
+      // Additional containers to try
+      '.room-pricing', '.rate-container', '.total-price', 
+      '.price-display', '.booking-price'
     ];
     
     let foundInContainer = false;
@@ -187,6 +229,7 @@ async function fetchHotelPrice(
         priceEls.each((i, el) => {
           const priceText = $(el).text().trim();
           console.log(`Price container ${container} - element ${i} text: ${priceText}`);
+          console.log(`Container HTML context: ${$.html(el).substring(0, PRICE_DEBUG_CONTEXT)}`);
           
           for (const pattern of regexPatterns) {
             pattern.lastIndex = 0;
@@ -209,24 +252,53 @@ async function fetchHotelPrice(
     });
     
     if (prices.length === 0) {
-      for (const pattern of regexPatterns) {
-        pattern.lastIndex = 0;
-        let match;
-        while ((match = pattern.exec(bodyText)) !== null) {
-          if (match[1]) {
-            const cleanPrice = match[1].replace(/,/g, '');
-            const price = parseFloat(cleanPrice);
-            
-            if (!isNaN(price) && price > 0) {
-              prices.push(price);
-              console.log(`Found price with pattern ${pattern}: ${price}`);
+      // Check text around currency symbols for prices
+      const currencyContextRegex = /([^\n]{0,30}[€$£¥][^\n]{0,30})/g;
+      const currencyMatches = bodyText.match(currencyContextRegex) || [];
+      
+      if (currencyMatches.length > 0) {
+        console.log(`Found ${currencyMatches.length} text segments with currency symbols`);
+        currencyMatches.slice(0, 20).forEach((match, i) => {
+          console.log(`Currency context ${i}: "${match.trim()}"`);
+          
+          for (const pattern of regexPatterns) {
+            pattern.lastIndex = 0;
+            const priceMatch = match.match(pattern);
+            if (priceMatch && priceMatch[1]) {
+              const cleanPrice = priceMatch[1].replace(/,/g, '');
+              const price = parseFloat(cleanPrice);
+              
+              if (!isNaN(price) && price > 0) {
+                console.log(`Found price in currency context: ${price} (matched with ${pattern})`);
+                prices.push(price);
+              }
             }
           }
-        }
-        
-        if (prices.length > 0) {
-          console.log(`Found ${prices.length} prices using pattern: ${pattern}`);
-          break;
+        });
+      }
+      
+      // If still no prices, try general regex search on entire body text
+      if (prices.length === 0) {
+        for (const pattern of regexPatterns) {
+          pattern.lastIndex = 0;
+          let match;
+          while ((match = pattern.exec(bodyText)) !== null) {
+            if (match[1]) {
+              const cleanPrice = match[1].replace(/,/g, '');
+              const price = parseFloat(cleanPrice);
+              
+              if (!isNaN(price) && price > 0) {
+                prices.push(price);
+                console.log(`Found price with pattern ${pattern}: ${price}`);
+                console.log(`Text context: "${bodyText.substring(Math.max(0, match.index - 30), match.index + match[0].length + 30)}"`);
+              }
+            }
+          }
+          
+          if (prices.length > 0) {
+            console.log(`Found ${prices.length} prices using pattern: ${pattern}`);
+            break;
+          }
         }
       }
     }
@@ -235,8 +307,8 @@ async function fetchHotelPrice(
       console.log('No price matches found using regex patterns, trying direct element search');
       
       $('div:contains("Total price"), span:contains("Total price"), div:contains("price"), span:contains("price")').each((_i, el) => {
-        const text = $(el).text();
-        console.log(`Checking element text: ${text.substring(0, 100)}`);
+        const text = $(el).text().trim();
+        console.log(`Checking element with price text: "${text.substring(0, PRICE_DEBUG_CONTEXT)}"`);
         
         for (const pattern of regexPatterns) {
           pattern.lastIndex = 0;
@@ -248,7 +320,7 @@ async function fetchHotelPrice(
               
               if (!isNaN(price) && price > 0) {
                 prices.push(price);
-                console.log(`Found price in element: ${price} (from text: ${text.trim().substring(0, 30)}...)`);
+                console.log(`Found price in element: ${price} (from text: ${text.substring(0, 30)}...)`);
               }
             }
           }
