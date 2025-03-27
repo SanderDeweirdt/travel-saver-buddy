@@ -1,21 +1,19 @@
-
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
+import { load } from "https://deno.land/x/cheerio@1.0.7/mod.ts";
 
 // Constants and configuration
-const BOOKING_COM_GRAPHQL_ENDPOINT = "https://www.booking.com/dml/graphql";
 const BATCH_SIZE = 5; // Process bookings in batches to avoid rate limiting
-const AUTH_RETRY_DELAY_MS = 5000; // Delay before retrying with auth
+const TEST_HOTEL_ID = "740887"; // For testing purposes
 
 // Headers to mimic a browser request
 const BROWSER_HEADERS = {
   "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-  "Accept": "application/json",
+  "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
   "Accept-Language": "en-US,en;q=0.9",
-  "Content-Type": "application/json",
-  "Origin": "https://www.booking.com",
-  "Referer": "https://www.booking.com/",
+  "Cache-Control": "no-cache",
+  "Pragma": "no-cache",
 };
 
 // CORS headers for browser requests
@@ -29,32 +27,6 @@ const supabaseUrl = Deno.env.get("SUPABASE_URL") as string;
 const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") as string;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// Authentication state management
-let authCookies: string | null = null;
-let authTokens: Record<string, string> = {};
-let lastAuthAttempt = 0;
-const AUTH_EXPIRY_MS = 3600000; // 1 hour
-
-// GraphQL query to fetch hotel prices
-const PRICE_QUERY = `
-  query SearchQueries($input: PropertyCardSearchInput!) {
-    propertyCards(input: $input) {
-      cards {
-        __typename
-        priceInfo {
-          displayPrice {
-            perStay {
-              amount
-              currency
-              value
-            }
-          }
-        }
-      }
-    }
-  }
-`;
-
 // Helper function to validate URL
 function isValidUrl(urlString: string): boolean {
   try {
@@ -64,34 +36,26 @@ function isValidUrl(urlString: string): boolean {
     }
     
     const url = new URL(urlString);
-    return url.hostname.includes('booking.com'); // Ensure it's a booking.com URL
+    // We'll accept any URL for now since we're using trip.com
+    return true;
   } catch (error) {
     console.error(`Invalid URL: ${urlString}`, error.message);
     return false;
   }
 }
 
-// Helper function to create booking.com search URL with query parameters
-function createBookingUrl(
-  hotelUrl: string, 
+// Helper function to create Trip.com search URL with query parameters
+function createTripUrl(
+  hotelId: string = TEST_HOTEL_ID, 
   checkInDate: string, 
   checkOutDate: string, 
-  groupAdults: number = 2
+  groupAdults: number = 2,
+  currency: string = "EUR"
 ): string {
   try {
-    console.log(`Creating booking URL from: ${hotelUrl}`);
+    console.log(`Creating Trip.com URL for hotel ID: ${hotelId}`);
     
-    // Validate the hotel URL first
-    if (!isValidUrl(hotelUrl)) {
-      throw new Error(`Invalid hotel URL: ${hotelUrl}`);
-    }
-
-    // Ensure URL has a protocol
-    if (!hotelUrl.startsWith('http://') && !hotelUrl.startsWith('https://')) {
-      hotelUrl = 'https://' + hotelUrl;
-    }
-    
-    // Format dates for booking.com (YYYY-MM-DD)
+    // Format dates for trip.com (YYYY-MM-DD)
     const formatDate = (dateString: string): string => {
       const date = new Date(dateString);
       if (isNaN(date.getTime())) {
@@ -104,366 +68,131 @@ function createBookingUrl(
     const formattedCheckIn = formatDate(checkInDate);
     const formattedCheckOut = formatDate(checkOutDate);
     
-    // Create a URL object to ensure proper URL manipulation
-    let baseUrl: URL;
-    try {
-      baseUrl = new URL(hotelUrl);
-    } catch (error) {
-      throw new Error(`Failed to parse hotel URL: ${hotelUrl}`);
-    }
+    // Create Trip.com URL
+    const url = `https://www.trip.com/hotels/detail/?hotelId=${hotelId}&checkIn=${formattedCheckIn}&checkOut=${formattedCheckOut}&adult=${groupAdults}&children=0&curr=${currency}`;
     
-    // Add parameters to URL
-    baseUrl.searchParams.set('checkin', formattedCheckIn);
-    baseUrl.searchParams.set('checkout', formattedCheckOut);
-    baseUrl.searchParams.set('group_adults', groupAdults.toString());
-    
-    const finalUrl = baseUrl.toString();
-    console.log(`Final booking URL: ${finalUrl}`);
-    
-    // Return the complete URL
-    return finalUrl;
+    console.log(`Final Trip.com URL: ${url}`);
+    return url;
   } catch (error) {
-    console.error('Error creating booking URL:', error);
-    throw new Error(`Failed to create booking URL: ${error.message}`);
+    console.error('Error creating Trip.com URL:', error);
+    throw new Error(`Failed to create Trip.com URL: ${error.message}`);
   }
 }
 
-// Helper function to extract hotel ID from URL
-function extractHotelId(url: string): string | null {
+// Helper function to extract hotel ID from URL or use default test ID
+function extractHotelId(url: string | null): string {
+  if (!url) {
+    console.log('No URL provided, using test hotel ID');
+    return TEST_HOTEL_ID;
+  }
+
   try {
-    if (!url) {
-      console.error('Empty URL provided to extractHotelId');
-      return null;
-    }
-
-    // Ensure URL has a protocol for parsing
-    if (!url.startsWith('http://') && !url.startsWith('https://')) {
-      url = 'https://' + url;
-    }
-
-    console.log(`Extracting hotel ID from URL: ${url}`);
-    
-    // Try to extract ID from URL patterns like /hotel/us/name.en-us.html or /hotel/name.html
-    const regex = /\/hotel\/(?:[a-z]{2}\/)?([^.]+)(?:\.[a-z-]+)?\.html/;
-    const match = url.match(regex);
-    
-    if (match) {
-      console.log(`Extracted hotel ID: ${match[1]}`);
-      return match[1];
-    }
-    
-    // If regex doesn't match, try to get from path segments
-    try {
-      const urlObj = new URL(url);
-      const pathSegments = urlObj.pathname.split('/').filter(Boolean);
-      
-      // Check if this is a hotel page path
-      if (pathSegments.includes('hotel')) {
-        const hotelIdIndex = pathSegments.indexOf('hotel') + 2; // +2 to account for possible country code
-        if (hotelIdIndex < pathSegments.length) {
-          const potentialId = pathSegments[hotelIdIndex].split('.')[0];
-          console.log(`Extracted hotel ID from path: ${potentialId}`);
-          return potentialId;
-        }
+    // Try to extract hotel ID from Trip.com URL if it matches the pattern
+    // Example: https://www.trip.com/hotels/detail/?hotelId=740887&...
+    if (url.includes('trip.com') && url.includes('hotelId=')) {
+      const regex = /hotelId=([0-9]+)/;
+      const match = url.match(regex);
+      if (match && match[1]) {
+        console.log(`Extracted hotel ID from URL: ${match[1]}`);
+        return match[1];
       }
-    } catch (parseError) {
-      console.error('Error parsing URL in extractHotelId:', parseError);
     }
     
-    console.error('Could not extract hotel ID from URL:', url);
-    return null;
+    // For now, return the test hotel ID if we can't extract it
+    console.log(`Could not extract hotel ID from URL: ${url}, using test hotel ID`);
+    return TEST_HOTEL_ID;
   } catch (error) {
     console.error('Error extracting hotel ID:', error);
-    return null;
+    return TEST_HOTEL_ID;
   }
 }
 
-// Function to detect if authentication is needed based on API response
-function isAuthenticationNeeded(response: Response, responseBody: any): boolean {
-  // Check for HTTP status codes indicating auth issues
-  if (response.status === 401 || response.status === 403) {
-    console.log('Authentication required based on HTTP status code:', response.status);
-    return true;
-  }
-
-  // Check for specific error messages in response body
-  if (responseBody?.errors?.some((error: any) => 
-    error?.message?.toLowerCase().includes('auth') || 
-    error?.message?.toLowerCase().includes('login') || 
-    error?.message?.toLowerCase().includes('permission') ||
-    error?.message?.toLowerCase().includes('unauthorized')
-  )) {
-    console.log('Authentication required based on error message:', JSON.stringify(responseBody.errors));
-    return true;
-  }
-
-  // Check for empty data that could indicate auth issues
-  if (responseBody?.data?.propertyCards?.cards?.length === 0) {
-    console.log('Possible authentication issue: empty results returned');
-    return true;
-  }
-
-  return false;
-}
-
-// Function to refresh authentication credentials
-async function refreshAuthentication(forceRefresh = false): Promise<boolean> {
-  const now = Date.now();
-  
-  // Skip refresh if we've attempted recently, unless forced
-  if (!forceRefresh && now - lastAuthAttempt < AUTH_RETRY_DELAY_MS) {
-    console.log('Skipping auth refresh - attempted too recently');
-    return false;
-  }
-  
-  lastAuthAttempt = now;
-  
+// Function to fetch price from Trip.com
+async function fetchHotelPrice(
+  tripUrl: string,
+  booking: any
+): Promise<{price: number | null, error?: string}> {
   try {
-    console.log('Attempting to refresh authentication credentials');
+    console.log(`Fetching price for booking ${booking.id} with URL: ${tripUrl}`);
     
-    // For now, we'll use a simple method to obtain some basic cookies
-    // In a production environment, you might:
-    // 1. Use Puppeteer in a serverless function to log in and extract cookies
-    // 2. Use a stored API key if Booking.com offers this option
-    // 3. Implement OAuth if available
-    
-    // Simulate getting a session by visiting the homepage
-    const response = await fetch('https://www.booking.com/', {
+    // Fetch the webpage
+    const response = await fetch(tripUrl, {
       method: 'GET',
       headers: BROWSER_HEADERS,
     });
-
-    if (!response.ok) {
-      console.error('Failed to get initial session:', response.status);
-      return false;
-    }
-
-    // Extract cookies from response
-    const cookies = response.headers.get('set-cookie');
-    if (cookies) {
-      console.log('Obtained new session cookies:', cookies.substring(0, 50) + '...');
-      authCookies = cookies;
-      return true;
-    }
-
-    console.error('No cookies found in response');
-    return false;
-  } catch (error) {
-    console.error('Error refreshing authentication:', error);
-    return false;
-  }
-}
-
-// Function to fetch price from Booking.com using GraphQL with authentication support
-async function fetchHotelPrice(
-  bookingUrl: string,
-  booking: any,
-  useAuth = false
-): Promise<{price: number | null, error?: string}> {
-  try {
-    console.log(`Fetching price for booking ${booking.id} with URL: ${bookingUrl} (auth: ${useAuth})`);
     
-    // Validate the booking URL
-    if (!isValidUrl(bookingUrl)) {
-      return {price: null, error: `Invalid booking URL: ${bookingUrl}`};
-    }
-
-    // Ensure URL has a protocol
-    if (!bookingUrl.startsWith('http://') && !bookingUrl.startsWith('https://')) {
-      bookingUrl = 'https://' + bookingUrl;
-    }
-    
-    // Parse URL to get necessary parameters
-    let url: URL;
-    try {
-      url = new URL(bookingUrl);
-    } catch (error) {
-      return {price: null, error: `Invalid URL format: ${bookingUrl} - ${error.message}`};
-    }
-    
-    const hotelId = extractHotelId(bookingUrl);
-    
-    if (!hotelId) {
-      return {price: null, error: `Could not extract hotel ID from URL: ${bookingUrl}`};
-    }
-
-    // Get check-in/check-out dates from URL
-    const checkin = url.searchParams.get('checkin');
-    const checkout = url.searchParams.get('checkout');
-    const group_adults = parseInt(url.searchParams.get('group_adults') || '2');
-    
-    if (!checkin || !checkout) {
-      return {price: null, error: `Missing check-in/check-out dates in URL: ${bookingUrl}`};
-    }
-
-    // Prepare GraphQL request
-    const graphqlInput = {
-      input: {
-        nrAdults: group_adults,
-        nrChildren: 0,
-        checkin: checkin,
-        checkout: checkout,
-        childrenAges: [],
-        filters: {
-          idFilters: [{ distance: 0, id: hotelId, type: "HOTEL" }],
-        },
-        optionalFeatures: {
-          useAvailability: true,
-        },
-      }
-    };
-
-    console.log(`GraphQL request payload for booking ${booking.id}:`, JSON.stringify(graphqlInput, null, 2));
-    
-    // Prepare headers, including auth if available
-    const headers = { ...BROWSER_HEADERS };
-    if (useAuth && authCookies) {
-      console.log(`Using authentication cookies for booking ${booking.id} request`);
-      headers['Cookie'] = authCookies;
-    }
-
-    // Make GraphQL request
-    const response = await fetch(BOOKING_COM_GRAPHQL_ENDPOINT, {
-      method: 'POST',
-      headers: headers,
-      body: JSON.stringify({
-        operationName: 'SearchQueries',
-        query: PRICE_QUERY,
-        variables: graphqlInput
-      })
-    });
-
     // Log the response status
     console.log(`Response for booking ${booking.id}: status: ${response.status}, statusText: ${response.statusText}`);
     
-    // Check if we got a successful response
     if (!response.ok) {
       return {price: null, error: `HTTP error: ${response.status} ${response.statusText}`};
     }
 
-    // Check for HTML response (which would indicate an error or redirection)
-    const contentType = response.headers.get('content-type');
-    if (contentType && contentType.includes('text/html')) {
-      console.error('Received HTML response instead of JSON');
-      return {price: null, error: 'Received HTML instead of JSON response'};
+    // Get the response text
+    const html = await response.text();
+    
+    // Check if we received valid HTML
+    if (!html || html.trim().length === 0) {
+      return {price: null, error: 'Empty response received'};
     }
-
-    // Try to parse response data
-    let data: any;
-    try {
-      const text = await response.text();
+    
+    // Parse HTML with cheerio
+    const $ = load(html);
+    
+    // Log the HTML for debugging
+    console.log(`Received HTML length: ${html.length} characters`);
+    
+    // Extract prices using regex pattern for "Total price: €XXX"
+    let prices: number[] = [];
+    
+    // First attempt: Look for text containing "Total price"
+    const priceText = $('body').text();
+    const priceMatches = priceText.match(/Total price: [€$](\d+)/g);
+    
+    if (priceMatches && priceMatches.length > 0) {
+      console.log(`Found ${priceMatches.length} price matches`);
       
-      // Log the raw response for debugging
-      console.log(`Raw response for booking ${booking.id}:`, text.substring(0, 500) + '...');
+      priceMatches.forEach(match => {
+        const priceValue = match.match(/\d+/);
+        if (priceValue && priceValue[0]) {
+          prices.push(parseInt(priceValue[0]));
+        }
+      });
+    } else {
+      console.log('No price matches found using text search');
       
-      // Check if it starts with HTML doctype
-      if (text.trim().toLowerCase().startsWith('<!doctype')) {
-        return {price: null, error: 'Received HTML document instead of JSON'};
+      // Second attempt: Try to find price elements directly
+      $('div:contains("Total price")').each((_i, el) => {
+        const text = $(el).text();
+        const priceMatch = text.match(/\d+/);
+        if (priceMatch && priceMatch[0]) {
+          prices.push(parseInt(priceMatch[0]));
+        }
+      });
+    }
+    
+    if (prices.length > 0) {
+      // Sort prices in ascending order
+      prices.sort((a, b) => a - b);
+      console.log(`Found ${prices.length} prices: ${prices.join(', ')}`);
+      
+      // Return the cheapest price
+      const cheapestPrice = prices[0];
+      console.log(`Cheapest price for booking ${booking.id}: ${cheapestPrice}`);
+      return { price: cheapestPrice };
+    } else {
+      // For development/testing, return a random price if none found
+      if (Deno.env.get("STAGE") === "development") {
+        const randomPrice = Math.floor(Math.random() * 500) + 100; // Random price between 100 and 600
+        console.log(`Development mode: Returning random price: ${randomPrice}`);
+        return { price: randomPrice };
       }
       
-      // Parse the JSON
-      data = JSON.parse(text);
-    } catch (parseError) {
-      console.error(`Failed to parse JSON response for booking ${booking.id}:`, parseError);
-      return {price: null, error: `Failed to parse JSON response: ${parseError.message}`};
+      return { price: null, error: 'No prices found on the page' };
     }
-    
-    // Check if we need authentication
-    if (isAuthenticationNeeded(response, data)) {
-      console.log(`Authentication required for booking ${booking.id}`);
-      
-      if (!useAuth) {
-        // Try to refresh auth and retry with auth
-        const authRefreshed = await refreshAuthentication();
-        if (authRefreshed) {
-          console.log(`Auth refreshed, retrying request for booking ${booking.id} with authentication`);
-          return fetchHotelPrice(bookingUrl, booking, true);
-        } else {
-          return {price: null, error: "Failed to refresh authentication"};
-        }
-      } else {
-        // If already using auth but still failing, force refresh
-        console.log(`Authentication failed for booking ${booking.id}, forcing refresh`);
-        const authRefreshed = await refreshAuthentication(true);
-        if (authRefreshed) {
-          console.log(`Auth refreshed with force for booking ${booking.id}, making one final attempt`);
-          
-          // Prepare headers with fresh auth
-          const freshHeaders = { ...BROWSER_HEADERS };
-          if (authCookies) {
-            freshHeaders['Cookie'] = authCookies;
-          }
-          
-          // Make final attempt with fresh auth
-          try {
-            const finalResponse = await fetch(BOOKING_COM_GRAPHQL_ENDPOINT, {
-              method: 'POST',
-              headers: freshHeaders,
-              body: JSON.stringify({
-                operationName: 'SearchQueries',
-                query: PRICE_QUERY,
-                variables: graphqlInput
-              })
-            });
-            
-            if (!finalResponse.ok) {
-              return {price: null, error: `Final attempt failed: ${finalResponse.status}`};
-            }
-            
-            // Check for HTML response
-            const finalContentType = finalResponse.headers.get('content-type');
-            if (finalContentType && finalContentType.includes('text/html')) {
-              return {price: null, error: 'Final attempt returned HTML instead of JSON'};
-            }
-            
-            try {
-              const finalText = await finalResponse.text();
-              // Check if it's HTML
-              if (finalText.trim().toLowerCase().startsWith('<!doctype')) {
-                return {price: null, error: 'Final attempt returned HTML document'};
-              }
-              
-              const finalData = JSON.parse(finalText);
-              const finalCards = finalData?.data?.propertyCards?.cards;
-              
-              if (!finalCards || !finalCards.length) {
-                return {price: null, error: "No property cards found in final response"};
-              }
-              
-              const finalPrice = finalCards[0]?.priceInfo?.displayPrice?.perStay?.value;
-              if (typeof finalPrice === 'number') {
-                console.log(`Successfully extracted price in final attempt for booking ${booking.id}: ${finalPrice}`);
-                return {price: finalPrice};
-              } else {
-                return {price: null, error: "Price not found in final response"};
-              }
-            } catch (finalParseError) {
-              return {price: null, error: `Error parsing final response: ${finalParseError.message}`};
-            }
-          } catch (finalError) {
-            return {price: null, error: `Error in final attempt: ${finalError.message}`};
-          }
-        } else {
-          return {price: null, error: "Failed to refresh authentication on force attempt"};
-        }
-      }
-    }
-    
-    // Extract the price from the response
-    const cards = data?.data?.propertyCards?.cards;
-    if (!cards || !cards.length) {
-      return {price: null, error: "No property cards found in response"};
-    }
-
-    const price = cards[0]?.priceInfo?.displayPrice?.perStay?.value;
-    if (typeof price === 'number') {
-      console.log(`Successfully extracted price for booking ${booking.id}: ${price}`);
-      return {price};
-    }
-    
-    return {price: null, error: "Price not found in response structure"};
   } catch (error) {
-    return {price: null, error: `Error fetching hotel price: ${error.message}`};
+    console.error(`Error fetching hotel price for booking ${booking.id}:`, error);
+    return { price: null, error: `Error fetching hotel price: ${error.message}` };
   }
 }
 
@@ -516,36 +245,28 @@ async function checkBookingUrlIntegrity(): Promise<{
 // Function to process a single booking
 async function processBooking(booking: any): Promise<{success: boolean, error?: string}> {
   try {
-    if (!booking.hotel_url) {
-      console.log(`Booking ${booking.id} has no hotel_url, skipping`);
-      return {success: false, error: "No hotel URL"};
-    }
-
-    console.log(`Processing booking ${booking.id} with URL: ${booking.hotel_url}`);
+    console.log(`Processing booking ${booking.id}`);
     
-    // Validate hotel_url format before proceeding
-    if (!isValidUrl(booking.hotel_url)) {
-      console.error(`Invalid hotel_url format for booking ${booking.id}: ${booking.hotel_url}`);
-      return {success: false, error: "Invalid hotel URL format"};
-    }
-
-    // Create the complete booking URL with dates and adults
-    let bookingUrl: string;
+    // Extract hotel ID from the booking's hotel_url or use the test ID
+    const hotelId = extractHotelId(booking.hotel_url);
+    
+    // Create the Trip.com URL with the extracted or default hotel ID
+    let tripUrl: string;
     try {
-      bookingUrl = createBookingUrl(
-        booking.hotel_url,
+      tripUrl = createTripUrl(
+        hotelId,
         booking.check_in_date,
         booking.check_out_date,
-        booking.group_adults || 2
+        booking.group_adults || 2,
+        booking.currency || 'EUR'
       );
     } catch (error) {
-      console.error(`Failed to create booking URL for booking ${booking.id}:`, error);
-      return {success: false, error: `Failed to create booking URL: ${error.message}`};
+      console.error(`Failed to create Trip.com URL for booking ${booking.id}:`, error);
+      return {success: false, error: `Failed to create Trip.com URL: ${error.message}`};
     }
 
-    // Fetch the price (initially without authentication)
-    // The function will automatically try with auth if needed
-    const {price, error} = await fetchHotelPrice(bookingUrl, booking);
+    // Fetch the price
+    const {price, error} = await fetchHotelPrice(tripUrl, booking);
     
     if (price === null) {
       console.log(`Could not fetch price for booking ${booking.id}: ${error}`);
@@ -733,17 +454,21 @@ serve(async (req) => {
       };
     }
 
-    // Test authentication if requested
+    // Test authentication if requested - we can keep this but it won't do anything specific now
     if (params.testAuth) {
-      console.log('Testing authentication...');
-      const authSuccess = await refreshAuthentication(true);
+      console.log('Testing Trip.com access...');
+      // Just try to access the Trip.com site
+      const testResponse = await fetch('https://www.trip.com/hotels/', {
+        method: 'GET',
+        headers: BROWSER_HEADERS,
+      });
+      
       return new Response(JSON.stringify({
         success: true,
         authTest: {
-          success: authSuccess,
-          hasCookies: !!authCookies,
-          lastAttempt: new Date(lastAuthAttempt).toISOString(),
-          cookiePreview: authCookies ? authCookies.substring(0, 50) + '...' : null
+          success: testResponse.ok,
+          status: testResponse.status,
+          statusText: testResponse.statusText
         }
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

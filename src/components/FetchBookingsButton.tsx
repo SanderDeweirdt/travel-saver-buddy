@@ -85,9 +85,9 @@ const FetchBookingsButton = ({ onFetchComplete }: FetchBookingsButtonProps) => {
       if (data.success) {
         if (option === 'test-auth') {
           if (data.authTest?.success) {
-            toast.success('Authentication test successful!');
+            toast.success('Trip.com access test successful!');
           } else {
-            toast.error('Authentication test failed. Check edge function logs.');
+            toast.error(`Trip.com access test failed. Status: ${data.authTest?.status} ${data.authTest?.statusText}`);
           }
         } else if (option === 'check-urls') {
           const integrity = data.urlIntegrity;
@@ -97,9 +97,9 @@ const FetchBookingsButton = ({ onFetchComplete }: FetchBookingsButtonProps) => {
             toast.success(`All ${integrity.valid} hotel URLs are valid.`);
           }
         } else if (option === 'fetch-single') {
-          toast.success('Single booking fetch completed. Check logs for details.');
+          toast.success('Single booking price fetch completed. Check logs for details.');
         } else {
-          toast.success('Bookings fetched successfully!');
+          toast.success('Booking prices fetched successfully!');
         }
         
         onFetchComplete(); // Refresh bookings in the dashboard
@@ -143,7 +143,7 @@ const FetchBookingsButton = ({ onFetchComplete }: FetchBookingsButtonProps) => {
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => handleFetchBookings('test-auth')}>
           <AlertCircle className="h-4 w-4 mr-2" />
-          Test Authentication
+          Test Trip.com Access
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => handleFetchBookings('fetch-single')}>
           <Wrench className="h-4 w-4 mr-2" />
