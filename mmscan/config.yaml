@@ -64,3 +64,12 @@ api:
 output:
   dir: ./reports
   formats: [xlsx, csv]
+
+# Slack alerts after `mmscan run` or `mmscan notify`. The webhook URL is a
+# secret: put it in .env as SLACK_WEBHOOK_URL, never here. Only results that
+# match both lists are posted; nothing is posted when none match.
+notify:
+  slack: false
+  verdicts: [Deal]
+  changes: [New, Cheaper]
+  max_items: 10

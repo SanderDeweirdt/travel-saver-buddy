@@ -190,6 +190,29 @@ def _do_report(store: Store, cfg: Config, run_id: int) -> None:
     print_summary(store, run_id, cfg, now)
 
 
+def _do_notify(store: Store, cfg: Config, run_id: int, dry_run: bool = False) -> bool:
+    """Post Slack alerts for the run. Returns False when sending failed."""
+    import json
+
+    from mmscan.notify import NotifyError, notify_run, webhook_from_env
+
+    try:
+        url = None if dry_run else webhook_from_env()
+        n, payload = notify_run(store, cfg, run_id, datetime.now(UTC), url)
+    except NotifyError as e:
+        store.merge_run(run_id, warnings=[str(e)])
+        typer.echo(f"notify failed: {e}", err=True)
+        return False
+    if n == 0:
+        typer.echo("Slack: no new or cheaper results to post.")
+    elif dry_run:
+        typer.echo(f"Would post {n} alerts to Slack:")
+        typer.echo(json.dumps(payload, indent=2, ensure_ascii=False))
+    else:
+        typer.echo(f"Slack: posted {n} alerts.")
+    return True
+
+
 @app.command()
 def enrich(
     config: ConfigOpt = Path("config.yaml"),
@@ -255,6 +278,27 @@ def report(
 
 
 @app.command()
+def notify(
+    config: ConfigOpt = Path("config.yaml"),
+    dry_run: DryRunOpt = False,
+    verbose: VerboseOpt = False,
+) -> None:
+    """Post new or cheaper results of the latest scored run to Slack. No API calls."""
+    _setup_logging(verbose)
+    cfg = _load(config)
+    if not DB_PATH.exists():
+        typer.echo("No scored run yet. Run `mmscan score` first.", err=True)
+        raise typer.Exit(1)
+    store = Store(DB_PATH)
+    run_id = store.latest_scored_run()
+    if run_id is None:
+        typer.echo("No scored run yet. Run `mmscan score` first.", err=True)
+        raise typer.Exit(1)
+    if not _do_notify(store, cfg, run_id, dry_run):
+        raise typer.Exit(1)
+
+
+@app.command()
 def run(
     config: ConfigOpt = Path("config.yaml"),
     dry_run: DryRunOpt = False,
@@ -291,6 +335,8 @@ def run(
     complete = status == "ok" and _do_enrich(client, store, cfg, run_id)
     _do_score(store, cfg, run_id, config)
     _do_report(store, cfg, run_id)
+    if cfg.notify.slack:
+        _do_notify(store, cfg, run_id)
     if not complete:
         typer.echo("Run is partial: the daily call cap stopped it early.", err=True)
         raise typer.Exit(1)

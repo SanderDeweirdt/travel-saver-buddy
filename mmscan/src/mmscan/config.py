@@ -82,6 +82,13 @@ class Api(_Model):
     daily_call_cap: int = Field(300, ge=1)
 
 
+class Notify(_Model):
+    slack: bool = False
+    verdicts: list[Literal["Deal", "Worth a look"]] = ["Deal"]
+    changes: list[Literal["New", "Cheaper"]] = ["New", "Cheaper"]
+    max_items: int = Field(10, ge=1, le=40)
+
+
 class Output(_Model):
     dir: Path = Path("./reports")
     formats: list[Literal["xlsx", "csv"]] = ["xlsx", "csv"]
@@ -103,6 +110,7 @@ class Config(_Model):
     value_per_mile_cents: ValueBands = ValueBands()
     api: Api = Api()
     output: Output = Output()
+    notify: Notify = Notify()
 
     warnings: list[str] = Field(default_factory=list, exclude=True)
 

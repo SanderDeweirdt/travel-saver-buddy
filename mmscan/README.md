@@ -44,6 +44,7 @@ Every command takes `--config PATH` (default `config.yaml`), `--dry-run`
 | `mmscan score` | Total cost, baselines, flags and verdicts | 0 |
 | `mmscan report` | Spreadsheet, Shortlist CSV and the terminal top 10 | 0 |
 | `mmscan run` | Scan, enrich, score and report in one run; prints the planned calls first | Scan plus enrich |
+| `mmscan notify` | Posts the latest run's new or cheaper Deals to Slack; nothing when there are none | 0 |
 | `mmscan quota` | Calls left today (last `X-RateLimit-Remaining`) and calls made by mmscan today | 0 |
 
 `enrich` and `score` work on the latest scanned run, and `report` on the
@@ -74,11 +75,31 @@ scan.
 | `value_per_mile_cents` | Bands for value per mile against a cash fare. |
 | `api` | Page size, mixed-cabin filter, `include_filtered`, and the daily call cap. |
 | `output` | Report folder and formats. |
+| `notify` | Slack alerts: `slack: true` turns them on after `mmscan run`; `verdicts` and `changes` pick what is posted; `max_items` caps the message. |
 
 Optional `cash_fares.csv`, next to `config.yaml`, with columns
 `origin,destination,cabin,month,fare_eur` (`month` as `YYYY-MM`). Matching
 results get a cash fare, saving and value per mile. Bad rows are skipped
 with a warning naming the line.
+
+## Slack alerts
+
+1. In Slack, create an app at <https://api.slack.com/apps> ("From scratch"),
+   turn on **Incoming Webhooks**, and add a webhook to the channel you want.
+2. Put the webhook URL in `.env` as `SLACK_WEBHOOK_URL=...`. It is a secret:
+   never put it in `config.yaml`.
+3. Set `notify.slack: true` in `config.yaml`.
+4. Check the message with `uv run mmscan notify --dry-run`, then send it
+   with `uv run mmscan notify`.
+
+`mmscan run` then posts after each run, but only results that are on the
+Shortlist, have a verdict in `notify.verdicts` (default Deal) and are New or
+Cheaper than the previous run. A quiet run posts nothing, and so does the
+very first run, which has no previous run to compare with. A Slack failure
+is logged in the run log and does not fail the run.
+
+If the tool runs in a cloud environment with a network allowlist, add
+`hooks.slack.com` next to `seats.aero`.
 
 ## Findings
 
