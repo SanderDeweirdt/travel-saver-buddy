@@ -7,6 +7,8 @@ import sqlite3
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from mmscan.models import Trip
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS runs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -223,3 +225,93 @@ class Store:
         )
         self.conn.execute("DELETE FROM trip_fetches WHERE fetched_at < ?", (cutoff,))
         self.conn.commit()
+
+    # Scan results
+
+    def save_availability(self, run_id: int, avail: dict, kind: str) -> None:
+        route = avail.get("Route") or {}
+        self.conn.execute(
+            "INSERT OR REPLACE INTO availabilities(run_id, id, origin, destination, "
+            "origin_region, destination_region, date, source, updated_at, origin_kind, raw_json) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                run_id,
+                str(avail["ID"]),
+                route.get("OriginAirport"),
+                route.get("DestinationAirport"),
+                route.get("OriginRegion"),
+                route.get("DestinationRegion"),
+                avail.get("Date"),
+                avail.get("Source"),
+                avail.get("UpdatedAt"),
+                kind,
+                json.dumps(avail, sort_keys=True),
+            ),
+        )
+        self.conn.commit()
+
+    def scan_counts(self, run_id: int) -> dict:
+        counts = {"region_results": 0, "watchlist_results": 0}
+        for kind, n in self.conn.execute(
+            "SELECT origin_kind, count(*) FROM availabilities WHERE run_id=? GROUP BY origin_kind",
+            (run_id,),
+        ):
+            counts[f"{kind}_results"] = n
+        row = self.conn.execute(
+            "SELECT count(*) FROM trips t JOIN availabilities a "
+            "ON a.id = t.availability_id AND a.updated_at = t.updated_at "
+            "WHERE a.run_id=? AND a.origin_kind='watchlist'",
+            (run_id,),
+        ).fetchone()
+        counts["watchlist_trips"] = int(row[0])
+        return counts
+
+    def save_trips(
+        self,
+        avail_id: str,
+        updated_at: str,
+        trips: list[Trip],
+        booking_link: str | None,
+        raw: object,
+        now: datetime | None = None,
+    ) -> None:
+        """Store one availability's trips and its fetch row in one transaction."""
+        with self.conn:
+            self.conn.execute(
+                "INSERT OR REPLACE INTO trip_fetches(availability_id, updated_at, fetched_at, "
+                "status, booking_link, raw_json) VALUES (?,?,?,?,?,?)",
+                (
+                    avail_id,
+                    updated_at,
+                    (now or utcnow()).isoformat(),
+                    "ok",
+                    booking_link,
+                    json.dumps(raw, sort_keys=True),
+                ),
+            )
+            self.conn.executemany(
+                "INSERT OR REPLACE INTO trips(id, availability_id, updated_at, cabin, "
+                "mileage_cost, total_taxes, taxes_currency, remaining_seats, stops, carriers, "
+                "flight_numbers, departs_at, arrives_at, total_duration, raw_json) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                [
+                    (
+                        t.id,
+                        avail_id,
+                        updated_at,
+                        t.cabin,
+                        t.miles,
+                        t.taxes_minor,
+                        t.currency,
+                        t.seats,
+                        t.stops,
+                        t.carriers,
+                        t.flight_numbers,
+                        t.departs_at,
+                        t.arrives_at,
+                        t.total_duration,
+                        json.dumps(t.raw, sort_keys=True),
+                    )
+                    for t in trips
+                ],
+            )

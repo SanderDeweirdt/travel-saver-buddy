@@ -18,11 +18,17 @@ cp .env.example .env   # then put your seats.aero Pro API key in it
 
 ## Status
 
-Milestone 0 (access check) is built. Run:
+Milestone 0 (access check) and the milestone 1 code (scan and store) are
+built. The live gates have not run yet: `seats.aero` is not reachable from
+the build environment, so the tests use the hand-written fixtures in
+`tests/fixtures/synthetic/`.
 
 ```bash
 uv run mmscan check --dry-run   # shows the 4 requests, sends nothing
 uv run mmscan check             # 4 API calls; saves tests/fixtures/live/*.json
+uv run mmscan scan --dry-run    # first request per region pair and watchlist direction
+uv run mmscan scan              # region pairs and watchlist; pages as needed
+uv run mmscan quota             # calls left today and calls made; 0 API calls
 uv run pytest                   # offline tests
 ```
 

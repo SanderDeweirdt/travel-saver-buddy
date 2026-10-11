@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import date
 from pathlib import Path
 from typing import Annotated
 
@@ -84,7 +85,36 @@ def scan(
     verbose: VerboseOpt = False,
 ) -> None:
     """Steps 1 and 2: scan regions and the watchlist."""
-    _todo("scan")
+    from mmscan.scan import planned_requests, run_scan
+
+    _setup_logging(verbose)
+    cfg = _load(config)
+    today = date.today()
+    if dry_run:
+        reqs = planned_requests(cfg, today)
+        typer.echo(f"Would start with {len(reqs)} requests (more pages as results require):")
+        for path, params in reqs:
+            typer.echo(f"  GET /{path} {params}")
+        return
+    store = Store(DB_PATH)
+    store.purge_older_than(180)
+    run_id = store.start_run("scan", cfg.model_dump_json())
+    try:
+        client = Client.from_env(store, run_id, cfg.api.daily_call_cap)
+    except ApiError as e:
+        store.finish_run(run_id, "failed", {}, [str(e)])
+        typer.echo(f"scan failed: {e}", err=True)
+        raise typer.Exit(1) from e
+    status, stats = run_scan(client, store, cfg, run_id, today)
+    for w in stats["warnings"]:
+        typer.echo(f"warning: {w}", err=True)
+    typer.echo(
+        f"Scan {status}: {stats['region_results']} region results, "
+        f"{stats['watchlist_results']} watchlist results with {stats['watchlist_trips']} trips, "
+        f"{stats['calls']} API calls."
+    )
+    if status != "ok":
+        raise typer.Exit(1)
 
 
 @app.command()
@@ -134,4 +164,13 @@ def quota(
     verbose: VerboseOpt = False,
 ) -> None:
     """Calls left today and calls made by this tool. No API calls."""
-    _todo("quota")
+    cap = _load(config).api.daily_call_cap if config.exists() else 300
+    if not DB_PATH.exists():
+        typer.echo(f"No calls recorded yet. Daily cap: {cap}.")
+        return
+    store = Store(DB_PATH)
+    remaining = store.last_rate_remaining()
+    typer.echo(
+        f"X-RateLimit-Remaining (last call): {'unknown' if remaining is None else remaining}"
+    )
+    typer.echo(f"Calls by mmscan today (UTC): {store.calls_today()} of cap {cap}")

@@ -4,8 +4,10 @@ Filled in from `tests/fixtures/live/*.json`, recorded by `mmscan check`
 (4 calls). Where the live response differs from the PRD's API section, the
 live response wins, and the difference is listed here.
 
-**Status: not yet recorded.** `SEATS_AERO_API_KEY` is not set, and
-`seats.aero` is not reachable from the build environment.
+**Status: not yet recorded.** On 2026-10-11 the key was set, but the
+build environment's network policy refused the connection to `seats.aero`
+(proxy 403 on CONNECT), so no request reached the API. Add `seats.aero` to
+the environment's allowed domains and rerun `uv run mmscan check`.
 
 | Question | PRD expectation | Live answer |
 | --- | --- | --- |
