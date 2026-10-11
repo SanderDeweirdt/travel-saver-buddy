@@ -1,4 +1,7 @@
-"""New and Cheaper, against the previous scored run."""
+"""New and Cheaper, against the last time each route, date and cabin was seen.
+
+Comparing per result rather than against one previous run keeps hourly watchlist runs and daily
+full runs from flagging each other's results as New, so each deal is reported once."""
 
 from __future__ import annotations
 
@@ -18,15 +21,21 @@ def previous_run_id(store: Store, run_id: int) -> int | None:
 
 
 def previous_totals(store: Store, run_id: int) -> dict[tuple, float | None] | None:
-    prev = previous_run_id(store, run_id)
-    if prev is None:
-        return None
+    """Last known total per (origin, destination, date, cabin) over every earlier scored run.
+    A key seen only without a total maps to None. None overall when no earlier run was scored."""
     rows = store.conn.execute(
         "SELECT origin, destination, date, cabin, total_eur FROM results "
-        "WHERE run_id=? AND expired=0",
-        (prev,),
-    )
-    return {(r[0], r[1], r[2], r[3]): r[4] for r in rows}
+        "WHERE run_id < ? AND expired = 0 ORDER BY run_id",
+        (run_id,),
+    ).fetchall()
+    if not rows:
+        return None
+    last: dict[tuple, float | None] = {}
+    for r in rows:
+        key = (r[0], r[1], r[2], r[3])
+        if r[4] is not None or key not in last:
+            last[key] = r[4]
+    return last
 
 
 def change(prev_total: float | None, total: float) -> Literal["New", "Cheaper", ""]:
@@ -38,7 +47,8 @@ def change(prev_total: float | None, total: float) -> Literal["New", "Cheaper", 
 
 
 def change_for(prev: dict[tuple, float | None] | None, key: tuple, total: float | None) -> str:
-    """Blank when there is no previous run, no total, or the previous run had no total."""
+    """Blank when nothing was scored before, there is no total, or the key was only ever seen
+    without a total."""
     if prev is None or total is None:
         return ""
     if key not in prev:

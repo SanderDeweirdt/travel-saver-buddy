@@ -73,3 +73,9 @@ notify:
   verdicts: [Deal]
   changes: [New, Cheaper]
   max_items: 10
+
+# `mmscan watch`: watchlist only, for frequent runs. Results come cheapest
+# first, so one page (api.take results) per direction holds the deals.
+# Calls per watch run: 2 x max_pages.
+watch:
+  max_pages: 1

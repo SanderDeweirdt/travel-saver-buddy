@@ -21,6 +21,7 @@ def paginate(
     params: dict[str, Any],
     take: int,
     on_page: Callable[[list[dict]], None] | None = None,
+    max_pages: int | None = None,
 ) -> tuple[list[dict], list[str]]:
     """Fetch every page, deduplicated by ID. `on_page` gets each page's new items as they arrive,
     so a cap hit mid-scan keeps what was already fetched."""
@@ -28,6 +29,7 @@ def paginate(
     seen: set[str] = set()
     warnings: list[str] = []
     retrieved = 0
+    pages = 0
     cursor = None
     while True:
         page_params = {**params, "take": take}
@@ -35,6 +37,7 @@ def paginate(
             page_params["skip"] = retrieved
             page_params["cursor"] = cursor
         body, _ = client.get(path, page_params)
+        pages += 1
         page = body.get("data") if isinstance(body, dict) else body
         page = page or []
         if cursor is None and isinstance(body, dict):
@@ -46,7 +49,7 @@ def paginate(
         if on_page and new:
             on_page(new)
         has_more = isinstance(body, dict) and bool(body.get("hasMore"))
-        if not has_more:
+        if not has_more or (max_pages is not None and pages >= max_pages):
             break
         if not new:
             msg = f"/{path}: page at skip={page_params.get('skip', 0)} added no new ID; stopped"
@@ -126,7 +129,14 @@ def scan_regions(client: Client, store: Store, cfg: Config, run_id: int, today: 
     return stats
 
 
-def scan_watchlist(client: Client, store: Store, cfg: Config, run_id: int, today: date) -> dict:
+def scan_watchlist(
+    client: Client,
+    store: Store,
+    cfg: Config,
+    run_id: int,
+    today: date,
+    max_pages: int | None = None,
+) -> dict:
     stats = {"watchlist_results": 0, "trips": 0, "warnings": []}
     for path, params in watchlist_requests(cfg, today):
 
@@ -142,23 +152,33 @@ def scan_watchlist(client: Client, store: Store, cfg: Config, run_id: int, today
                 )
                 stats["trips"] += len(trips)
 
-        items, warns = paginate(client, path, params, cfg.api.take, on_page=save)
+        items, warns = paginate(
+            client, path, params, cfg.api.take, on_page=save, max_pages=max_pages
+        )
         stats["watchlist_results"] += len(items)
         stats["warnings"].extend(warns)
     return stats
 
 
 def run_scan(
-    client: Client, store: Store, cfg: Config, run_id: int, today: date
+    client: Client,
+    store: Store,
+    cfg: Config,
+    run_id: int,
+    today: date,
+    watch_only: bool = False,
 ) -> tuple[str, dict]:
     """Scan regions, then the watchlist, and close the run. Returns (status, stats).
+    `watch_only` skips the regions and reads at most `watch.max_pages` per direction.
 
     A cap hit or API error stops the scan; everything stored so far is kept and counted."""
     status = "ok"
     warnings: list[str] = []
     try:
-        warnings += scan_regions(client, store, cfg, run_id, today)["warnings"]
-        warnings += scan_watchlist(client, store, cfg, run_id, today)["warnings"]
+        if not watch_only:
+            warnings += scan_regions(client, store, cfg, run_id, today)["warnings"]
+        pages = cfg.watch.max_pages if watch_only else None
+        warnings += scan_watchlist(client, store, cfg, run_id, today, pages)["warnings"]
     except CapReached as e:
         status = "partial"
         warnings.append(str(e))

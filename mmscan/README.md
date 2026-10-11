@@ -44,11 +44,13 @@ Every command takes `--config PATH` (default `config.yaml`), `--dry-run`
 | `mmscan score` | Total cost, baselines, flags and verdicts | 0 |
 | `mmscan report` | Spreadsheet, Shortlist CSV and the terminal top 10 | 0 |
 | `mmscan run` | Scan, enrich, score and report in one run; prints the planned calls first | Scan plus enrich |
+| `mmscan watch` | Watchlist only: scan (first `watch.max_pages` page per direction), score against stored history, post new deals to Slack. For hourly runs | 2 with the default config |
 | `mmscan notify` | Posts the latest run's new or cheaper Deals to Slack; nothing when there are none | 0 |
 | `mmscan quota` | Calls left today (last `X-RateLimit-Remaining`) and calls made by mmscan today | 0 |
 
-`enrich` and `score` work on the latest scanned run, and `report` on the
-latest scored run. Get Trips results are cached per availability `ID` and
+`enrich` and `score` work on the latest `scan` or `run`, and `report` on
+the latest scored one; `watch` runs are left out because they hold only the
+watchlist. Get Trips results are cached per availability `ID` and
 `UpdatedAt`, so a rerun does not pay for unchanged availabilities. If the
 daily cap (`api.daily_call_cap`, default 300) is reached, the run stops,
 keeps what it stored, is marked `partial`, and exits non-zero.
@@ -75,6 +77,7 @@ scan.
 | `value_per_mile_cents` | Bands for value per mile against a cash fare. |
 | `api` | Page size, mixed-cabin filter, `include_filtered`, and the daily call cap. |
 | `output` | Report folder and formats. |
+| `watch.max_pages` | Pages per direction for `mmscan watch`. Results come cheapest first, so 1 page usually holds every deal. |
 | `notify` | Slack alerts: `slack: true` turns them on after `mmscan run`; `verdicts` and `changes` pick what is posted; `max_items` caps the message. |
 
 Optional `cash_fares.csv`, next to `config.yaml`, with columns
@@ -100,6 +103,27 @@ is logged in the run log and does not fail the run.
 
 If the tool runs in a cloud environment with a network allowlist, add
 `hooks.slack.com` next to `seats.aero`.
+
+## Getting told fast: schedule
+
+seats.aero has no webhooks, and its cached data refreshes every few hours,
+so polling more often than hourly finds little new. Two schedules cover it:
+
+```cron
+# Hourly: watchlist only, posts new or cheaper deals to Slack (2 calls).
+7 * * * *  cd /path/to/mmscan && uv run mmscan watch >> data/watch.log 2>&1
+# Daily: regions, fees for candidates, full report (about 4 + pages + 150 calls).
+37 5 * * * cd /path/to/mmscan && uv run mmscan run   >> data/run.log 2>&1
+```
+
+That is roughly 48 + 160 calls a day, inside the 300 `api.daily_call_cap`
+and the 1,000-call Pro allowance.
+
+New and Cheaper compare each route, date and cabin with the last time any
+earlier run saw it, not with one previous run. So hourly watch runs and the
+daily run do not mark each other's results as New, and each deal is posted
+once: New when first seen, Cheaper when its total drops 5% or more since it
+was last seen.
 
 ## Findings
 

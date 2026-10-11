@@ -182,13 +182,20 @@ class Store:
     def run_info(self, run_id: int) -> sqlite3.Row | None:
         return self.conn.execute("SELECT * FROM runs WHERE id=?", (run_id,)).fetchone()
 
-    def latest_scanned_run(self) -> int | None:
-        row = self.conn.execute("SELECT max(run_id) FROM availabilities").fetchone()
+    def _latest(self, table: str, kinds: tuple[str, ...] | None) -> int | None:
+        sql = f"SELECT max(t.run_id) FROM {table} t JOIN runs u ON u.id = t.run_id"
+        args: tuple = ()
+        if kinds:
+            sql += f" WHERE u.kind IN ({','.join('?' * len(kinds))})"
+            args = kinds
+        row = self.conn.execute(sql, args).fetchone()
         return None if row[0] is None else int(row[0])
 
-    def latest_scored_run(self) -> int | None:
-        row = self.conn.execute("SELECT max(run_id) FROM results").fetchone()
-        return None if row[0] is None else int(row[0])
+    def latest_scanned_run(self, kinds: tuple[str, ...] | None = None) -> int | None:
+        return self._latest("availabilities", kinds)
+
+    def latest_scored_run(self, kinds: tuple[str, ...] | None = None) -> int | None:
+        return self._latest("results", kinds)
 
     # API calls
 

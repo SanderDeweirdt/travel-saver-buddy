@@ -14,6 +14,7 @@ from mmscan.config import Config, ConfigError, load_config
 from mmscan.store import Store
 
 DB_PATH = Path("data/mmscan.db")
+FULL_RUNS = ("scan", "run")  # watch runs hold only the watchlist
 LIVE_FIXTURES = Path("tests/fixtures/live")
 
 app = typer.Typer(help="Miles & More award scanner (seats.aero).", no_args_is_help=True)
@@ -128,7 +129,7 @@ def _client(store: Store, run_id: int, cfg: Config) -> Client:
 
 
 def _scanned_run(store: Store) -> int:
-    run_id = store.latest_scanned_run()
+    run_id = store.latest_scanned_run(FULL_RUNS)
     if run_id is None:
         typer.echo("No scan stored yet. Run `mmscan scan` first.", err=True)
         raise typer.Exit(1)
@@ -270,7 +271,7 @@ def report(
         typer.echo(f"Would write the report for the latest scored run to {cfg.output.dir}.")
         return
     store = Store(DB_PATH)
-    run_id = store.latest_scored_run()
+    run_id = store.latest_scored_run(FULL_RUNS)
     if run_id is None:
         typer.echo("No scored run yet. Run `mmscan score` first.", err=True)
         raise typer.Exit(1)
@@ -339,6 +340,54 @@ def run(
         _do_notify(store, cfg, run_id)
     if not complete:
         typer.echo("Run is partial: the daily call cap stopped it early.", err=True)
+        raise typer.Exit(1)
+
+
+@app.command()
+def watch(
+    config: ConfigOpt = Path("config.yaml"),
+    dry_run: DryRunOpt = False,
+    verbose: VerboseOpt = False,
+) -> None:
+    """Watchlist only: scan, score against stored history and post new deals to Slack.
+    Made for frequent runs (cron, hourly); costs 2 x watch.max_pages calls."""
+    from mmscan.scan import run_scan, watchlist_requests
+
+    _setup_logging(verbose)
+    cfg = _load(config)
+    today = date.today()
+    reqs = watchlist_requests(cfg, today)
+    if not reqs:
+        typer.echo("The watchlist is empty; nothing to watch.", err=True)
+        raise typer.Exit(1)
+    typer.echo(f"Planned calls: at most {len(reqs) * cfg.watch.max_pages}. Scoring makes none.")
+    if dry_run:
+        for path, params in reqs:
+            typer.echo(f"  GET /{path} { ({**params, 'take': cfg.api.take}) }")
+        return
+    store = Store(DB_PATH)
+    store.purge_older_than(180)
+    run_id = store.start_run("watch", cfg.model_dump_json())
+    client = _client(store, run_id, cfg)
+    status, stats = run_scan(client, store, cfg, run_id, today, watch_only=True)
+    for w in stats["warnings"]:
+        typer.echo(f"warning: {w}", err=True)
+    typer.echo(
+        f"Watch {status}: {stats['watchlist_results']} results with "
+        f"{stats['watchlist_trips']} trips, {stats['calls']} API calls."
+    )
+    if status == "failed":
+        raise typer.Exit(1)
+    _do_score(store, cfg, run_id, config)
+    if cfg.notify.slack:
+        _do_notify(store, cfg, run_id)
+    else:
+        from mmscan.notify import select_alerts
+        from mmscan.report import load_results
+
+        n = len(select_alerts(load_results(store, run_id), cfg))
+        typer.echo(f"{n} new or cheaper results (Slack is off: notify.slack is false).")
+    if status != "ok":
         raise typer.Exit(1)
 
 

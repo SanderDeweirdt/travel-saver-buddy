@@ -82,6 +82,10 @@ class Api(_Model):
     daily_call_cap: int = Field(300, ge=1)
 
 
+class Watch(_Model):
+    max_pages: int = Field(1, ge=1)
+
+
 class Notify(_Model):
     slack: bool = False
     verdicts: list[Literal["Deal", "Worth a look"]] = ["Deal"]
@@ -111,6 +115,7 @@ class Config(_Model):
     api: Api = Api()
     output: Output = Output()
     notify: Notify = Notify()
+    watch: Watch = Watch()
 
     warnings: list[str] = Field(default_factory=list, exclude=True)
 
