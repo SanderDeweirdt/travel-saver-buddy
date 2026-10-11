@@ -120,6 +120,11 @@ class Client:
             )
         return cls(key, store, run_id, daily_cap, **kwargs)
 
+    @property
+    def api_key(self) -> str:
+        """Only for scrubbing the key out of saved responses. Never log it."""
+        return self._key
+
     def close(self) -> None:
         self._http.close()
 
