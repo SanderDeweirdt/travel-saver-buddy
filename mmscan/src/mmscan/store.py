@@ -163,6 +163,33 @@ class Store:
         )
         self.conn.commit()
 
+    def merge_run(
+        self,
+        run_id: int,
+        status: str | None = None,
+        stats: dict | None = None,
+        warnings: list[str] | None = None,
+        now: datetime | None = None,
+    ) -> None:
+        """Add a step's stats and warnings to a run that several commands share."""
+        row = self.conn.execute(
+            "SELECT status, stats_json, warnings_json FROM runs WHERE id=?", (run_id,)
+        ).fetchone()
+        merged = {**json.loads(row["stats_json"] or "{}"), **(stats or {})}
+        warns = list(dict.fromkeys(json.loads(row["warnings_json"] or "[]") + (warnings or [])))
+        self.finish_run(run_id, status or row["status"], merged, warns, now=now)
+
+    def run_info(self, run_id: int) -> sqlite3.Row | None:
+        return self.conn.execute("SELECT * FROM runs WHERE id=?", (run_id,)).fetchone()
+
+    def latest_scanned_run(self) -> int | None:
+        row = self.conn.execute("SELECT max(run_id) FROM availabilities").fetchone()
+        return None if row[0] is None else int(row[0])
+
+    def latest_scored_run(self) -> int | None:
+        row = self.conn.execute("SELECT max(run_id) FROM results").fetchone()
+        return None if row[0] is None else int(row[0])
+
     # API calls
 
     def record_call(
@@ -265,6 +292,21 @@ class Store:
         ).fetchone()
         counts["watchlist_trips"] = int(row[0])
         return counts
+
+    def has_fetch(self, avail_id: str, updated_at: str) -> bool:
+        row = self.conn.execute(
+            "SELECT 1 FROM trip_fetches WHERE availability_id=? AND updated_at=?",
+            (avail_id, updated_at),
+        ).fetchone()
+        return row is not None
+
+    def mark_expired(self, avail_id: str, updated_at: str, now: datetime | None = None) -> None:
+        with self.conn:
+            self.conn.execute(
+                "INSERT OR REPLACE INTO trip_fetches(availability_id, updated_at, fetched_at, "
+                "status, booking_link, raw_json) VALUES (?,?,?,?,?,?)",
+                (avail_id, updated_at, (now or utcnow()).isoformat(), "expired", None, None),
+            )
 
     def save_trips(
         self,
