@@ -1,0 +1,57 @@
+{
+  "data": [
+    {
+      "ID": "tr-1",
+      "AvailabilityID": "av-muc-sin-1",
+      "Cabin": "Business",
+      "MileageCost": 60000,
+      "TotalTaxes": 39850,
+      "TaxesCurrency": "EUR",
+      "TaxesCurrencySymbol": "€",
+      "RemainingSeats": 2,
+      "Stops": 0,
+      "Carriers": "LH",
+      "FlightNumbers": "LH778",
+      "DepartsAt": "2026-12-10T22:05:00Z",
+      "ArrivesAt": "2026-12-11T17:10:00Z",
+      "TotalDuration": 725,
+      "Source": "lufthansa",
+      "AvailabilitySegments": [
+        {
+          "FlightNumber": "LH778",
+          "FareClass": "I",
+          "AircraftCode": "359",
+          "AircraftName": "Airbus A350-900",
+          "OriginAirport": "MUC",
+          "DestinationAirport": "SIN",
+          "DepartsAt": "2026-12-10T22:05:00Z",
+          "ArrivesAt": "2026-12-11T17:10:00Z",
+          "Distance": 6417,
+          "Order": 0
+        }
+      ]
+    },
+    {
+      "ID": "tr-2",
+      "AvailabilityID": "av-muc-sin-1",
+      "Cabin": "Economy",
+      "MileageCost": 35000,
+      "TotalTaxes": 12900,
+      "TaxesCurrency": "",
+      "TaxesCurrencySymbol": "",
+      "RemainingSeats": 0,
+      "Stops": 0,
+      "Carriers": "LH",
+      "FlightNumbers": "LH778",
+      "DepartsAt": "2026-12-10T22:05:00Z",
+      "ArrivesAt": "2026-12-11T17:10:00Z",
+      "TotalDuration": 725,
+      "Source": "lufthansa",
+      "AvailabilitySegments": []
+    }
+  ],
+  "booking_links": [
+    {"label": "Miles & More", "link": "https://www.miles-and-more.com/", "primary": true},
+    {"label": "Lufthansa", "link": "https://www.lufthansa.com/", "primary": false}
+  ]
+}

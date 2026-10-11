@@ -1,0 +1,81 @@
+source: lufthansa
+cabins: [economy, business]
+min_seats: 2
+
+# What one mile costs you, in euro cents. Turns miles into euros.
+mile_cost_eur_cents: 1.16
+
+date_window:
+  start_offset_days: 0
+  end_offset_days: 330
+
+region_pairs:
+  - {origin: Europe, destination: Asia}
+  - {origin: Asia, destination: Europe}
+
+watchlist:
+  origins: [MUC, FRA, ZRH, VIE, BRU]
+  destinations: [SIN, KUL, BKK, MNL]
+  both_directions: true
+
+# The API's regions are continents. Subregions refine them by airport list.
+subregions:
+  southeast_asia: [SIN, KUL, BKK, MNL, CGK, SGN, HAN, DPS, HKT, PEN, CEB]
+
+# Fallback ceilings, used when a baseline has too little data.
+# A place in "between" is an API region name or a subregion key.
+# chart_rate_miles is half the official return price for partner awards.
+benchmarks:
+  - name: economy_europe_southeast_asia
+    cabin: economy
+    between: [Europe, southeast_asia]
+    good_miles_max: 35000
+    chart_rate_miles: 42500
+    fees_max_eur: 200
+  - name: business_europe_southeast_asia
+    cabin: business
+    between: [Europe, southeast_asia]
+    good_miles_max: 60000
+    chart_rate_miles: 100000
+    fees_max_eur: 450
+
+relative:
+  percentile_good: 20
+  min_samples: 15
+  history_days: 30
+
+prescreen:
+  percentile: 30
+
+enrich:
+  max_calls: 150
+
+value_per_mile_cents:
+  good: 2.0
+  fair: 1.5
+  poor: 1.2
+
+api:
+  take: 1000
+  min_cabin_pct: 100
+  include_filtered: false
+  daily_call_cap: 300
+
+output:
+  dir: ./reports
+  formats: [xlsx, csv]
+
+# Slack alerts after `mmscan run` or `mmscan notify`. The webhook URL is a
+# secret: put it in .env as SLACK_WEBHOOK_URL, never here. Only results that
+# match both lists are posted; nothing is posted when none match.
+notify:
+  slack: false
+  verdicts: [Deal]
+  changes: [New, Cheaper]
+  max_items: 10
+
+# `mmscan watch`: watchlist only, for frequent runs. Results come cheapest
+# first, so one page (api.take results) per direction holds the deals.
+# Calls per watch run: 2 x max_pages.
+watch:
+  max_pages: 1
