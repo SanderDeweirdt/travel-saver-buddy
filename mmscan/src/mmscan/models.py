@@ -105,10 +105,14 @@ def parse_trip(d: dict) -> Trip:
     )
 
 
-def fees_eur(taxes_minor: int, currency: str) -> float | None:
-    """Fees in euros. Empty currency is taken as EUR (builder call 3); others are unpriced."""
+def fees_eur(taxes_minor: int, currency: str, usd_to_eur: float | None = None) -> float | None:
+    """Fees in euros from minor units. Empty currency is taken as EUR (builder call 3). The live
+    API reports lufthansa fees in USD, converted at the configured fixed rate. Anything else, or
+    USD without a rate, is unpriced."""
     if currency in ("EUR", ""):
         return taxes_minor / 100
+    if currency == "USD" and usd_to_eur:
+        return round(taxes_minor / 100 * usd_to_eur, 2)
     return None
 
 
