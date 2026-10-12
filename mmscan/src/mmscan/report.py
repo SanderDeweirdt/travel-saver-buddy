@@ -74,17 +74,10 @@ def load_results(store: Store, run_id: int) -> list[Scored]:
     return sorted(out, key=rank_key)
 
 
-def shortlist(results: list[Scored], cfg: Config | None = None) -> list[Scored]:
-    """Priced Deal and Worth a look rows; with `cfg` and shortlist.scope "focus", only those in
-    the benchmark or watchlist focus."""
-    out = [
-        s
-        for s in results
-        if s.verdict in (DEAL, WORTH)
-        and not s.fee_estimated
-        and not s.expired
-        and s.total_eur is not None
-    ]
+def eligible(results: list[Scored], cfg: Config | None = None) -> list[Scored]:
+    """Priced, live results; with `cfg` and shortlist.scope "focus", only those in the benchmark
+    or watchlist focus."""
+    out = [s for s in results if not s.fee_estimated and not s.expired and s.total_eur is not None]
     if cfg is not None and cfg.shortlist.scope == "focus":
         out = [
             s
@@ -92,6 +85,11 @@ def shortlist(results: list[Scored], cfg: Config | None = None) -> list[Scored]:
             if cfg.in_focus(s.origin, s.origin_region, s.destination, s.destination_region, s.cabin)
         ]
     return out
+
+
+def shortlist(results: list[Scored], cfg: Config | None = None) -> list[Scored]:
+    """Eligible Deal and Worth a look rows."""
+    return [s for s in eligible(results, cfg) if s.verdict in (DEAL, WORTH)]
 
 
 def _age_hours(updated_at: str | None, now: datetime) -> float | None:

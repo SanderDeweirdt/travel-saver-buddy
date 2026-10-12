@@ -73,6 +73,16 @@ output:
   dir: ./reports
   formats: [xlsx, csv]
 
+# Two ways to be a Deal besides the relative baselines above:
+#   by_ceiling: miles and fees within the matching benchmark's good_miles_max and fees_max_eur
+#   (an absolute price). A route whose fare never moves can still be a Deal this way.
+deals:
+  by_ceiling: true
+
+# Change = "Cheaper" when a total fell this % or more since the result was last seen.
+drops:
+  min_pct: 5
+
 # What reaches the Shortlist, the shortlist CSV and Slack. focus = results that match a
 # benchmark above (Europe <-> southeast_asia) or a watchlist airport pair; all = everything
 # scored a Deal or Worth a look. "All results" always has every result either way.
@@ -85,6 +95,7 @@ shortlist:
 # match both lists are posted; nothing is posted when none match.
 notify:
   slack: false
+  on_drop: true   # also alert on Cheaper results of any verdict (inside the shortlist scope)
   verdicts: [Deal]
   changes: [New, Cheaper]
   max_items: 10

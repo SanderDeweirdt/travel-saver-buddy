@@ -96,8 +96,21 @@ class Watch(_Model):
     max_pages: int = Field(1, ge=1)
 
 
+class Deals(_Model):
+    # An absolute price: miles and fees within the matching benchmark's ceilings is a Deal
+    # (seats permitting), even where the relative baselines say otherwise.
+    by_ceiling: bool = True
+
+
+class Drops(_Model):
+    # Change shows "Cheaper" when a total fell at least this % since it was last seen.
+    min_pct: float = Field(5, gt=0, lt=100)
+
+
 class Notify(_Model):
     slack: bool = False
+    # Also alert on Cheaper results of any verdict (inside the shortlist scope).
+    on_drop: bool = True
     verdicts: list[Literal["Deal", "Worth a look"]] = ["Deal"]
     changes: list[Literal["New", "Cheaper"]] = ["New", "Cheaper"]
     max_items: int = Field(10, ge=1, le=40)
@@ -127,6 +140,8 @@ class Config(_Model):
     output: Output = Output()
     notify: Notify = Notify()
     shortlist: ShortlistScope = ShortlistScope()
+    deals: Deals = Deals()
+    drops: Drops = Drops()
     watch: Watch = Watch()
 
     warnings: list[str] = Field(default_factory=list, exclude=True)

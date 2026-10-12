@@ -354,6 +354,8 @@ def score_rows(
         s.route_pct = percentile_rank(by_route.get(_route(s), []), s.total_eur)
         s.destination_pct = percentile_rank(by_dest.get(_dest(s), []), s.total_eur)
         s.verdict = verdict(s.route_good, s.destination_good, bool(s.seats_ok), capped)
+        if cfg.deals.by_ceiling and s.ceiling_good and s.seats_ok:
+            s.verdict = DEAL
 
         if s.date and s.origin and s.destination:
             cash = fares.fare(s.origin, s.destination, s.cabin, s.date[:7])
@@ -362,7 +364,7 @@ def score_rows(
                 s.saving_eur = round(cash - s.total_eur, 2)
                 s.value_cents = (cash - s.fees_eur) / s.miles * 100
                 s.value_band = value_band(s.value_cents, cfg)
-        s.change = change_for(prev, s.key, s.total_eur)
+        s.change = change_for(prev, s.key, s.total_eur, cfg.drops.min_pct)
     return sorted(current, key=rank_key)
 
 

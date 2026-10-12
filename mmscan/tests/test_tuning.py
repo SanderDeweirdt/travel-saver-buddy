@@ -74,3 +74,71 @@ def test_worth_a_look_rows_follow_the_same_scope(default_config_dict):
     s = scored(700.0, origin="MUC", dest="NRT")
     s.verdict = WORTH
     assert shortlist([s], config(default_config_dict)) == []
+
+
+# --- Deals by absolute price, and alerts on price drops --------------------------------------
+
+
+def test_ceiling_makes_a_deal_on_a_flat_route(default_config_dict):
+    rows = flat_route(price=700.0, miles=50000, fees=100.0)  # business ceiling 60,000 mi / 450 EUR
+    cfg = cfg_with(default_config_dict, relative={"min_discount_pct": 10})
+    score_rows(rows, [], cfg)
+    assert all(r.verdict == DEAL and r.route_good is False for r in rows)
+
+
+def test_ceiling_deal_can_be_switched_off(default_config_dict):
+    rows = flat_route(price=700.0, miles=50000, fees=100.0)
+    cfg = cfg_with(
+        default_config_dict, relative={"min_discount_pct": 10}, deals={"by_ceiling": False}
+    )
+    score_rows(rows, [], cfg)
+    assert all(r.verdict != DEAL for r in rows)
+
+
+def test_ceiling_deal_needs_seats_and_both_limits(default_config_dict):
+    cfg = cfg_with(default_config_dict, relative={"min_discount_pct": 10})
+    no_seats = scored(700.0, miles=50000, fees=100.0, seats_ok=False, date="2026-12-01")
+    high_fee = scored(700.0, miles=50000, fees=451.0, date="2026-12-02")
+    high_miles = scored(700.0, miles=60001, fees=100.0, date="2026-12-03")
+    score_rows([no_seats, high_fee, high_miles], [], cfg)
+    assert [r.verdict == DEAL for r in (no_seats, high_fee, high_miles)] == [False] * 3
+
+
+def test_drop_threshold_comes_from_config(default_config_dict):
+    from mmscan.diff import change, change_for
+
+    assert change(1000, 960, drop_pct=5) == ""
+    assert change(1000, 960, drop_pct=4) == "Cheaper"
+    prev = {("MUC", "SIN", "2026-12-10", "business"): 1000.0}
+    key = ("MUC", "SIN", "2026-12-10", "business")
+    assert change_for(prev, key, 900.0, 15) == ""
+    assert change_for(prev, key, 900.0, 10) == "Cheaper"
+    with pytest.raises(ValueError, match="min_pct"):
+        config(default_config_dict, drops={"min_pct": 0})
+
+
+def _alert_row(change, verdict, **kw):
+    s = scored(700.0, **kw)
+    s.change, s.verdict = change, verdict
+    return s
+
+
+def test_on_drop_alerts_cheaper_results_of_any_verdict(default_config_dict):
+    from mmscan.notify import build_message, select_alerts
+
+    cheaper_skip = _alert_row("Cheaper", "Skip", id="a")
+    new_skip = _alert_row("New", "Skip", id="b")
+    new_deal = _alert_row("New", DEAL, id="c")
+    quiet_deal = _alert_row("", DEAL, id="d")
+    off_scope = _alert_row("Cheaper", "Skip", origin="MUC", dest="NRT", id="e")
+    rows = [cheaper_skip, new_skip, new_deal, quiet_deal, off_scope]
+    cfg = config(default_config_dict)
+    assert [s.availability_id for s in select_alerts(rows, cfg)] == ["c", "a"]
+    off = config(default_config_dict, notify={"on_drop": False})
+    assert [s.availability_id for s in select_alerts(rows, off)] == ["c"]
+    from datetime import UTC, datetime
+
+    text = build_message([cheaper_skip], 1, cfg, datetime(2026, 10, 12, tzinfo=UTC))["blocks"][1][
+        "text"
+    ]["text"]
+    assert text.startswith("*Cheaper* ·")

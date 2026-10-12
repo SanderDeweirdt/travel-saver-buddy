@@ -73,6 +73,8 @@ scan.
 | `subregions` | Airport lists that refine a continent, used by `benchmarks`. |
 | `benchmarks` | Fallback ceilings per cabin and place pair, used when a baseline is thin. `chart_rate_miles` sets the chart-rate flag at 95%. |
 | `relative` | `percentile_good` (deal threshold), `min_samples` (below this a baseline is unknown), `history_days` (stored runs that count), `min_discount_pct` (a route or destination only counts as good when the total is also this % below its median; 0 = plain percentile cut). Lufthansa-group fares barely move by date, so a high value leaves few Deals. |
+| `deals` | `by_ceiling: true` makes a result within its benchmark's `good_miles_max` and `fees_max_eur` a Deal even when the relative baselines say no. The right way to find deals on routes whose fare never moves. Check the ceilings against real fees: the PRD's 200 EUR economy limit is below almost every real fee. |
+| `drops` | `min_pct`: Change shows Cheaper when a total fell this much since it was last seen. |
 | `shortlist` | `scope: focus` limits the Shortlist, the CSV and Slack to results matching a benchmark or (`focus_watchlist`) a watchlist pair; `all` keeps everything scored Deal or Worth a look. "All results" always has every result. |
 | `prescreen.percentile` | Share of region results, cheapest first, that get their fees fetched. |
 | `enrich.max_calls` | Get Trips calls per run: for `run` it caps trip details for Shortlist results; for `enrich` it caps the pre-screened candidates. Set to 0 to skip. |
@@ -80,7 +82,7 @@ scan.
 | `api` | Page size, mixed-cabin filter, `include_filtered`, and the daily call cap. |
 | `output` | Report folder and formats. |
 | `watch.max_pages` | Pages per direction for `mmscan watch`. Results come cheapest first, so 1 page usually holds every deal. |
-| `notify` | Slack alerts: `slack: true` turns them on after `mmscan run`; `verdicts` and `changes` pick what is posted; `max_items` caps the message. |
+| `notify` | Slack alerts: `slack: true` turns them on after `mmscan run`; `verdicts` and `changes` pick what is posted; `max_items` caps the message; `on_drop: true` also alerts on Cheaper results of any verdict. |
 
 Optional `cash_fares.csv`, next to `config.yaml`, with columns
 `origin,destination,cabin,month,fare_eur` (`month` as `YYYY-MM`). Matching
