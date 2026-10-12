@@ -34,9 +34,9 @@ benchmarks:
   - name: economy_europe_southeast_asia
     cabin: economy
     between: [Europe, southeast_asia]
-    good_miles_max: 35000
+    good_miles_max: 25000
     chart_rate_miles: 42500
-    fees_max_eur: 200
+    fees_max_eur: 280
   - name: business_europe_southeast_asia
     cabin: business
     between: [Europe, southeast_asia]
