@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import pytest
@@ -19,3 +20,31 @@ def write_config(tmp_path):
         return p
 
     return _write
+
+
+TABLES = ("results", "trips", "trip_fetches", "availabilities", "api_calls", "runs")
+
+
+@pytest.fixture(params=["sqlite", "postgres"])
+def backend_store(request, tmp_path):
+    """A Store on each backend. Postgres runs only when TEST_DATABASE_URL is set; the tables of
+    that database are dropped before and after every test, so point it at a scratch database."""
+    from mmscan.store import Store
+
+    if request.param == "sqlite":
+        store = Store(tmp_path / "db.sqlite")
+        yield store
+        store.close()
+        return
+    url = os.environ.get("TEST_DATABASE_URL")
+    if not url:
+        pytest.skip("TEST_DATABASE_URL is not set; the Postgres path is not exercised")
+    for _ in range(2):
+        store = Store(url)
+        for table in TABLES:
+            store.conn.execute(f"DROP TABLE IF EXISTS {table} CASCADE")
+        store.conn.commit()
+        store.close()
+    store = Store(url)  # fresh schema
+    yield store
+    store.close()

@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>{% block title %}mmscan{% endblock %}</title>
+<style>
+:root {
+  color-scheme: light;
+  --bg: #fcfcfb; --surface: #ffffff; --ink: #0b0b0b; --ink-2: #52514e; --line: #e4e3df;
+  --accent: #2a78d6; --series-1: #2a78d6; --series-2: #eb6834;
+  --good: #0b7a3b; --warn: #8a5a00; --bad: #b3261e;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --bg: #1a1a19; --surface: #222221; --ink: #f0efec; --ink-2: #c3c2b7; --line: #3a3a38;
+    --accent: #3987e5; --series-1: #3987e5; --series-2: #d95926;
+    --good: #5dd68a; --warn: #e6b450; --bad: #ff8a80;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink);
+  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+a { color: var(--accent); }
+header { display: flex; flex-wrap: wrap; gap: 4px 16px; align-items: center;
+  padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--surface); }
+header .brand { font-weight: 700; margin-right: 8px; }
+header nav { display: flex; flex-wrap: wrap; gap: 4px 14px; flex: 1; }
+header nav a { text-decoration: none; color: var(--ink-2); padding: 4px 0; }
+header nav a.on { color: var(--ink); border-bottom: 2px solid var(--accent); }
+header form { margin: 0; }
+main { padding: 16px; max-width: 1200px; margin: 0 auto; }
+h1 { font-size: 20px; margin: 4px 0 12px; }
+.note { color: var(--ink-2); font-size: 13px; margin: 8px 0 14px; }
+.filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; align-items: end; }
+.filters label { display: flex; flex-direction: column; font-size: 12px; color: var(--ink-2); }
+select, input, button { font: inherit; padding: 6px 8px; border: 1px solid var(--line);
+  border-radius: 6px; background: var(--surface); color: var(--ink); }
+button { cursor: pointer; }
+.scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; white-space: nowrap; }
+th, td { padding: 7px 10px; border-bottom: 1px solid var(--line); text-align: left; }
+th { font-size: 12px; color: var(--ink-2); font-weight: 600; position: sticky; top: 0; background: var(--surface); }
+td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+tr:last-child td { border-bottom: 0; }
+.tag { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px;
+  border: 1px solid var(--line); }
+.tag.deal { color: var(--good); border-color: var(--good); }
+.tag.worth { color: var(--warn); border-color: var(--warn); }
+.tag.partial, .tag.failed { color: var(--bad); border-color: var(--bad); font-weight: 600; }
+tr.partial td { background: color-mix(in srgb, var(--bad) 8%, transparent); }
+.meter { height: 14px; background: var(--line); border-radius: 7px; overflow: hidden; max-width: 420px; }
+.meter > div { height: 100%; background: var(--accent); }
+.chart { width: 100%; height: auto; max-width: 760px; }
+.chart .grid { stroke: var(--line); stroke-width: 1; }
+.chart .axis { fill: var(--ink-2); font-size: 11px; }
+.chart .label { fill: var(--ink); font-size: 12px; }
+.chart .line { fill: none; stroke-width: 2; stroke-linejoin: round; }
+.chart .s1 { stroke: var(--series-1); } .chart .s2 { stroke: var(--series-2); }
+.chart circle.end.s1 { fill: var(--series-1); } .chart circle.end.s2 { fill: var(--series-2); }
+.chart .end { stroke: var(--surface); stroke-width: 2; }
+.chart .hit { fill: transparent; cursor: crosshair; }
+#tip { position: fixed; pointer-events: none; background: var(--ink); color: var(--bg);
+  padding: 6px 10px; border-radius: 6px; font-size: 13px; display: none; max-width: 280px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+  padding: 16px; max-width: 360px; margin: 48px auto; }
+.card form { display: flex; flex-direction: column; gap: 10px; }
+.err { color: var(--bad); }
+</style>
+</head>
+<body>
+{% if page != "login" %}
+<header>
+  <span class="brand">mmscan</span>
+  <nav>
+    <a href="/" class="{{ 'on' if page == 'shortlist' }}">Shortlist</a>
+    <a href="/runs" class="{{ 'on' if page == 'runs' }}">Runs</a>
+    <a href="/quota" class="{{ 'on' if page == 'quota' }}">Quota</a>
+    <a href="/reports/latest.xlsx">Excel</a>
+    <a href="/reports/latest-shortlist.csv">CSV</a>
+  </nav>
+  <form method="post" action="/logout"><button type="submit">Log out</button></form>
+</header>
+{% endif %}
+<main>
+{% block body %}{% endblock %}
+</main>
+<div id="tip"></div>
+<script>
+const tip = document.getElementById("tip");
+document.addEventListener("pointerover", e => {
+  const t = e.target.closest("[data-tip]");
+  if (!t) { tip.style.display = "none"; return; }
+  tip.textContent = t.dataset.tip; tip.style.display = "block";
+});
+document.addEventListener("pointermove", e => {
+  tip.style.left = Math.min(e.clientX + 12, innerWidth - 300) + "px";
+  tip.style.top = e.clientY + 14 + "px";
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Log in · mmscan{% endblock %}
+{% block body %}
+<div class="card">
+  <h1>mmscan</h1>
+  <form method="post" action="/login">
+    <input type="hidden" name="next" value="{{ next }}">
+    <label>Password <input type="password" name="password" autocomplete="current-password" autofocus required></label>
+    {% if error %}<div class="err" role="alert">{{ error }}</div>{% endif %}
+    <button type="submit">Log in</button>
+  </form>
+</div>
+{% endblock %}

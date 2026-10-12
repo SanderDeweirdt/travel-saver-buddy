@@ -148,10 +148,39 @@ was last seen.
 - **Fee spread per route (milestone 2):** pending a live enrich.
   `mmscan enrich` prints min, median and max fee per route and cabin.
 
+## Deploy on Railway
+
+State lives in SQLite locally (`data/mmscan.db`) and in Postgres when `DATABASE_URL` is set. A
+Railway deploy is a Postgres database, a cron **scanner** (`sh deploy/cron.sh`, hourly) and a
+private read-only **dashboard** (`mmscan web`), both built from `Dockerfile`. Step-by-step
+instructions and a first-deploy checklist: [docs/railway-deploy.md](docs/railway-deploy.md).
+
+| Variable | Used by | Purpose |
+| --- | --- | --- |
+| `SEATS_AERO_API_KEY` | scanner, local | seats.aero Pro key |
+| `SLACK_WEBHOOK_URL` | scanner, local | Slack alerts (when `notify.slack` is true) |
+| `DATABASE_URL` | all | Postgres URL; unset means local SQLite |
+| `DASHBOARD_PASSWORD` | dashboard | the one shared login password |
+| `SESSION_SECRET` | dashboard | signs the session cookie |
+| `MMSCAN_CONFIG` | dashboard | path to `config.yaml` (default `config.yaml`) |
+| `MMSCAN_REPORT_DIR` | scanner | set by `cron.sh`; reports go to a temp dir |
+| `DASHBOARD_INSECURE_COOKIES` | local | `1` allows the session cookie over plain http |
+| `PORT` | dashboard | set by Railway |
+
+Run the dashboard locally against the SQLite file:
+
+```bash
+DASHBOARD_PASSWORD=pick-one SESSION_SECRET=$(openssl rand -hex 32) \
+  DASHBOARD_INSECURE_COOKIES=1 uv run mmscan web   # http://localhost:8000
+```
+
+`mmscan migrate-sqlite --from data/mmscan.db` copies local history into Postgres.
+
 ## Tests
 
 ```bash
 uv run pytest -q && uv run ruff check . && uv run ruff format --check .
 ```
 
-Tests never touch the network.
+Tests never touch the network. Set `TEST_DATABASE_URL` to a scratch Postgres database (its
+mmscan tables are dropped) to run the store tests on Postgres as well; without it they skip.
