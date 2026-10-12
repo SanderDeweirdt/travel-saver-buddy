@@ -94,7 +94,7 @@ shortlist:
 # secret: put it in .env as SLACK_WEBHOOK_URL, never here. Only results that
 # match both lists are posted; nothing is posted when none match.
 notify:
-  slack: true
+  slack: false
   on_drop: true   # also alert on Cheaper results of any verdict (inside the shortlist scope)
   verdicts: [Deal]
   changes: [New, Cheaper]
