@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Annotated
@@ -18,6 +19,15 @@ FULL_RUNS = ("scan", "run")  # watch runs hold only the watchlist
 LIVE_FIXTURES = Path("tests/fixtures/live")
 
 app = typer.Typer(help="Miles & More award scanner (seats.aero).", no_args_is_help=True)
+
+
+def database_target() -> Path | str:
+    """DATABASE_URL (Postgres) when set, else the local SQLite file."""
+    return os.environ.get("DATABASE_URL") or DB_PATH
+
+
+def _store() -> Store:
+    return Store(database_target())
 
 
 ConfigOpt = Annotated[Path, typer.Option("--config", help="Path to config.yaml.")]
@@ -59,7 +69,7 @@ def check(
             typer.echo(f"  GET /{path} {params}")
         return
     cap = _load(config).api.daily_call_cap if config.exists() else 300
-    store = Store(DB_PATH)
+    store = _store()
     store.purge_older_than(180)
     run_id = store.start_run("check", "{}")
     try:
@@ -92,7 +102,7 @@ def scan(
         for path, params in reqs:
             typer.echo(f"  GET /{path} {params}")
         return
-    store = Store(DB_PATH)
+    store = _store()
     store.purge_older_than(180)
     run_id = store.start_run("scan", cfg.model_dump_json())
     try:
@@ -229,7 +239,7 @@ def enrich(
     if dry_run and not DB_PATH.exists():
         typer.echo("No scan stored yet; nothing to enrich.")
         return
-    store = Store(DB_PATH)
+    store = _store()
     run_id = _scanned_run(store)
     if dry_run:
         candidates = select_candidates(store, cfg, run_id)
@@ -255,7 +265,7 @@ def score(
     if dry_run:
         typer.echo("Would score the latest scanned run. 0 API calls.")
         return
-    store = Store(DB_PATH)
+    store = _store()
     _do_score(store, cfg, _scanned_run(store), config)
 
 
@@ -271,7 +281,7 @@ def report(
     if dry_run:
         typer.echo(f"Would write the report for the latest scored run to {cfg.output.dir}.")
         return
-    store = Store(DB_PATH)
+    store = _store()
     run_id = store.latest_scored_run(FULL_RUNS)
     if run_id is None:
         typer.echo("No scored run yet. Run `mmscan score` first.", err=True)
@@ -288,10 +298,11 @@ def notify(
     """Post new or cheaper results of the latest scored run to Slack. No API calls."""
     _setup_logging(verbose)
     cfg = _load(config)
-    if not DB_PATH.exists():
+    target = database_target()
+    if isinstance(target, Path) and not target.exists():
         typer.echo("No scored run yet. Run `mmscan score` first.", err=True)
         raise typer.Exit(1)
-    store = Store(DB_PATH)
+    store = _store()
     run_id = store.latest_scored_run()
     if run_id is None:
         typer.echo("No scored run yet. Run `mmscan score` first.", err=True)
@@ -322,7 +333,7 @@ def run(
         for path, params in reqs:
             typer.echo(f"  GET /{path} {params}")
         return
-    store = Store(DB_PATH)
+    store = _store()
     store.purge_older_than(180)
     run_id = store.start_run("run", cfg.model_dump_json())
     client = _client(store, run_id, cfg)
@@ -376,7 +387,7 @@ def watch(
         for path, params in reqs:
             typer.echo(f"  GET /{path} { ({**params, 'take': cfg.api.take}) }")
         return
-    store = Store(DB_PATH)
+    store = _store()
     store.purge_older_than(180)
     run_id = store.start_run("watch", cfg.model_dump_json())
     client = _client(store, run_id, cfg)
@@ -410,12 +421,32 @@ def quota(
 ) -> None:
     """Calls left today and calls made by this tool. No API calls."""
     cap = _load(config).api.daily_call_cap if config.exists() else 300
-    if not DB_PATH.exists():
+    target = database_target()
+    if isinstance(target, Path) and not target.exists():
         typer.echo(f"No calls recorded yet. Daily cap: {cap}.")
         return
-    store = Store(DB_PATH)
+    store = _store()
     remaining = store.last_rate_remaining()
     typer.echo(
         f"X-RateLimit-Remaining (last call): {'unknown' if remaining is None else remaining}"
     )
     typer.echo(f"Calls by mmscan today (UTC): {store.calls_today()} of cap {cap}")
+
+
+@app.command("migrate-sqlite")
+def migrate_sqlite(
+    source: Annotated[Path, typer.Option("--from", help="SQLite file to copy from.")] = DB_PATH,
+) -> None:
+    """Copy a local SQLite database into the Postgres database in DATABASE_URL. Safe to repeat:
+    rows already there are left alone."""
+    from mmscan.migrate import migrate
+
+    url = os.environ.get("DATABASE_URL")
+    if not url:
+        typer.echo("DATABASE_URL is not set; it names the Postgres target.", err=True)
+        raise typer.Exit(2)
+    if not source.exists():
+        typer.echo(f"{source} does not exist.", err=True)
+        raise typer.Exit(2)
+    for table, copied, total in migrate(source, url):
+        typer.echo(f"{table}: {copied} new rows copied, {total} in the source")
