@@ -342,7 +342,7 @@ def run(
     if complete:
         from mmscan.enrich import shortlist_candidates
 
-        candidates = shortlist_candidates(store, run_id)
+        candidates = shortlist_candidates(store, cfg, run_id)
         if candidates and cfg.enrich.max_calls:
             complete = _do_enrich(client, store, cfg, run_id, candidates)
             _do_score(store, cfg, run_id, config)

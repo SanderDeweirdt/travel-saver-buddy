@@ -9,7 +9,7 @@ from typing import Literal
 
 from mmscan.store import Store
 
-CHEAPER_DROP = 0.05
+DEFAULT_DROP_PCT = 5.0  # config: drops.min_pct
 
 
 def previous_run_id(store: Store, run_id: int) -> int | None:
@@ -38,15 +38,22 @@ def previous_totals(store: Store, run_id: int) -> dict[tuple, float | None] | No
     return last
 
 
-def change(prev_total: float | None, total: float) -> Literal["New", "Cheaper", ""]:
+def change(
+    prev_total: float | None, total: float, drop_pct: float = DEFAULT_DROP_PCT
+) -> Literal["New", "Cheaper", ""]:
     if prev_total is None:
         return "New"
-    if prev_total > 0 and (prev_total - total) / prev_total >= CHEAPER_DROP - 1e-9:
+    if prev_total > 0 and (prev_total - total) / prev_total * 100 >= drop_pct - 1e-9:
         return "Cheaper"
     return ""
 
 
-def change_for(prev: dict[tuple, float | None] | None, key: tuple, total: float | None) -> str:
+def change_for(
+    prev: dict[tuple, float | None] | None,
+    key: tuple,
+    total: float | None,
+    drop_pct: float = DEFAULT_DROP_PCT,
+) -> str:
     """Blank when nothing was scored before, there is no total, or the key was only ever seen
     without a total."""
     if prev is None or total is None:
@@ -55,4 +62,4 @@ def change_for(prev: dict[tuple, float | None] | None, key: tuple, total: float 
         return "New"
     if prev[key] is None:
         return ""
-    return change(prev[key], total)
+    return change(prev[key], total, drop_pct)

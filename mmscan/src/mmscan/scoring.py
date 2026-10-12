@@ -327,6 +327,7 @@ def score_rows(
     by_dest = _group(samples, _dest)
     pg = cfg.relative.percentile_good
     n_min = cfg.relative.min_samples
+    disc = cfg.relative.min_discount_pct / 100
 
     for s in current:
         if s.expired or s.total_eur is None:
@@ -342,7 +343,8 @@ def score_rows(
         layers = []
         for values in (by_route.get(_route(s), []), by_dest.get(_dest(s), [])):
             if len(values) >= n_min:
-                layers.append(s.total_eur <= percentile(values, pg))
+                cut = min(percentile(values, pg), percentile(values, 50) * (1 - disc))
+                layers.append(s.total_eur <= cut)
             elif bm:
                 layers.append(bool(s.ceiling_good))
             else:
@@ -352,6 +354,8 @@ def score_rows(
         s.route_pct = percentile_rank(by_route.get(_route(s), []), s.total_eur)
         s.destination_pct = percentile_rank(by_dest.get(_dest(s), []), s.total_eur)
         s.verdict = verdict(s.route_good, s.destination_good, bool(s.seats_ok), capped)
+        if cfg.deals.by_ceiling and s.ceiling_good and s.seats_ok:
+            s.verdict = DEAL
 
         if s.date and s.origin and s.destination:
             cash = fares.fare(s.origin, s.destination, s.cabin, s.date[:7])
@@ -360,7 +364,7 @@ def score_rows(
                 s.saving_eur = round(cash - s.total_eur, 2)
                 s.value_cents = (cash - s.fees_eur) / s.miles * 100
                 s.value_band = value_band(s.value_cents, cfg)
-        s.change = change_for(prev, s.key, s.total_eur)
+        s.change = change_for(prev, s.key, s.total_eur, cfg.drops.min_pct)
     return sorted(current, key=rank_key)
 
 

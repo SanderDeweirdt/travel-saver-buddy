@@ -74,15 +74,22 @@ def load_results(store: Store, run_id: int) -> list[Scored]:
     return sorted(out, key=rank_key)
 
 
-def shortlist(results: list[Scored]) -> list[Scored]:
-    return [
-        s
-        for s in results
-        if s.verdict in (DEAL, WORTH)
-        and not s.fee_estimated
-        and not s.expired
-        and s.total_eur is not None
-    ]
+def eligible(results: list[Scored], cfg: Config | None = None) -> list[Scored]:
+    """Priced, live results; with `cfg` and shortlist.scope "focus", only those in the benchmark
+    or watchlist focus."""
+    out = [s for s in results if not s.fee_estimated and not s.expired and s.total_eur is not None]
+    if cfg is not None and cfg.shortlist.scope == "focus":
+        out = [
+            s
+            for s in out
+            if cfg.in_focus(s.origin, s.origin_region, s.destination, s.destination_region, s.cabin)
+        ]
+    return out
+
+
+def shortlist(results: list[Scored], cfg: Config | None = None) -> list[Scored]:
+    """Eligible Deal and Worth a look rows."""
+    return [s for s in eligible(results, cfg) if s.verdict in (DEAL, WORTH)]
 
 
 def _age_hours(updated_at: str | None, now: datetime) -> float | None:
@@ -192,14 +199,16 @@ def route_stats(results: list[Scored]) -> list[list]:
     return out
 
 
-def run_log(store: Store, run_id: int, results: list[Scored], now: datetime) -> list[list]:
+def run_log(
+    store: Store, run_id: int, results: list[Scored], now: datetime, cfg: Config
+) -> list[list]:
     run = store.run_info(run_id)
     stats = json.loads(run["stats_json"] or "{}") if run else {}
     warnings = json.loads(run["warnings_json"] or "[]") if run else []
     calls = store.conn.execute(
         "SELECT count(*) FROM api_calls WHERE run_id=?", (run_id,)
     ).fetchone()[0]
-    sl = shortlist(results)
+    sl = shortlist(results, cfg)
     rows = [
         ["Disclaimer", DISCLAIMER],
         ["Run id", run_id],
@@ -237,7 +246,7 @@ def run_log(store: Store, run_id: int, results: list[Scored], now: datetime) -> 
 
 def write_report(store: Store, cfg: Config, run_id: int, now: datetime) -> list[Path]:
     results = load_results(store, run_id)
-    sl = shortlist(results)
+    sl = shortlist(results, cfg)
     out_dir = Path(cfg.output.dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     stem = f"mmscan_{now.strftime('%Y-%m-%d_%H%M')}"
@@ -275,7 +284,7 @@ def write_report(store: Store, cfg: Config, run_id: int, now: datetime) -> list[
             route_stats(results),
         )
         log_ws = wb.create_sheet("Run log")
-        _write_table(log_ws, ["Item", "Value"], run_log(store, run_id, results, now))
+        _write_table(log_ws, ["Item", "Value"], run_log(store, run_id, results, now, cfg))
         path = out_dir / f"{stem}.xlsx"
         wb.save(path)
         written.append(path)
@@ -295,7 +304,7 @@ def print_summary(
     store: Store, run_id: int, cfg: Config, now: datetime, file: TextIO = sys.stdout
 ) -> None:
     results = load_results(store, run_id)
-    sl = shortlist(results)
+    sl = shortlist(results, cfg)
     calls = store.conn.execute(
         "SELECT count(*) FROM api_calls WHERE run_id=?", (run_id,)
     ).fetchone()[0]

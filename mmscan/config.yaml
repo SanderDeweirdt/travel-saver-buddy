@@ -34,9 +34,9 @@ benchmarks:
   - name: economy_europe_southeast_asia
     cabin: economy
     between: [Europe, southeast_asia]
-    good_miles_max: 35000
+    good_miles_max: 25000
     chart_rate_miles: 42500
-    fees_max_eur: 200
+    fees_max_eur: 280
   - name: business_europe_southeast_asia
     cabin: business
     between: [Europe, southeast_asia]
@@ -48,6 +48,9 @@ relative:
   percentile_good: 20
   min_samples: 15
   history_days: 30
+  # A deal must also be at least this % below the median total of its route/destination, so a
+  # route whose price barely moves has no deals. 0 = off (plain percentile cut).
+  min_discount_pct: 10
 
 prescreen:
   percentile: 30
@@ -70,11 +73,29 @@ output:
   dir: ./reports
   formats: [xlsx, csv]
 
+# Two ways to be a Deal besides the relative baselines above:
+#   by_ceiling: miles and fees within the matching benchmark's good_miles_max and fees_max_eur
+#   (an absolute price). A route whose fare never moves can still be a Deal this way.
+deals:
+  by_ceiling: true
+
+# Change = "Cheaper" when a total fell this % or more since the result was last seen.
+drops:
+  min_pct: 5
+
+# What reaches the Shortlist, the shortlist CSV and Slack. focus = results that match a
+# benchmark above (Europe <-> southeast_asia) or a watchlist airport pair; all = everything
+# scored a Deal or Worth a look. "All results" always has every result either way.
+shortlist:
+  scope: focus
+  focus_watchlist: true
+
 # Slack alerts after `mmscan run` or `mmscan notify`. The webhook URL is a
 # secret: put it in .env as SLACK_WEBHOOK_URL, never here. Only results that
 # match both lists are posted; nothing is posted when none match.
 notify:
   slack: false
+  on_drop: true   # also alert on Cheaper results of any verdict (inside the shortlist scope)
   verdicts: [Deal]
   changes: [New, Cheaper]
   max_items: 10

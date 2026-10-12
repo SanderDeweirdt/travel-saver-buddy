@@ -12,8 +12,8 @@ from dotenv import load_dotenv
 
 from mmscan.config import Config
 from mmscan.models import local_time
-from mmscan.report import DISCLAIMER, load_results, shortlist
-from mmscan.scoring import Scored
+from mmscan.report import DISCLAIMER, eligible, load_results
+from mmscan.scoring import SKIP, Scored, rank_key
 from mmscan.store import Store
 
 WEBHOOK_ENV = "SLACK_WEBHOOK_URL"
@@ -36,8 +36,16 @@ def webhook_from_env(dotenv_path: Path | None = None) -> str:
 
 
 def select_alerts(results: list[Scored], cfg: Config) -> list[Scored]:
+    """Shortlist rows whose verdict is in notify.verdicts and whose change is in notify.changes,
+    plus (notify.on_drop) any eligible result that got cheaper, whatever its verdict."""
     n = cfg.notify
-    return [s for s in shortlist(results) if s.verdict in n.verdicts and s.change in n.changes]
+    out = [
+        s
+        for s in eligible(results, cfg)
+        if (s.verdict in n.verdicts and s.change in n.changes)
+        or (n.on_drop and s.change == "Cheaper")
+    ]
+    return sorted(out, key=rank_key)
 
 
 def _esc(text: str) -> str:
@@ -45,11 +53,12 @@ def _esc(text: str) -> str:
 
 
 def _line(s: Scored) -> str:
+    label = s.change if s.verdict == SKIP else f"{s.change} {s.verdict}"
     seats = s.seats if s.seats is not None else "unknown"
     stops = "direct" if s.stops == 0 else f"{s.stops} stop{'s' if s.stops != 1 else ''}"
     route = f"{s.origin}→{s.destination}"
     parts = [
-        f"*{_esc(s.change)} {_esc(s.verdict)}* · {route} · {s.date} · {s.cabin}",
+        f"*{_esc(label)}* · {route} · {s.date} · {s.cabin}",
         f"{s.miles:,} mi + €{s.fees_eur:.0f} fees = *€{s.total_eur:.0f}*",
         f"{stops}, seats {seats}",
     ]
