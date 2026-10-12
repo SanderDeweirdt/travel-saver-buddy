@@ -136,12 +136,13 @@ def _scanned_run(store: Store) -> int:
     return run_id
 
 
-def _do_enrich(client: Client, store: Store, cfg: Config, run_id: int) -> bool:
-    """Returns False when the daily cap stopped it."""
+def _do_enrich(
+    client: Client, store: Store, cfg: Config, run_id: int, candidates: list[str]
+) -> bool:
+    """Fetch trips for the candidates. Returns False when the daily cap stopped it."""
     from mmscan.enrich import enrich as run_enrich
-    from mmscan.enrich import fee_spread, select_candidates
+    from mmscan.enrich import fee_spread
 
-    candidates = select_candidates(store, cfg, run_id)
     stats = run_enrich(client, store, cfg, run_id, candidates)
     store.merge_run(
         run_id,
@@ -164,7 +165,7 @@ def _do_enrich(client: Client, store: Store, cfg: Config, run_id: int) -> bool:
         f"{stats.priced} priced, {stats.expired} expired, {stats.skipped_cached} already cached, "
         f"{stats.left_over} left for the next run."
     )
-    spread = fee_spread(store)
+    spread = fee_spread(store, cfg.usd_to_eur)
     if spread:
         typer.echo("Fee spread per route and cabin (EUR): n, min, median, max")
         for o, d, c, n, lo, med, hi in spread:
@@ -238,7 +239,7 @@ def enrich(
             typer.echo(f"  GET /trips/{avail_id}")
         return
     client = _client(store, run_id, cfg)
-    if not _do_enrich(client, store, cfg, run_id):
+    if not _do_enrich(client, store, cfg, run_id, select_candidates(store, cfg, run_id)):
         raise typer.Exit(1)
 
 
@@ -314,7 +315,8 @@ def run(
     reqs = planned_requests(cfg, today)
     typer.echo(
         f"Planned calls: {len(reqs)} scan requests plus extra pages as results require, "
-        f"then up to {cfg.enrich.max_calls} Get Trips calls. Score and report make none."
+        f"then up to {cfg.enrich.max_calls} Get Trips calls for Shortlist results. "
+        f"Score and report make none."
     )
     if dry_run:
         for path, params in reqs:
@@ -333,8 +335,17 @@ def run(
     )
     if status == "failed":
         raise typer.Exit(1)
-    complete = status == "ok" and _do_enrich(client, store, cfg, run_id)
+    # Fees come with the scan (summary taxes). Score first, then fetch trip details (flight
+    # numbers, times, booking link) only for results that made the Shortlist, and score again.
     _do_score(store, cfg, run_id, config)
+    complete = status == "ok"
+    if complete:
+        from mmscan.enrich import shortlist_candidates
+
+        candidates = shortlist_candidates(store, run_id)
+        if candidates and cfg.enrich.max_calls:
+            complete = _do_enrich(client, store, cfg, run_id, candidates)
+            _do_score(store, cfg, run_id, config)
     _do_report(store, cfg, run_id)
     if cfg.notify.slack:
         _do_notify(store, cfg, run_id)

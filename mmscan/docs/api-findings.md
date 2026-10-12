@@ -40,14 +40,18 @@ the seats.aero terms forbid redistributing the data.
   today.
 - **`UpdatedAt`** has microseconds (`2026-10-12T11:17:22.611864Z`).
 
-## What this means for mmscan
+## What this means for mmscan (and what was done)
 
-1. **Blocking: fees are in USD.** Builder call 3 treats any non-EUR currency
-   as unpriced, so as built every result is unpriced and the Shortlist is
-   always empty. Fees need converting from USD to EUR.
-2. **Region results come with fees.** The summary's `{P}TotalTaxes` gives the
-   cash co-payment of the cheapest trip, so every region result can be priced
-   without Get Trips. `enrich` would then only be needed for flight numbers,
-   times and the booking link, or could be dropped from the default run.
-3. Minor: an empty `AvailabilityTrips` list from a watchlist search should not
-   be stored as a successful trip fetch with no trips.
+1. **Fees are in USD.** Fixed in code: `usd_to_eur` in `config.yaml` (a fixed
+   rate, euro per dollar, placeholder 0.92: set it to today's rate). Without
+   it USD fees stay unpriced and the Shortlist stays empty. The run log
+   notes how many objects were converted and at what rate.
+2. **Region results come with fees.** The summary's `{P}TotalTaxes` prices
+   every region result without Get Trips. A summary with no or zero taxes is
+   treated as unknown, not free, and falls back to the median-fee estimate.
+   `mmscan run` now scores first, then fetches trip details (flight numbers,
+   times, booking link) only for results that made the Shortlist, up to
+   `enrich.max_calls`, and scores again. `mmscan enrich` still does the
+   PRD's blind cheapest-30% pre-screen when run by hand.
+3. **An empty `AvailabilityTrips` list** is no longer stored as a successful
+   trip fetch.

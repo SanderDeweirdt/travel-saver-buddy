@@ -103,6 +103,7 @@ class Config(_Model):
     cabins: list[Cabin] = Field(min_length=1)
     min_seats: int = Field(2, ge=1)
     mile_cost_eur_cents: float = Field(gt=0)
+    usd_to_eur: float | None = Field(None, gt=0)
     date_window: DateWindow = DateWindow()
     region_pairs: list[RegionPair] = []
     watchlist: Watchlist = Watchlist()

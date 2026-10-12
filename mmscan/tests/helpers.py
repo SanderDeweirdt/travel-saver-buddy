@@ -24,9 +24,12 @@ def avail(
     dest: str = "SIN",
     date: str = "2026-12-10",
     updated: str = "2026-10-10T08:00:00Z",
+    taxes: dict[str, int] | None = None,
+    currency: str = "USD",
     **cabins: int,
 ) -> dict:
-    """`cabins` maps cabin name to miles, e.g. business=60000."""
+    """`cabins` maps cabin name to miles, e.g. business=60000. `taxes` maps cabin name to the
+    summary's TotalTaxes in minor units, as the live API returns them (in USD)."""
     a = {
         "ID": id,
         "Route": {
@@ -38,9 +41,12 @@ def avail(
         "Date": date,
         "Source": "lufthansa",
         "UpdatedAt": updated,
+        "TaxesCurrency": currency,
+        "AvailabilityTrips": [],
     }
     for name, p in CABIN_PREFIX.items():
         miles = cabins.get(name)
+        a[f"{p}TotalTaxes"] = (taxes or {}).get(name, 0)
         a[f"{p}Available"] = miles is not None
         a[f"{p}MileageCost"] = str(miles) if miles is not None else "0"
         a[f"{p}RemainingSeats"] = 4 if miles is not None else 0

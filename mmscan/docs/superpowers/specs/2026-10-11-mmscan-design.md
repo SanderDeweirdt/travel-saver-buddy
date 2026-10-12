@@ -51,3 +51,10 @@ with the web app. All paths in the plan are relative to `mmscan/`.
     shaped exactly as the PRD's API section describes. Recorded responses
     go in `tests/fixtures/live/` and replace the synthetic ones wherever
     they differ.
+14. **Fees in USD (milestone 0 finding).** `usd_to_eur` converts fees at a
+    fixed rate from the config. USD without a rate is unpriced, with a run
+    log warning. Empty currency is still read as EUR.
+15. **Fees from the summary.** A region result is priced from the summary's
+    `{P}TotalTaxes` when no trip details are stored; stored trips win. Zero
+    or missing taxes mean unknown. `run` fetches trip details only for
+    Shortlist results, after a first scoring pass.

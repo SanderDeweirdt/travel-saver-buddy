@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 from mmscan.config import Config
 from mmscan.diff import change_for, previous_totals
 from mmscan.fares import FareSource, NoFares, value_band
-from mmscan.models import Trip, fees_eur, parse_cabin_offers
+from mmscan.models import CABIN_PREFIX, Trip, fees_eur, parse_cabin_offers
 from mmscan.store import Store
 
 log = logging.getLogger("mmscan.scoring")
@@ -48,20 +48,23 @@ def total_cost_eur(miles: int, fees: float, cents: float) -> float:
 
 
 def pick_trip(
-    trips: list[Trip], cabin: str, min_seats: int, cents: float
+    trips: list[Trip], cabin: str, min_seats: int, cents: float, usd_to_eur: float | None = None
 ) -> tuple[Trip, bool] | None:
     """Cheapest priced trip in the cabin that meets min_seats (unknown seats count as meeting,
     builder call 4); otherwise the cheapest priced one with seats_ok False."""
     priced = [
         t
         for t in trips
-        if t.cabin == cabin and t.miles > 0 and fees_eur(t.taxes_minor, t.currency) is not None
+        if t.cabin == cabin
+        and t.miles > 0
+        and fees_eur(t.taxes_minor, t.currency, usd_to_eur) is not None
     ]
     if not priced:
         return None
 
     def key(t: Trip) -> tuple:
-        return (total_cost_eur(t.miles, fees_eur(t.taxes_minor, t.currency), cents), t.stops, t.id)
+        fee = fees_eur(t.taxes_minor, t.currency, usd_to_eur)
+        return (total_cost_eur(t.miles, fee, cents), t.stops, t.id)
 
     meets = [t for t in priced if t.seats is None or t.seats >= min_seats]
     if meets:
@@ -141,10 +144,10 @@ def _offer_row(avail: dict, row, cabin: str, offer, trips, link, cfg: Config) ->
         updated_at=row["updated_at"],
         booking_link=link,
     )
-    picked = pick_trip(trips, cabin, cfg.min_seats, cfg.mile_cost_eur_cents)
+    picked = pick_trip(trips, cabin, cfg.min_seats, cfg.mile_cost_eur_cents, cfg.usd_to_eur)
     if picked:
         trip, seats_ok = picked
-        fees = fees_eur(trip.taxes_minor, trip.currency)
+        fees = fees_eur(trip.taxes_minor, trip.currency, cfg.usd_to_eur)
         return Scored(
             **base,
             miles=trip.miles,
@@ -160,12 +163,18 @@ def _offer_row(avail: dict, row, cabin: str, offer, trips, link, cfg: Config) ->
             seats_ok=seats_ok,
             direct=trip.stops == 0,
         )
+    # No trip details: the summary carries the cheapest trip's taxes per cabin (live finding).
+    taxes = avail.get(f"{CABIN_PREFIX[cabin]}TotalTaxes")
+    fees = None
+    if isinstance(taxes, int) and not isinstance(taxes, bool) and taxes > 0:
+        fees = fees_eur(taxes, avail.get("TaxesCurrency") or "", cfg.usd_to_eur)
+    priced = fees is not None
     return Scored(
         **base,
         miles=offer.miles,
-        fees_eur=None,
-        fee_estimated=True,
-        total_eur=None,
+        fees_eur=fees,
+        fee_estimated=not priced,
+        total_eur=total_cost_eur(offer.miles, fees, cfg.mile_cost_eur_cents) if priced else None,
         seats=offer.seats,
         stops=None,
         carriers=offer.airlines,
@@ -196,15 +205,39 @@ def _trip_from_row(r) -> Trip:
     )
 
 
+def _currency_warnings(currencies: dict[str, int], cfg: Config) -> list[str]:
+    out = []
+    if currencies.get(""):
+        out.append(f"{currencies['']} objects had an empty TaxesCurrency; taxes were read as EUR")
+    if currencies.get("USD"):
+        if cfg.usd_to_eur:
+            out.append(
+                f"{currencies['USD']} objects report fees in USD; converted at usd_to_eur="
+                f"{cfg.usd_to_eur}"
+            )
+        else:
+            out.append(
+                f"{currencies['USD']} objects report fees in USD and usd_to_eur is not set; "
+                f"they are unpriced"
+            )
+    for cur, n in sorted(currencies.items()):
+        if cur not in ("", "EUR", "USD"):
+            out.append(f"{n} objects report fees in {cur}; they are unpriced")
+    return out
+
+
 def current_rows(store: Store, cfg: Config, run_id: int) -> tuple[list[Scored], list[str]]:
     """One row per availability and configured cabin, priced from stored trips when present."""
     out: list[Scored] = []
     warnings: list[str] = []
-    empty_currency = 0
+    currencies: dict[str, int] = {}
     for row in store.conn.execute(
         "SELECT id, updated_at, raw_json FROM availabilities WHERE run_id=? ORDER BY id", (run_id,)
     ).fetchall():
         avail = json.loads(row["raw_json"])
+        if avail.get("TaxesCurrency") is not None:
+            cur = avail["TaxesCurrency"]
+            currencies[cur] = currencies.get(cur, 0) + 1
         updated = row["updated_at"] or ""
         fetch = store.conn.execute(
             "SELECT status, booking_link FROM trip_fetches "
@@ -218,22 +251,14 @@ def current_rows(store: Store, cfg: Config, run_id: int) -> tuple[list[Scored], 
             )
         ]
         for t in trips:
-            if t.currency == "":
-                empty_currency += 1
-            elif t.currency != "EUR":
-                warnings.append(
-                    f"trip {t.id}: taxes in {t.currency!r}, not EUR; left unpriced (builder call 3)"
-                )
+            currencies[t.currency] = currencies.get(t.currency, 0) + 1
         link = fetch["booking_link"] if fetch else None
         for offer in parse_cabin_offers(avail, cfg.cabins):
             s = _offer_row(avail, row, offer.cabin, offer, trips, link, cfg)
             if fetch is not None and fetch["status"] == "expired":
                 s.expired = True
             out.append(s)
-    if empty_currency:
-        warnings.append(
-            f"{empty_currency} trips had an empty TaxesCurrency; their taxes were read as EUR"
-        )
+    warnings += _currency_warnings(currencies, cfg)
     return out, warnings
 
 

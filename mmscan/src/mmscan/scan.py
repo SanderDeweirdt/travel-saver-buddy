@@ -144,7 +144,7 @@ def scan_watchlist(
             for avail in page:
                 store.save_availability(run_id, avail, "watchlist")
                 raw_trips = avail.get("AvailabilityTrips")
-                if raw_trips is None:
+                if not raw_trips:
                     continue
                 trips = [parse_trip(t) for t in raw_trips]
                 store.save_trips(
