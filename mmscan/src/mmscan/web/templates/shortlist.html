@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Shortlist · mmscan{% endblock %}
+{% block body %}
+<h1>Shortlist</h1>
+{% if not view %}
+<p>No scored run yet. The scanner has not stored results.</p>
+{% else %}
+<form class="filters" method="get" action="/">
+  <label>Run
+    <select name="run">
+      {% for r in runs %}<option value="{{ r.id }}" {{ 'selected' if r.id == run_id }}>#{{ r.id }} {{ r.kind }} {{ r.started_at|when }}</option>{% endfor %}
+    </select></label>
+  <label>Route
+    <select name="route"><option value="">All</option>
+      {% for r in view.routes %}<option {{ 'selected' if r == f.route }}>{{ r }}</option>{% endfor %}
+    </select></label>
+  <label>Cabin
+    <select name="cabin"><option value="">All</option>
+      {% for c in view.cabins %}<option {{ 'selected' if c == f.cabin }}>{{ c }}</option>{% endfor %}
+    </select></label>
+  <label>Verdict
+    <select name="verdict"><option value="">All</option>
+      {% for v in view.verdicts %}<option {{ 'selected' if v == f.verdict }}>{{ v }}</option>{% endfor %}
+    </select></label>
+  <label>Sort
+    <select name="sort">{% for s in sorts %}<option {{ 'selected' if s == f.sort }}>{{ s }}</option>{% endfor %}</select></label>
+  <label>Scope
+    <select name="all"><option value="0">Shortlist</option><option value="1" {{ 'selected' if f.all }}>All results</option></select></label>
+  <button type="submit">Apply</button>
+</form>
+<p class="note">{{ disclaimer }} Run #{{ run_id }}{% if run %} ({{ run.kind }}, {{ run.status }}, {{ run.started_at|when }} UTC){% endif %}.
+  {{ view.rows|length }} of {{ view.total }} results shown.</p>
+<div class="scroll"><table>
+<thead><tr>
+  <th>Verdict</th><th>Change</th><th>Date</th><th>Route</th><th>Cabin</th>
+  <th class="n">Miles</th><th class="n">Fees €</th><th class="n">Total €</th>
+  <th class="n">Baseline €</th><th class="n">Route pct</th><th class="n">Seats</th>
+  <th>Flags</th><th class="n">Data age h</th><th></th>
+</tr></thead>
+<tbody>
+{% for r in view.rows %}{% set s = r.s %}
+<tr>
+  <td><span class="tag {{ 'deal' if s.verdict == 'Deal' else 'worth' if s.verdict == 'Worth a look' }}">{{ s.verdict }}</span></td>
+  <td>{{ s.change or "" }}</td>
+  <td>{{ s.date }}</td>
+  <td><a href="/route/{{ s.origin }}/{{ s.destination }}/{{ s.cabin }}">{{ s.origin }}→{{ s.destination }}</a></td>
+  <td>{{ s.cabin }}</td>
+  <td class="n">{{ "{:,}".format(s.miles) if s.miles is not none else "–" }}</td>
+  <td class="n">{{ s.fees_eur|money }}</td>
+  <td class="n">{{ s.total_eur|money }}</td>
+  <td class="n" title="{{ r.samples }} samples">{{ r.baseline|money }}</td>
+  <td class="n">{{ "%.0f"|format(s.route_pct) if s.route_pct is not none else "–" }}</td>
+  <td class="n">{{ s.seats if s.seats is not none else "?" }}</td>
+  <td>{% if s.chart_rate %}chart_rate {% endif %}{% if s.ceiling_good %}ceiling_good{% endif %}</td>
+  <td class="n">{{ "%.0f"|format(r.age_h) if r.age_h is not none else "–" }}{{ " (stale)" if r.age_h and r.age_h > 48 }}</td>
+  <td>{% if s.booking_link %}<a href="{{ s.booking_link }}" rel="noopener noreferrer" target="_blank">book</a>{% endif %}</td>
+</tr>
+{% else %}<tr><td colspan="14">Nothing matches.</td></tr>{% endfor %}
+</tbody></table></div>
+{% endif %}
+{% endblock %}

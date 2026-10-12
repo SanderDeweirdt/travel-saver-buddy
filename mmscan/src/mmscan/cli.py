@@ -452,3 +452,22 @@ def migrate_sqlite(
         raise typer.Exit(2)
     for table, copied, total in migrate(source, url):
         typer.echo(f"{table}: {copied} new rows copied, {total} in the source")
+
+
+@app.command()
+def web(
+    host: Annotated[str, typer.Option(help="Interface to bind.")] = "0.0.0.0",
+    port: Annotated[int, typer.Option(envvar="PORT", help="Port; Railway sets PORT.")] = 8000,
+) -> None:
+    """Private read-only dashboard. Needs DASHBOARD_PASSWORD and SESSION_SECRET."""
+    import uvicorn
+
+    from mmscan.web.app import create_app
+    from mmscan.web.settings import SettingsError, settings_from_env
+
+    try:
+        application = create_app(settings_from_env())
+    except SettingsError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(2) from e
+    uvicorn.run(application, host=host, port=port, proxy_headers=True, forwarded_allow_ips="*")
