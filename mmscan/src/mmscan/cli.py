@@ -197,6 +197,8 @@ def _do_report(store: Store, cfg: Config, run_id: int) -> None:
     from mmscan.report import print_summary, write_report
 
     now = datetime.now(UTC)
+    if report_dir := os.environ.get("MMSCAN_REPORT_DIR"):
+        cfg.output.dir = Path(report_dir)  # cron runs keep no reports on disk
     for p in write_report(store, cfg, run_id, now):
         typer.echo(f"Wrote {p}")
     print_summary(store, run_id, cfg, now)
