@@ -1,8 +1,23 @@
 # PRD: Miles & More award scanner
 
-Oct 11, 2026 · @Sander
+Oct 11, 2026 · @Sander · Updated Oct 12, 2026 to match the built tool
 
-A command-line tool that pulls Miles & More award availability from the seats.aero API in bulk, scores every result against configurable benchmarks, and writes a ranked shortlist to a spreadsheet. This document is the build brief for Claude Code; start at "Build order".
+A command-line tool that pulls Miles & More award availability from the seats.aero API in bulk, scores every result against configurable benchmarks, and writes a ranked shortlist to a spreadsheet. It began as the build brief for Claude Code and now describes what is built. Where the first draft and the live API disagreed, the live API won; those differences are in [`api-findings.md`](api-findings.md). Start at "Status" for what is done and what is still open.
+
+## Status
+
+All five milestones are built, tested offline (111 tests, no network) and merged. Two things were added after the original plan: `mmscan watch` (frequent watchlist-only runs) and Slack alerts.
+
+| Gate | State |
+| --- | --- |
+| Milestone 0: access check | Done on 2026-10-12 (4 calls). Findings in `api-findings.md`. |
+| Milestone 1: first live scan of the default config, call count under the daily cap | Not run yet |
+| Milestone 1: `include_filtered` comparison | Not run yet; the default stays `false` until it is |
+| Milestone 2: fee spread per route | Not run yet. `mmscan enrich` prints it. Matters less now that fees come from the summary, but it still decides whether the fee estimate is sound |
+| Milestone 3: spreadsheet opens cleanly in Excel and LibreOffice | Not checked |
+| Milestone 4: fresh clone runs end to end in under 10 minutes | Not checked live |
+
+Open before real use: put today's rate in `usd_to_eur` (the shipped 0.92 is a placeholder) and run `mmscan scan` once.
 
 ## Scope
 
@@ -14,9 +29,11 @@ In scope for v1:
 - Pull a watchlist of specific airport pairs.
 - Store every run locally so prices can be compared across runs.
 - Turn every result into a total cost in euros per person: miles at the user's cost per mile, plus the cash co-payment. Score that total against the route, the destination and a fallback ceiling.
-- Fetch flight-level detail for every candidate: taxes and surcharges, carriers, flight numbers, stops, booking link. Nothing reaches the shortlist without its cash co-payment.
+- Price every result with its cash co-payment, read from the summary object's taxes or from stored trips. Nothing reaches the shortlist without an actual (not estimated) fee.
+- Fetch flight-level detail (carriers, flight numbers, times, booking link) for Shortlist results only.
 - Write a ranked spreadsheet and print a short terminal summary.
-- List what is new or cheaper since the previous run.
+- Flag what is new or cheaper compared with the last time each result was seen.
+- Post new or cheaper Deals to Slack through an incoming webhook, and offer a cheap watchlist-only command (`mmscan watch`) for hourly runs.
 
 Out of scope for v1:
 
@@ -24,7 +41,7 @@ Out of scope for v1:
 - Other mileage programs. Keep the source configurable, but only `lufthansa` is tested.
 - Live Search. It is not available to Pro API keys.
 - Automatic cash fares. The seats.aero API has no cash ticket prices. v1 reads fares the user enters by hand, behind an interface a fare source can plug into later.
-- A web UI, notifications and scheduling. These are candidates for v2.
+- A web UI, and a built-in scheduler. The tool runs once and exits; the README gives cron lines for hourly and daily runs.
 - Commercial or shared use. The API key is for personal, non-commercial use.
 
 Alternative for one-off questions: seats.aero also offers an MCP server at `https://seats.aero/mcp`. This tool exists for repeatable bulk scoring with history, which ad hoc queries do not give.
@@ -45,40 +62,48 @@ These defaults are assumptions. Every one lives in the config file, so Claude Co
 | Fallback ceiling, economy, Europe to Southeast Asia | 35,000 miles and 200 EUR fees, one-way | Placeholder set below the chart rate; replace it once the tool has its own statistics |
 | Chart-rate marker | 100,000 miles in business and 42,500 in economy, one-way | Half the official return price for partner awards; shown as a flag only, because a chart-rate award with low fees can still win on total cost |
 | Cost of a mile | 1.16 euro cents | Sander's purchase price; turns miles into euros |
-| Results priced with fees per run | Every watchlist result, plus up to 150 region results | Watchlist fees come free with the search; each region result costs one API call |
+| Fees (currency) | Taken from the summary, in USD, converted at `usd_to_eur` (placeholder 0.92) | seats.aero reports `lufthansa` fees in USD. Without a rate, fees are unpriced and the Shortlist stays empty |
+| Results priced with fees per run | Every result with non-zero summary taxes; the rest get an estimate | Costs no extra call. Get Trips is spent only on Shortlist results, up to 150 |
 | Mixed-cabin itineraries | Excluded | API default, `min_cabin_pct=100` |
 | Stack | Python 3.12, uv, SQLite | Single user, runs on a laptop or a home server |
 | Output | One .xlsx per run, plus CSV | No Google Sheets integration in v1 |
-| How it runs | On demand from the terminal | Scheduling is v2 |
+| How it runs | On demand from the terminal, or from cron | Suggested: `watch` hourly (2 calls), `run` daily (about 4 + pages + 150 calls), roughly 210 a day against the cap of 300 |
+| Alerts | Slack incoming webhook, off by default | Only Shortlist Deals that are New or Cheaper; webhook URL in `.env` |
 
 ## How it works
 
-One run is six steps. Steps 1, 2 and 4 call the API; the rest work from the local database and can be repeated for free.
+One `mmscan run` is six steps. Steps 1 and 2 call the API, and step 4 does for Shortlist results only; the rest work from the local database and can be repeated for free.
 
-1. **Scan regions.** Call Bulk Availability once per region pair and direction, with `take=1000`. Page with `skip` and `cursor` until `hasMore` is false. Deduplicate by `ID`. These results carry miles but no fees. With more than one cabin configured, send no cabin filter and read each configured cabin from the same objects.
-2. **Scan the watchlist.** Call Cached Search with the watchlist origins and destinations as comma-separated lists, `sources=lufthansa`, `order_by=lowest_mileage` and `include_trips=true`. The trips arrive in the same response, so every watchlist result has its cash co-payment at no extra call. Run both directions, with the same cabin rule as step 1.
-3. **Pre-screen.** Rank the region results on miles alone, per route and per destination, separately for each cabin, and keep the cheapest 30% as candidates.
-4. **Enrich.** Call Get Trips for each candidate, cheapest first, up to `enrich.max_calls` (default 150). Skip any availability whose `UpdatedAt` has not changed since its trips were stored. Candidates left over are counted in the run log and picked up by the next run. One Get Trips call prices every cabin of that availability.
-5. **Score.** Compute the total cost of every priced result, build the route and destination baselines, and apply the rules in "Scoring".
-6. **Report.** Write the spreadsheet and CSV, print the top 10 to the terminal, and list what is new or cheaper than the previous run.
+1. **Scan regions.** Call Bulk Availability once per region pair and direction, with `take=1000`. Page with `skip` and `cursor` until `hasMore` is false. Deduplicate by `ID`; stop paging if a page adds no new `ID`. With more than one cabin configured, send no cabin filter and read each configured cabin from the same objects. These results carry miles and, per cabin, the taxes of the cheapest trip (`{P}TotalTaxes`, one `TaxesCurrency` per availability), so they are priced without Get Trips.
+2. **Scan the watchlist.** Call Cached Search with the watchlist origins and destinations as comma-separated lists, `sources=lufthansa`, `order_by=lowest_mileage` and `include_trips=true`. The trips arrive in the same response, with fees and flight detail. Run both directions, with the same cabin rule as step 1.
+3. **Score.** First pass. Total cost of every result from stored trips or, failing that, the summary taxes; baselines; rules in "Scoring".
+4. **Fetch trip details for the Shortlist.** Call Get Trips for each Shortlist result that has no stored trips, best first, up to `enrich.max_calls` (default 150). This adds flight numbers, times and the booking link. Skip any availability whose `UpdatedAt` has not changed since its trips were stored. One Get Trips call covers every cabin of that availability.
+5. **Score again,** now that stored trips replace the summary taxes where they exist.
+6. **Report and notify.** Write the spreadsheet and CSV, print the top 10 to the terminal, and, when `notify.slack` is on, post new or cheaper Deals to Slack.
+
+`mmscan enrich` is the original blind alternative to step 4, kept for use by hand: it ranks region results on miles alone, per route and per destination and separately for each cabin, keeps the cheapest 30% (`prescreen.percentile`) and fetches their trips, then prints the fee spread per route. `mmscan watch` runs steps 2, 3 and 6 on the watchlist only, reading at most `watch.max_pages` pages per direction, so it costs 2 calls with the default config.
 
 Commands, with `mmscan` as the working package and CLI name:
 
 | Command | What it does | API calls |
 | --- | --- | --- |
-| `mmscan check` | Four small calls to confirm the key works and see what the live responses contain; saves the raw JSON as test fixtures | 4 |
-| `mmscan scan` | Steps 1 and 2 | Depends on result volume; logged per run |
-| `mmscan enrich` | Steps 3 and 4 | Up to 150 |
-| `mmscan score` | Step 5 | 0 |
-| `mmscan report` | Step 6 | 0 |
-| `mmscan run` | All steps in order | Sum of the above |
+| `mmscan check` | Four small calls to confirm the key works and see what the live responses contain; saves the raw JSON as fixtures (git-ignored) | 4 |
+| `mmscan scan` | Steps 1 and 2 | One per page; 4 first pages with the default config |
+| `mmscan enrich` | Pre-screen and fetch trips for the cheapest 30% of region results, by hand | Up to 150 |
+| `mmscan score` | Step 3 on the latest scan | 0 |
+| `mmscan report` | Step 6 minus Slack, on the latest scored full run | 0 |
+| `mmscan run` | Steps 1 to 6 in order; prints the planned calls first | Scan plus at most 150 |
+| `mmscan watch` | Watchlist scan, score against stored history, Slack alerts. For hourly runs | 2 x `watch.max_pages` |
+| `mmscan notify` | Post the latest scored run's new or cheaper Deals to Slack; nothing when there are none | 0 |
 | `mmscan quota` | Calls left today, from the last X-RateLimit-Remaining response header, and calls made by this tool | 0 |
 
-Every command accepts `--config PATH` and `--dry-run`. A dry run prints the requests it would start with and sends nothing; page counts are only known once a scan runs.
+`enrich`, `score` and `report` use the latest `scan` or `run`; `watch` runs are left out because they hold only the watchlist.
+
+Every command accepts `--config PATH`, `--dry-run` and `--verbose`. A dry run prints the requests it would start with and sends nothing; page counts are only known once a scan runs.
 
 ## Configuration
 
-All behaviour comes from one `config.yaml`. The API key is the only setting kept outside it, in the environment variable `SEATS_AERO_API_KEY`, loaded from a git-ignored `.env`.
+All behaviour comes from one `config.yaml`. The two secrets are kept outside it, in the environment variables `SEATS_AERO_API_KEY` and `SLACK_WEBHOOK_URL`, loaded from a git-ignored `.env`.
 
 ```yaml
 source: lufthansa
@@ -87,6 +112,10 @@ min_seats: 2
 
 # What one mile costs you, in euro cents. Turns miles into euros.
 mile_cost_eur_cents: 1.16
+
+# seats.aero reports Miles & More fees in USD. Fixed rate, euro per dollar; update it now and
+# then. Without it, USD fees are unpriced and the Shortlist stays empty.
+usd_to_eur: 0.92
 
 date_window:
   start_offset_days: 0
@@ -147,9 +176,22 @@ api:
 output:
   dir: ./reports
   formats: [xlsx, csv]
+
+# Slack alerts after `mmscan run` or `mmscan notify`. Only results that match both lists
+# are posted; nothing is posted when none match.
+notify:
+  slack: false
+  verdicts: [Deal]
+  changes: [New, Cheaper]
+  max_items: 10
+
+# `mmscan watch`: watchlist only. Results come cheapest first, so one page per direction
+# usually holds every deal. Calls per run: 2 x max_pages.
+watch:
+  max_pages: 1
 ```
 
-Validate the config on load and fail with a message that names the bad key. Unknown airports in `subregions` or `watchlist` are a warning, not an error.
+Validate the config on load and fail with a message that names the bad key. Unknown airports in `subregions` or `watchlist` (anything that is not three uppercase letters; there is no airport database) are a warning, not an error.
 
 Optional second input, `cash_fares.csv`, with columns `origin, destination, cabin, month, fare_eur` (`month` as YYYY-MM). When a row matches a result, the report shows the cash fare, the saving against it and the value per mile. When none matches, those columns stay empty. Read the file through a small fare-source interface so an automatic source can replace it later.
 
@@ -175,28 +217,29 @@ The flags combine into one verdict per result:
 
 | Verdict | Rule |
 | --- | --- |
-| Deal | `route_good` and `destination_good`, with `seats_ok` |
+| Deal | `route_good` and `destination_good`, with `seats_ok` (with too few seats the result is Worth a look, not Skip) |
 | Worth a look | Exactly one of `route_good` or `destination_good` |
 | Skip | Everything else |
 
 Rules behind the flags:
 
-- **Total cost.** Per adult, one-way. Miles come from the trip's `MileageCost`, fees from its `TotalTaxes`, and the cost per mile from `mile_cost_eur_cents`.
+- **Total cost.** Per adult, one-way. Miles come from the trip's `MileageCost`, fees from its `TotalTaxes`, and the cost per mile from `mile_cost_eur_cents`. Taxes are in minor units and in the currency the API reports, which is USD for `lufthansa`: divide by 100 and multiply by `usd_to_eur`. EUR is used as is; an empty currency is read as EUR with a run-log warning; any other currency, or USD without a rate, is unpriced.
+- **Where fees come from.** Stored trips first. Without them, the summary's `{P}TotalTaxes` for that cabin (the taxes of its cheapest-miles trip). Zero or missing summary taxes mean unknown, not free.
 - **Which trip.** One availability can hold several trips. Use the trip with the lowest total cost in the target cabin that meets `min_seats`. If none meets it, use the lowest total cost and set `seats_ok` to false.
-- **Baselines.** Use every result for the same cabin from the current run plus the stored runs of the last `history_days`. The route baseline groups by origin and destination. The destination baseline groups by origin region and destination.
-- **Results without fees.** Region results that were not enriched enter the baselines with an estimated fee: the median fee of priced results on the same route. Mark them as estimated. They count toward baselines but never appear on the Shortlist. A route with no priced result stays out of the destination baseline.
+- **Baselines.** Use every result for the same cabin from the current run plus the stored runs of the last `history_days`. When the same route, date and cabin appears in several runs, only its latest observation counts. The route baseline groups by origin and destination. The destination baseline groups by origin region and destination. Thresholds use linear interpolation between ranks; the percentile shown in the report is a mid-rank, `(count below + 0.5 x count equal) / n x 100`.
+- **Results without fees.** Results with no usable trip or summary taxes enter the baselines with an estimated fee: the median fee of priced results on the same route and cabin. Mark them as estimated. They count toward baselines but never appear on the Shortlist. A route with no priced result stays out of the destination baseline.
 - **Thin data.** A baseline with fewer than `min_samples` results is unknown. `ceiling_good` then stands in for that layer. When no benchmark matches either, the result can reach Worth a look at most.
 - **Unavailable cabins.** A mileage cost of `"0"`, empty or null means the cabin is not available. Only use a cabin whose `Available` flag is true.
 - **Seat count of zero.** Treat 0 remaining seats on an available cabin as unknown, not as sold out, and show it as unknown in the report.
 - **Against cash.** With a cash fare, show the saving (cash fare minus total cost) and the value per mile ((cash fare minus fees) divided by miles, in euro cents). Bands come from `value_per_mile_cents`. Without a cash fare these stay blank and the verdict is unaffected.
 - **Ranking.** Verdict first, then total cost ascending, with direct flights ahead of connections on ties.
-- **New or cheaper.** New means the route, date and cabin did not appear in the previous run. Cheaper means its total cost dropped by 5% or more.
+- **New or cheaper.** Compared with the last time any earlier run saw the same route, date and cabin, not with one previous run, so hourly `watch` runs and the daily `run` do not mark each other's results as New and each deal is reported once. New means it was never seen. Cheaper means its total cost dropped by 5% or more since it was last seen. The very first scored run has nothing to compare with, so its Change column and Slack alerts stay empty. A result that was only ever seen without a total is not New.
 - **Infants.** Not modelled. All figures are per adult.
 
 Two assumptions to test:
 
-- **Fees are stable within a route.** The fee estimate relies on it. Milestone 2 reports the spread of fees per route; if it is wide, drop the estimate and build baselines from priced results only.
-- **Hidden expensive results.** By default the API leaves out expensive dynamically priced results (`include_filtered=false`). That makes the stored distribution look cheaper than reality, so the percentiles are stricter than they seem. In milestone 1, run one scan each way, record how the counts differ in the README, and keep the default unless the difference is large.
+- **Fees are stable within a route.** The fee estimate relies on it, though it now covers only the few results whose summary has no taxes. `mmscan enrich` reports the spread of fees per route (min, median, max); if it is wide, drop the estimate and build baselines from priced results only. Not measured yet.
+- **Hidden expensive results.** By default the API leaves out expensive dynamically priced results (`include_filtered=false`). That makes the stored distribution look cheaper than reality, so the percentiles are stricter than they seem. Run one scan each way, record how the counts differ in the README, and keep the default unless the difference is large. Not measured yet.
 
 ## Report
 
@@ -205,7 +248,7 @@ Each run writes `reports/mmscan_YYYY-MM-DD_HHMM.xlsx` with four sheets, and the 
 | Sheet | Contents |
 | --- | --- |
 | Shortlist | Priced results with verdict Deal or Worth a look, ranked by total cost |
-| All results | Every result from this run, with a filter row and a column saying whether its fee is actual or estimated |
+| All results | Every result from this run, with a filter row, plus the columns Fee source (actual or estimated), Seats OK, Direct and Expired |
 | Route stats | Per route and per destination, by cabin: sample count, then minimum, 20th percentile, median and maximum total cost, and the median fee |
 | Run log | Run time, config used, API calls made, result counts, candidates not yet priced, warnings |
 
@@ -240,9 +283,11 @@ Formatting: freeze the header row, turn on filters, colour the Verdict cell (gre
 
 The terminal summary prints the run totals and the top 10 Shortlist rows as a plain table.
 
+Slack alerts (`notify.slack: true`, or `mmscan notify`) post one message per run: a header with the count, up to `notify.max_items` results (route, date, cabin, miles plus fees, total, stops, seats, flights, departure, saving against cash, booking link) and the cached-data line. Only Shortlist results with a verdict in `notify.verdicts` and a change in `notify.changes` are posted. A quiet run posts nothing, and a Slack failure goes to the run log without failing the run.
+
 ## seats.aero API reference
 
-Everything below was read from the seats.aero developer docs on 11 October 2026. Before coding, fetch [the docs index](https://developers.seats.aero/llms.txt) and re-check; where a live response differs from this section, the live response wins.
+Everything below was read from the seats.aero developer docs on 11 October 2026 and corrected against live responses on 12 October 2026 (see [`api-findings.md`](api-findings.md)). Where a live response differs from the docs, the live response wins. Re-check the [docs index](https://developers.seats.aero/llms.txt) if something stops matching.
 
 - Base URL: `https://seats.aero/partnerapi/`
 - Auth: API key in the `Partner-Authorization` header on every request.
@@ -264,31 +309,35 @@ Parameter values:
 - `order_by=lowest_mileage` returns the cheapest results first.
 - `min_cabin_pct`: 0 to 100, default 100, which excludes any itinerary with distance flown below the reported cabin.
 
-Cached Search documents this response envelope: `data` (array), `count`, `hasMore`, `cursor`. The Bulk Availability page documents no response body; it is expected to match, so confirm it in milestone 0.
+Both Cached Search and Bulk Availability return the envelope `data` (array), `count`, `hasMore`, `cursor`, plus `moreURL`, a ready-made path for the next page. (Confirmed live; the docs describe the body only for Cached Search.)
 
 Availability object, one per route, date and program:
 
-- `ID`, `RouteID`, `Date`, `ParsedDate`, `Source`, `CreatedAt`, `UpdatedAt`
-- `Route`: `ID`, `OriginAirport`, `OriginRegion`, `DestinationAirport`, `DestinationRegion`, `NumDaysOut`, `Distance`, `Source`
-- Per cabin, with prefix `Y`, `W`, `J` or `F`: `Available` (boolean), `MileageCost` (string), `RemainingSeats` (integer), `Airlines` (string such as "AA, B6"), `Direct` (boolean). Example: `JMileageCost`.
-- `AvailabilityTrips`: null unless `include_trips=true` on Cached Search. With it, each availability carries its trips, taxes included, at no extra call. Bulk Availability has no such parameter.
+- `ID`, `RouteID`, `Date`, `ParsedDate`, `Source`, `CreatedAt`, `UpdatedAt` (with microseconds)
+- `Route`: `ID`, `OriginAirport`, `OriginRegion`, `DestinationAirport`, `DestinationRegion`, `Connecting`, `Distance`, `Source` (`NumDaysOut` is not present)
+- Per cabin, with prefix `Y`, `W`, `J` or `F`: `Available` (boolean), `MileageCost` (string), `RemainingSeats` (integer), `Airlines` (string such as "AA, B6"), `Direct` (boolean), and, found live, `TotalTaxes` (integer, minor units). Example: `JMileageCost`. Each also has a `...Raw` twin (`JMileageCostRaw` is an integer) and `Direct` variants for the cheapest nonstop (`JDirectMileageCost`, `JDirectTotalTaxes`, `JDirectRemainingSeats`, `JDirectAirlines`).
+- `TaxesCurrency`: one per availability, `USD` for `lufthansa`.
+- `AvailabilityTrips`: null on Cached Search unless `include_trips=true`, in which case each availability carries its trips, taxes included, at no extra call. On Bulk Availability it is an empty list.
 
 Trip object, from Get Trips:
 
 - `ID`, `AvailabilityID`, `Cabin`, `MileageCost` (integer), `TotalTaxes` (integer), `TaxesCurrency`, `TaxesCurrencySymbol`, `RemainingSeats`, `Stops`, `Carriers`, `FlightNumbers`, `DepartsAt`, `ArrivesAt`, `TotalDuration`, `Source`, optional `MixedCabinPct`
 - `AvailabilitySegments`: per flight `FlightNumber`, `FareClass`, `AircraftCode`, `AircraftName`, `OriginAirport`, `DestinationAirport`, `DepartsAt`, `ArrivesAt`, `Distance`, `Order`
-- Top level of the response: `booking_links`, each with `label`, `link`, `primary`.
+- Trips also carry `OriginAirport`, `DestinationAirport`, `Connections`, `Aircraft`, `FareClasses`, `TotalSegmentDistance`, `RouteID`, `CreatedAt`, `UpdatedAt`. `MixedCabinPct` did not appear. `Cabin` is lower case (`economy`, `business`). Minified trips (`minify_trips=true`) keep `TotalTaxes` but drop `TaxesCurrency`, times, flight numbers and segments.
+- Top level of the Get Trips response: `booking_links`, each with `label`, `link`, `primary` (the primary one is "Book via Miles & More", a prefilled award search), plus `origin_coordinates`, `destination_coordinates` and `carriers`.
 
 Things that will bite:
 
 - **Types differ.** Summary mileage costs are strings; trip mileage costs are integers. Per-cabin fields can be null.
-- **Taxes are in minor units.** The docs describe `TotalTaxes` of 1290 as 12.90. `TaxesCurrency` can be an empty string; store the raw value and the currency, and flag an empty currency in the run log instead of guessing.
-- **No taxes on the summary object in the documented schema.** Fees come from Get Trips. If the live summary response turns out to carry tax fields, use them and save the calls.
+- **Taxes are in minor units and in USD.** The docs describe `TotalTaxes` of 1290 as 12.90. Live, `TaxesCurrency` was `USD` on every `lufthansa` object checked (233 of them), never empty and never EUR. Store the raw value and the currency; convert with `usd_to_eur`. An empty currency is read as EUR and flagged in the run log. Amounts fit one adult's ticket, but that is not provable from the data.
+- **The summary object carries taxes** (`{P}TotalTaxes`), equal to the taxes of that cabin's cheapest-miles trip in all 10 search results checked. Region results are therefore priced without Get Trips. Zero or missing means unknown.
+- **Seat counts are often 0** on `lufthansa` (9 of 20 summary business counts). Treat 0 as unknown.
 - **Times are airport local time** even though they end in `Z`. Do not convert them as UTC.
 - **Pagination.** Set `skip` to the number of results already retrieved and `cursor` to the value from the first response. Objects can repeat across pages; deduplicate by `ID`.
+- **Dates start today.** A scan with no `start_date` returns flights departing today.
 - **Get Trips returns every cabin** for that availability. Filter on `Cabin`.
 - **A 404 from Get Trips** means the availability is gone. Mark the result expired and continue.
-- **`TotalDuration` has no documented unit.** The example values look like minutes; confirm against a real trip.
+- **`TotalDuration` is in minutes.** Confirmed against a ZRH to BOM trip, which also confirms the times are airport local.
 - **The `lufthansa` source** is listed with cabins Y, J and F, seat counts, and trip data.
 - **Error responses are only partly documented.** The help article says 401 or 403 points to a missing, invalid or regenerated key or a malformed request, and that requests are rejected once the daily allowance is used up, without naming that status code. Treat 401 and 403 as fatal, with a message that API access may not be enabled for the account. Treat 429 and 5xx as retryable with backoff, unless the remaining-calls header is zero.
 
@@ -296,28 +345,29 @@ Things that will bite:
 
 - **Quota.** A Pro key allows up to 1,000 API calls per day, resetting at midnight UTC. It is a daily allowance, not a per-second rate limit. Read the X-RateLimit-Remaining header after each call and treat it as the truth. Count every call in the local database and stop with a clear message at `daily_call_cap` (default 300), so a bug cannot burn the day's allowance.
 - **Pacing and retries.** Send requests one at a time, at most two per second. Retry timeouts, 429 and 5xx up to three times with exponential backoff, and honour a `Retry-After` header when one is present.
-- **Secrets.** Read the key from the environment only. It must never appear in the config, logs, fixtures, reports or git history. Redact the header in debug output.
-- **Terms of use.** The key is for personal, non-commercial use. Do not publish or redistribute the data.
+- **Secrets.** Read the API key and the Slack webhook URL from the environment only (`.env`, git-ignored). Neither may appear in the config, logs, fixtures, reports or git history. Redact the auth header in debug output, and name only the error type when a Slack post fails.
+- **Terms of use.** The key is for personal, non-commercial use. Do not publish or redistribute the data. This repository is public, so recorded live responses (`tests/fixtures/live/`) are git-ignored and tests use hand-written fixtures in `tests/fixtures/synthetic/`.
 - **Access is not guaranteed.** seats.aero does not enable the API for every Pro account or country. `mmscan check` exists to find that out before anything else is built on it.
 - **Cached, not live.** Every report carries the line "Cached data. Confirm price and seats on miles-and-more.com before acting." seats.aero may also miss availability that Miles & More shows.
-- **Storage.** One SQLite file at `./data/mmscan.db` with tables for runs, availabilities, trips and API calls. Keep the raw JSON of each row so parsing can be fixed without new calls. Delete rows older than 180 days.
+- **Storage.** One SQLite file at `./data/mmscan.db` with tables for runs, availabilities, trips, trip fetches (the cache keyed on availability `ID` and `UpdatedAt`), scored results and API calls. Keep the raw JSON of each row so parsing can be fixed without new calls. Delete rows older than 180 days.
 - **Logging.** One line per request: endpoint, parameters, status, duration, results returned.
 - **Tests.** pytest, with no network access. Use recorded responses with the key stripped. Cover string, null and `"0"` mileage costs, pagination with duplicate IDs, every scoring rule, the percentile fallback, tax conversion and config validation.
 - **Platform.** macOS and Linux, Python 3.12, no background services.
 
 ## Build order
 
-Build in five milestones and stop after each one. Milestone 0 is a gate: it proves the account has API access and shows what the live responses contain, before any design depends on them.
+The tool was built in five milestones, stopping after each one, followed by a sixth for the alerts. Milestone 0 is a gate: it proves the account has API access and shows what the live responses contain, before any design depends on them. The "Done when" column is the original acceptance test; the Status section says which gates have actually been run.
 
 | Milestone | Build | Done when |
 | --- | --- | --- |
-| 0. Access check | Repo scaffold (uv, ruff, pytest, `.gitignore`, `.env.example`). `mmscan check` makes four calls: Bulk Availability with `source=lufthansa`, `cabin=business`, `origin_region=Europe`, `destination_region=Asia`, `take=10`; Get Trips for the first `ID`; Cached Search for MUC to SIN with `sources=lufthansa`, `include_trips=true`, `take=10`; the same search with `minify_trips=true`. | All four raw responses are saved as fixtures with the key stripped. The README lists every difference from this PRD: envelope, tax fields on the summary object, whether minified trips keep `TotalTaxes`, the `TaxesCurrency` value, whether taxes are per passenger, and the `TotalDuration` unit. Total cost: 4 calls. |
+| 0. Access check | Repo scaffold (uv, ruff, pytest, `.gitignore`, `.env.example`). `mmscan check` makes four calls: Bulk Availability with `source=lufthansa`, `cabin=business`, `origin_region=Europe`, `destination_region=Asia`, `take=10`; Get Trips for the first `ID`; Cached Search for MUC to SIN with `sources=lufthansa`, `include_trips=true`, `take=10`; the same search with `minify_trips=true`. | All four raw responses are saved as fixtures with the key stripped. `docs/api-findings.md` lists every difference from the original draft of this PRD: envelope, tax fields on the summary object, whether minified trips keep `TotalTaxes`, the `TaxesCurrency` value, whether taxes are per passenger, and the `TotalDuration` unit. Total cost: 4 calls. |
 | 1. Scan and store | Config loading and validation, API client (pagination, deduplication, retries, call counter), SQLite schema, `scan` for regions and for the watchlist with trips, `quota`, `--dry-run`. | A scan of the default config finishes under the daily cap. Every watchlist result is stored with its trips and fees. The call count per run is logged. The `include_filtered` comparison is written up in the README. |
-| 2. Pre-screen and enrich | Candidate selection on miles, `enrich`, a trip cache keyed on availability `ID` and `UpdatedAt`, tax conversion. | Up to 150 candidates are priced in at most 150 calls. A second run on the same data makes no Get Trips call for unchanged availabilities. A 404 marks the result expired without stopping the run. The README reports the spread of fees per route. |
-| 3. Score and report | Total cost, both baselines, the fee estimate, `score`, `report`, the four-sheet spreadsheet and CSV, `cash_fares.csv`. | Every scoring rule has a unit test. Every Shortlist row has actual fees and a total cost. The spreadsheet opens cleanly in Excel and LibreOffice. Run log totals match the database. |
+| 2. Pre-screen and enrich | Candidate selection on miles, `enrich`, a trip cache keyed on availability `ID` and `UpdatedAt`, tax conversion (USD to EUR). | Up to 150 candidates are priced in at most 150 calls. A second run on the same data makes no Get Trips call for unchanged availabilities. A 404 marks the result expired without stopping the run. The README reports the spread of fees per route. |
+| 3. Score and report | Total cost, both baselines, the fee estimate, summary-tax pricing, `score`, `report`, the four-sheet spreadsheet and CSV, `cash_fares.csv`. | Every scoring rule has a unit test. Every Shortlist row has actual fees and a total cost. The spreadsheet opens cleanly in Excel and LibreOffice. Run log totals match the database. |
 | 4. Diff and full run | New and Cheaper detection, `mmscan run`, README with setup, usage and how to tune the config. | Two runs in a row produce a filled Change column. A fresh clone runs end to end in under 10 minutes by following the README. |
+| 5. Watch and alerts (added after the first draft) | `mmscan watch`, `mmscan notify`, Slack incoming-webhook posts, last-seen change detection, cron lines in the README. | Hourly watch runs and the daily run do not mark each other's results as New. A quiet run posts nothing. A Slack failure does not fail the run. |
 
-Not now: scheduling, notifications, other mileage programs, an automatic cash fare source.
+Not now: a built-in scheduler, other mileage programs, an automatic cash fare source, a web UI.
 
 Working rules for Claude Code:
 
@@ -325,12 +375,12 @@ Working rules for Claude Code:
 - Before any command that calls the live API, state how many calls it will make. `mmscan check` is the only one that may run without asking.
 - Do not invent API fields. If a field this PRD relies on is missing from a live response, stop and report it.
 - Dependencies allowed without asking: httpx, typer, pydantic, pyyaml, openpyxl, python-dotenv, pytest, ruff. Ask before adding others.
-- Keep one module per concern: config, client, store, scoring, enrich, report, cli.
+- Keep one module per concern: config, client, store, scoring, enrich, report, cli, plus models, scan, fares, diff, check and notify.
 - Commit at the end of each milestone. Never commit `.env`, the database or reports.
 
 ## Sources
 
-API behaviour, opened on 11 October 2026:
+API behaviour, opened on 11 October 2026 and checked live on 12 October 2026:
 
 - [Getting Started](https://developers.seats.aero/reference/getting-started-p.md): base rules, auth header, Pro access, MCP server
 - [Concepts](https://developers.seats.aero/reference/concepts-copy.md): sources table, availability and trip objects, mixed cabin, pagination

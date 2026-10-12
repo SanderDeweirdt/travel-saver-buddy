@@ -1,6 +1,6 @@
 # mmscan design
 
-The design is the PRD, unchanged: [`docs/PRD.md`](../../PRD.md). This file
+The design is the PRD, which was updated on 2026-10-12 to match the built tool: [`docs/PRD.md`](../../PRD.md). This file
 records only where the project lives and the calls the builder made where
 the PRD leaves a choice open. Every call below is the builder's, not
 Sander's, and can be overruled.
