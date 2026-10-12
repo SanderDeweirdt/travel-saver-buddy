@@ -6,3 +6,6 @@ __pycache__/
 .ruff_cache/
 .pytest_cache/
 *.egg-info/
+
+# Live API responses: seats.aero terms forbid redistributing the data
+tests/fixtures/live/
