@@ -103,7 +103,7 @@ def test_shortlist_candidates_skip_fetched_and_skipped(tmp_path, default_config_
     store, run = _store(tmp_path, cheap, pricey, fetched)
     store.save_trips("fetched", fetched["UpdatedAt"], [trip("t", avail_id="fetched")], None, {})
     score_run(store, config(default_config_dict), run, NOW)
-    assert shortlist_candidates(store, run) == ["cheap"]
+    assert shortlist_candidates(store, config(default_config_dict), run) == ["cheap"]
 
 
 def test_run_prices_from_summary_then_enriches_only_the_shortlist(

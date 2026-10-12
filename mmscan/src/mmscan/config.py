@@ -59,6 +59,16 @@ class Relative(_Model):
     percentile_good: float = Field(20, gt=0, le=100)
     min_samples: int = Field(15, ge=1)
     history_days: int = Field(30, ge=0)
+    # A route/destination layer is only "good" when the total is also at least this far below
+    # the layer's median. 0 turns the rule off (the PRD's plain percentile cut).
+    min_discount_pct: float = Field(10, ge=0, lt=100)
+
+
+class ShortlistScope(_Model):
+    # focus: only results matching a benchmark or the watchlist reach the Shortlist, the CSV
+    # and Slack alerts. all: every Deal and Worth a look, as the PRD says.
+    scope: Literal["focus", "all"] = "focus"
+    focus_watchlist: bool = True
 
 
 class Prescreen(_Model):
@@ -116,6 +126,7 @@ class Config(_Model):
     api: Api = Api()
     output: Output = Output()
     notify: Notify = Notify()
+    shortlist: ShortlistScope = ShortlistScope()
     watch: Watch = Watch()
 
     warnings: list[str] = Field(default_factory=list, exclude=True)
@@ -131,6 +142,19 @@ class Config(_Model):
                         f"nor a subregion key"
                     )
         return self
+
+    def in_focus(
+        self, origin: str, origin_region: str, dest: str, dest_region: str, cabin: str
+    ) -> bool:
+        """Matches a benchmark, or (when focus_watchlist) a watchlist airport pair."""
+        if self.benchmark_for(cabin, origin, origin_region, dest, dest_region):
+            return True
+        wl = self.watchlist
+        if not self.shortlist.focus_watchlist:
+            return False
+        if origin in wl.origins and dest in wl.destinations:
+            return True
+        return wl.both_directions and origin in wl.destinations and dest in wl.origins
 
     def date_range(self, today: date) -> tuple[date, date]:
         return (

@@ -48,6 +48,9 @@ relative:
   percentile_good: 20
   min_samples: 15
   history_days: 30
+  # A deal must also be at least this % below the median total of its route/destination, so a
+  # route whose price barely moves has no deals. 0 = off (plain percentile cut).
+  min_discount_pct: 10
 
 prescreen:
   percentile: 30
@@ -69,6 +72,13 @@ api:
 output:
   dir: ./reports
   formats: [xlsx, csv]
+
+# What reaches the Shortlist, the shortlist CSV and Slack. focus = results that match a
+# benchmark above (Europe <-> southeast_asia) or a watchlist airport pair; all = everything
+# scored a Deal or Worth a look. "All results" always has every result either way.
+shortlist:
+  scope: focus
+  focus_watchlist: true
 
 # Slack alerts after `mmscan run` or `mmscan notify`. The webhook URL is a
 # secret: put it in .env as SLACK_WEBHOOK_URL, never here. Only results that

@@ -37,7 +37,7 @@ def webhook_from_env(dotenv_path: Path | None = None) -> str:
 
 def select_alerts(results: list[Scored], cfg: Config) -> list[Scored]:
     n = cfg.notify
-    return [s for s in shortlist(results) if s.verdict in n.verdicts and s.change in n.changes]
+    return [s for s in shortlist(results, cfg) if s.verdict in n.verdicts and s.change in n.changes]
 
 
 def _esc(text: str) -> str:

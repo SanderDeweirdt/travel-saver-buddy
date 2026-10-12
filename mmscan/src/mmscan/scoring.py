@@ -327,6 +327,7 @@ def score_rows(
     by_dest = _group(samples, _dest)
     pg = cfg.relative.percentile_good
     n_min = cfg.relative.min_samples
+    disc = cfg.relative.min_discount_pct / 100
 
     for s in current:
         if s.expired or s.total_eur is None:
@@ -342,7 +343,8 @@ def score_rows(
         layers = []
         for values in (by_route.get(_route(s), []), by_dest.get(_dest(s), [])):
             if len(values) >= n_min:
-                layers.append(s.total_eur <= percentile(values, pg))
+                cut = min(percentile(values, pg), percentile(values, 50) * (1 - disc))
+                layers.append(s.total_eur <= cut)
             elif bm:
                 layers.append(bool(s.ceiling_good))
             else:

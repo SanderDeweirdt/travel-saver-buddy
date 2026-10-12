@@ -72,7 +72,8 @@ scan.
 | `watchlist` | Airports searched with trips included, so their fees are free. `both_directions` adds the return direction. |
 | `subregions` | Airport lists that refine a continent, used by `benchmarks`. |
 | `benchmarks` | Fallback ceilings per cabin and place pair, used when a baseline is thin. `chart_rate_miles` sets the chart-rate flag at 95%. |
-| `relative` | `percentile_good` (deal threshold), `min_samples` (below this a baseline is unknown), `history_days` (stored runs that count). |
+| `relative` | `percentile_good` (deal threshold), `min_samples` (below this a baseline is unknown), `history_days` (stored runs that count), `min_discount_pct` (a route or destination only counts as good when the total is also this % below its median; 0 = plain percentile cut). Lufthansa-group fares barely move by date, so a high value leaves few Deals. |
+| `shortlist` | `scope: focus` limits the Shortlist, the CSV and Slack to results matching a benchmark or (`focus_watchlist`) a watchlist pair; `all` keeps everything scored Deal or Worth a look. "All results" always has every result. |
 | `prescreen.percentile` | Share of region results, cheapest first, that get their fees fetched. |
 | `enrich.max_calls` | Get Trips calls per run: for `run` it caps trip details for Shortlist results; for `enrich` it caps the pre-screened candidates. Set to 0 to skip. |
 | `value_per_mile_cents` | Bands for value per mile against a cash fare. |

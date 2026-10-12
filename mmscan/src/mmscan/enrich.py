@@ -107,14 +107,14 @@ def enrich(
     return stats
 
 
-def shortlist_candidates(store: Store, run_id: int) -> list[str]:
+def shortlist_candidates(store: Store, cfg: Config, run_id: int) -> list[str]:
     """Availabilities on the run's Shortlist whose trip details are not stored yet, best first.
     Their fees are already known from the summary; the trips add flight numbers, times and the
     booking link, so only results worth acting on cost a Get Trips call."""
     from mmscan.report import load_results, shortlist
 
     out: list[str] = []
-    for s in shortlist(load_results(store, run_id)):
+    for s in shortlist(load_results(store, run_id), cfg):
         if s.availability_id in out or store.has_fetch(s.availability_id, s.updated_at or ""):
             continue
         out.append(s.availability_id)
