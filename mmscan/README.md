@@ -134,7 +134,17 @@ was last seen.
 - **Live API:** `mmscan check` ran on 2026-10-12; see
   [`docs/api-findings.md`](docs/api-findings.md). Main finding: fees are in
   USD and the summary already carries them.
-- **`include_filtered` comparison (milestone 1):** pending a live scan.
+- **First scan (2026-10-12):** 36 calls for 26,386 region results and 3,931
+  watchlist results (about 15 pages of 1,000 per region direction, 5 for the
+  watchlist); about 30,300 distinct availabilities, 49,486 priced cabin
+  results.
+- **`include_filtered` comparison (2026-10-12, 31 calls):** with
+  `include_filtered=true` the two region directions returned 30,320 distinct
+  availabilities against 30,317 with the default: 5 extra and 2 missing, which
+  is scan timing, not hidden data. Including them moved no route baseline
+  (20th percentile and median shift 0.0% on all 32 Southeast Asia routes with
+  15 or more samples). Miles & More hides essentially nothing, so the default
+  `include_filtered: false` stays.
 - **Fee spread per route (milestone 2):** pending a live enrich.
   `mmscan enrich` prints min, median and max fee per route and cabin.
 
