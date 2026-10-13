@@ -1,0 +1,510 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>mmscan dashboard mockup</title>
+<style>
+:root {
+  --bg: #f6f4ef; --surface: #ffffff; --surface-2: #efece5; --ink: #1d2327; --ink-2: #565f66; --line: #ddd8cc;
+  --accent: #0f6b66; --accent-ink: #ffffff; --accent-soft: #d9eeeb;
+  --good: #1b6e3a; --good-soft: #dcf0e2; --warn: #8a5a00; --warn-soft: #fbecc8;
+  --bad: #a3321f; --bad-soft: #f8dcd6; --info: #2f5aa8; --info-soft: #dde7f7;
+  --heat-0: #cfeadf; --heat-1: #e9f2d4; --heat-2: #f6e8b8; --heat-3: #f3cfae; --heat-4: #ecb4a6;
+  --radius: 12px; --shadow: 0 1px 2px rgba(0,0,0,.06), 0 4px 14px rgba(0,0,0,.05);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14181a; --surface: #1c2225; --surface-2: #252c30; --ink: #eceae4; --ink-2: #9ea8ad; --line: #333c41;
+    --accent: #4fc0b6; --accent-ink: #082624; --accent-soft: #17403d;
+    --good: #6fd08f; --good-soft: #183a25; --warn: #f0c060; --warn-soft: #3d3010;
+    --bad: #f08a78; --bad-soft: #43201a; --info: #8db0f0; --info-soft: #1f2e4d;
+    --heat-0: #1d4a40; --heat-1: #3a4a24; --heat-2: #55491c; --heat-3: #5f3a22; --heat-4: #63302a;
+    --shadow: none;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #14181a; --surface: #1c2225; --surface-2: #252c30; --ink: #eceae4; --ink-2: #9ea8ad; --line: #333c41;
+  --accent: #4fc0b6; --accent-ink: #082624; --accent-soft: #17403d;
+  --good: #6fd08f; --good-soft: #183a25; --warn: #f0c060; --warn-soft: #3d3010;
+  --bad: #f08a78; --bad-soft: #43201a; --info: #8db0f0; --info-soft: #1f2e4d;
+  --heat-0: #1d4a40; --heat-1: #3a4a24; --heat-2: #55491c; --heat-3: #5f3a22; --heat-4: #63302a;
+  --shadow: none;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+h1, h2, h3 { margin: 0; line-height: 1.2; }
+h2 { font-size: 20px; } h3 { font-size: 15px; }
+button, select, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+a { color: var(--accent); }
+.wrap { max-width: 1120px; margin: 0 auto; padding: 0 16px; }
+.num { font-variant-numeric: tabular-nums; }
+.muted { color: var(--ink-2); }
+.small { font-size: 13px; }
+
+/* top bar */
+.top { background: var(--surface); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 5; }
+.top .wrap { display: flex; align-items: center; gap: 16px; min-height: 56px; flex-wrap: wrap; }
+.brand { font-weight: 700; letter-spacing: -.01em; display: flex; align-items: center; gap: 8px; }
+.brand i { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); display: inline-block; }
+nav { display: flex; gap: 4px; flex: 1; overflow-x: auto; }
+nav button { background: none; border: 0; padding: 8px 12px; border-radius: 8px; color: var(--ink-2); white-space: nowrap; }
+nav button[aria-current="page"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+nav button:hover { background: var(--surface-2); }
+.icon-btn { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 6px 10px; }
+
+/* data honesty strip */
+.strip { background: var(--surface-2); border-bottom: 1px solid var(--line); font-size: 13px; color: var(--ink-2); }
+.strip .wrap { display: flex; gap: 8px 20px; flex-wrap: wrap; padding-top: 8px; padding-bottom: 8px; align-items: center; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--good); margin-right: 6px; }
+
+main { padding: 24px 0 64px; }
+.page-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 16px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 20px; }
+.grid { display: grid; gap: 16px; }
+.g2 { grid-template-columns: 1.2fr 1fr; } .g3 { grid-template-columns: repeat(3, 1fr); } .g4 { grid-template-columns: repeat(4, 1fr); }
+@media (max-width: 860px) { .g2, .g3, .g4 { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 600px) { .g2, .g3, .g4 { grid-template-columns: 1fr; } }
+
+/* badges */
+.badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; border: 1px solid transparent; }
+.b-good { background: var(--good-soft); color: var(--good); }
+.b-warn { background: var(--warn-soft); color: var(--warn); }
+.b-bad { background: var(--bad-soft); color: var(--bad); }
+.b-info { background: var(--info-soft); color: var(--info); }
+.b-mute { background: var(--surface-2); color: var(--ink-2); border-color: var(--line); }
+
+/* buttons */
+.btn { border: 1px solid var(--line); background: var(--surface); padding: 8px 14px; border-radius: 8px; font-weight: 600; }
+.btn:hover { background: var(--surface-2); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn.primary:hover { filter: brightness(1.08); }
+:focus-visible { outline: 3px solid var(--info); outline-offset: 2px; }
+
+/* trip picker */
+.tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+.tab { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 6px 14px; }
+.tab[aria-selected="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+
+/* hero */
+.hero { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+@media (max-width: 760px) { .hero { grid-template-columns: 1fr; } }
+.big { font-size: 40px; font-weight: 700; letter-spacing: -.02em; line-height: 1.1; }
+.kv { display: flex; flex-wrap: wrap; gap: 6px 20px; margin-top: 10px; }
+.kv span b { color: var(--ink); }
+.meter { height: 10px; border-radius: 999px; background: var(--surface-2); position: relative; margin: 14px 0 6px; overflow: visible; }
+.meter > div { height: 100%; border-radius: 999px; background: var(--accent); }
+.meter .mark { position: absolute; top: -5px; width: 2px; height: 20px; background: var(--ink); }
+
+/* option list */
+.opt { display: grid; grid-template-columns: 28px 1fr auto auto; gap: 8px 16px; align-items: center; padding: 14px 0; border-top: 1px solid var(--line); }
+.opt:first-child { border-top: 0; }
+.rank { width: 28px; height: 28px; border-radius: 50%; background: var(--surface-2); display: grid; place-items: center; font-weight: 700; font-size: 13px; }
+.opt .legs { display: grid; gap: 2px; }
+.opt .price { text-align: right; font-weight: 700; font-size: 18px; }
+@media (max-width: 640px) { .opt { grid-template-columns: 28px 1fr; } .opt .price { text-align: left; grid-column: 2; } .opt .act { grid-column: 2; } }
+
+/* calendar */
+.cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.cal .dow { font-size: 11px; color: var(--ink-2); text-align: center; }
+.cal button, .cal div.empty { aspect-ratio: 1.15; border-radius: 6px; border: 1px solid transparent; font-size: 12px; padding: 2px; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.15; }
+.cal button:hover { border-color: var(--ink); }
+.cal .d { font-size: 10px; color: var(--ink-2); }
+.cal .best { outline: 2px solid var(--ink); }
+.legend { display: flex; gap: 6px; align-items: center; font-size: 12px; color: var(--ink-2); margin-top: 10px; }
+.legend i { width: 18px; height: 10px; border-radius: 3px; display: inline-block; }
+
+/* tables */
+.tbl-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 10px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-2); font-weight: 600; cursor: pointer; }
+td.r, th.r { text-align: right; }
+tbody tr:hover { background: var(--surface-2); }
+tr.stale td { opacity: .6; }
+.filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+.chip { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 4px 12px; font-size: 13px; }
+.chip[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); font-weight: 600; }
+select, input[type=text], input[type=number], input[type=date] { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 7px 10px; }
+
+/* dialog */
+dialog { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--ink); padding: 0; width: min(560px, calc(100vw - 32px)); }
+dialog::backdrop { background: rgba(0,0,0,.45); }
+dialog form { padding: 20px; display: grid; gap: 14px; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+label { display: grid; gap: 4px; font-size: 13px; font-weight: 600; }
+label input, label select { font-weight: 400; width: 100%; }
+.err { color: var(--bad); font-size: 13px; font-weight: 600; min-height: 18px; }
+
+/* meters on health page */
+.stat { font-size: 28px; font-weight: 700; }
+.toggle { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+.toggle:first-of-type { border-top: 0; }
+.mock-note { background: var(--info-soft); color: var(--info); border-radius: 8px; padding: 8px 12px; font-size: 13px; margin-bottom: 16px; }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <div class="brand"><i></i> mmscan</div>
+    <nav id="nav" aria-label="Main">
+      <button data-view="trips">Trips</button>
+      <button data-view="deals">Deals</button>
+      <button data-view="health">Data &amp; alerts</button>
+    </nav>
+    <button class="icon-btn" id="theme" aria-label="Toggle dark mode">Theme</button>
+    <button class="icon-btn" aria-label="Log out">Log out</button>
+  </div>
+</header>
+
+<div class="strip">
+  <div class="wrap">
+    <span><span class="dot"></span><b>Last scan 23 min ago</b> · next in about 37 min</span>
+    <span>Cached seats.aero data. Confirm price and seats on miles-and-more.com before acting.</span>
+    <span>API calls today: <b class="num">64 / 300</b></span>
+  </div>
+</div>
+
+<main class="wrap" id="app"></main>
+
+<dialog id="tripDialog">
+  <form method="dialog" id="tripForm" novalidate>
+    <h2 id="dlgTitle">Edit trip</h2>
+    <label>Name <input type="text" name="name" required></label>
+    <div class="row2">
+      <label>From (airports) <input type="text" name="origins" placeholder="BRU, FRA"></label>
+      <label>To (airports) <input type="text" name="destinations" placeholder="MNL, CEB"></label>
+    </div>
+    <div class="row2">
+      <label>Leave between <span class="muted small" style="font-weight:400">start</span><input type="date" name="d1"></label>
+      <label>&nbsp;<span class="muted small" style="font-weight:400">end</span><input type="date" name="d2"></label>
+    </div>
+    <div class="row2">
+      <label>Return between <span class="muted small" style="font-weight:400">start</span><input type="date" name="r1"></label>
+      <label>&nbsp;<span class="muted small" style="font-weight:400">end</span><input type="date" name="r2"></label>
+    </div>
+    <div class="row2">
+      <label>Travellers <input type="number" name="seats" min="1" max="9"></label>
+      <label>Budget for everyone (EUR) <input type="number" name="budget" min="0" step="50"></label>
+    </div>
+    <div class="row2">
+      <label>Cabin <select name="cabin"><option>economy</option><option>business</option></select></label>
+      <label>Max stops <select name="stops"><option value="0">Nonstop</option><option value="1">1</option><option value="2">2</option></select></label>
+    </div>
+    <label style="display:flex;gap:8px;align-items:center;font-weight:400"><input type="checkbox" name="openjaw"> Allow a different airport on the way back</label>
+    <div class="err" id="formErr" role="alert"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn" value="cancel" formnovalidate>Cancel</button>
+      <button class="btn primary" id="saveTrip" value="default">Save trip</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+/* ---------- sample data (all invented for the mockup) ---------- */
+const MILE_CT = 1.16, USD_EUR = 0.92;
+const eur = n => '€' + Math.round(n).toLocaleString('en-GB');
+const mi = n => n.toLocaleString('en-GB');
+const cost = (miles, feesUsd) => miles * MILE_CT / 100 + feesUsd * USD_EUR;
+
+let trips = [
+  { id: 1, name: 'Family stay Philippines', origins: 'BRU, FRA', destinations: 'MNL, CEB', d1: '2027-06-01', d2: '2027-06-20',
+    r1: '2027-08-15', r2: '2027-08-31', seats: 2, budget: 3000, cabin: 'economy', stops: 1, openjaw: false, alertTop: 3 },
+  { id: 2, name: 'Singapore long weekend', origins: 'MUC, ZRH', destinations: 'SIN', d1: '2027-02-04', d2: '2027-02-28',
+    r1: '2027-02-10', r2: '2027-03-07', seats: 2, budget: 2200, cabin: 'business', stops: 0, openjaw: false, alertTop: 3 },
+];
+
+const options = {
+  1: [
+    { out: ['BRU','MNL','Thu 10 Jun','TK','via IST'], back: ['MNL','BRU','Fri 20 Aug','TK','via IST'], miles: [42500,42500], fees: [118,118], seats: 4, type: 'chart', age: 6, change: 'Cheaper', drop: 8, ok: true },
+    { out: ['FRA','MNL','Tue 8 Jun','TK','via IST'], back: ['MNL','FRA','Sun 22 Aug','TK','via IST'], miles: [42500,42500], fees: [131,126], seats: 2, type: 'chart', age: 11, change: 'New', ok: true },
+    { out: ['BRU','CEB','Sat 12 Jun','SQ','via SIN'], back: ['MNL','BRU','Mon 23 Aug','SQ','via SIN'], miles: [46000,46000], fees: [150,150], seats: 3, type: 'chart', age: 19, change: '', ok: true },
+    { out: ['FRA','MNL','Mon 14 Jun','LH','via MUC'], back: ['MNL','FRA','Tue 17 Aug','LH','via MUC'], miles: [31000,36000], fees: [205,205], seats: 2, type: 'dynamic', age: 9, change: 'New', ok: true },
+    { out: ['BRU','MNL','Wed 2 Jun','LX','via ZRH'], back: ['MNL','BRU','Thu 26 Aug','LX','via ZRH'], miles: [29500,33000], fees: [190,190], seats: 2, type: 'dynamic', age: 55, change: '', ok: true },
+  ],
+  2: [
+    { out: ['MUC','SIN','Thu 11 Feb','SQ','nonstop'], back: ['SIN','MUC','Mon 15 Feb','SQ','nonstop'], miles: [88000,88000], fees: [160,160], seats: 2, type: 'chart', age: 4, change: 'New', ok: true },
+    { out: ['ZRH','SIN','Fri 12 Feb','SQ','nonstop'], back: ['SIN','ZRH','Tue 16 Feb','SQ','nonstop'], miles: [88000,92000], fees: [175,175], seats: 2, type: 'chart', age: 30, change: '', ok: true },
+  ],
+};
+options[1].forEach(o => { o.pp = cost(o.miles[0], o.fees[0]) + cost(o.miles[1], o.fees[1]); });
+options[2].forEach(o => { o.pp = cost(o.miles[0], o.fees[0]) + cost(o.miles[1], o.fees[1]); });
+
+function series(seed, base, n = 30, drop = 0) {
+  let x = seed, out = [];
+  for (let i = 0; i < n; i++) { x = (x * 9301 + 49297) % 233280; out.push(base * (1 + (x / 233280 - .5) * .12) * (i > n - 6 ? 1 - drop : 1)); }
+  return out;
+}
+
+const deals = [
+  { v: 'Deal', chg: 'New', date: '2027-03-09', o: 'FRA', d: 'BKK', cab: 'Economy', miles: 42500, fees: 98, type: 'chart', car: 'TG', pct: 12, seats: 4, age: 5 },
+  { v: 'Deal', chg: 'Cheaper', date: '2027-04-21', o: 'MUC', d: 'SIN', cab: 'Business', miles: 88000, fees: 150, type: 'chart', car: 'SQ', pct: 8, seats: 2, age: 3 },
+  { v: 'Deal', chg: '', date: '2027-05-04', o: 'BRU', d: 'KUL', cab: 'Economy', miles: 42500, fees: 121, type: 'chart', car: 'TK', pct: 15, seats: 2, age: 14 },
+  { v: 'Worth a look', chg: 'New', date: '2027-02-18', o: 'ZRH', d: 'SIN', cab: 'Business', miles: 61000, fees: 310, type: 'dynamic', car: 'LX', pct: 18, seats: 2, age: 8 },
+  { v: 'Worth a look', chg: '', date: '2027-06-03', o: 'VIE', d: 'MNL', cab: 'Economy', miles: 33000, fees: 188, type: 'dynamic', car: 'OS', pct: 22, seats: 2, age: 52 },
+  { v: 'Worth a look', chg: 'Cheaper', date: '2027-01-27', o: 'FRA', d: 'KUL', cab: 'Economy', miles: 37500, fees: 140, type: 'chart', car: 'TK', pct: 25, seats: 6, age: 21 },
+  { v: 'Deal', chg: 'New', date: '2027-03-30', o: 'MUC', d: 'BKK', cab: 'Business', miles: 99000, fees: 170, type: 'chart', car: 'TG', pct: 6, seats: 2, age: 2 },
+  { v: 'Worth a look', chg: '', date: '2027-04-08', o: 'BRU', d: 'SIN', cab: 'Economy', miles: 27500, fees: 205, type: 'dynamic', car: 'SN', pct: 19, seats: 0, age: 60 },
+].map(r => ({ ...r, total: cost(r.miles, r.fees) }));
+
+/* ---------- helpers ---------- */
+const $ = (s, el = document) => el.querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function spark(vals, w = 360, h = 90, marker) {
+  const min = Math.min(...vals), max = Math.max(...vals), pad = 6;
+  const x = i => pad + i * (w - 2 * pad) / (vals.length - 1);
+  const y = v => h - pad - (v - min) / (max - min || 1) * (h - 2 * pad);
+  const pts = vals.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+  const last = vals.length - 1;
+  return `<svg viewBox="0 0 ${w} ${h}" width="100%" role="img" aria-label="Price over the last 30 days, now ${eur(vals[last])}, lowest ${eur(min)}, highest ${eur(max)}">
+    <polygon points="${pad},${h - pad} ${pts} ${w - pad},${h - pad}" fill="var(--accent-soft)"/>
+    <polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round"/>
+    <circle cx="${x(last)}" cy="${y(vals[last])}" r="4" fill="var(--accent)"/>
+  </svg>`;
+}
+
+const priceBadge = t => t === 'chart'
+  ? '<span class="badge b-good" title="Fixed partner chart: the miles price does not depend on demand">Chart price</span>'
+  : '<span class="badge b-warn" title="Dynamic Miles &amp; More price. Cached miles can differ a lot from the live price">⚠ Unverified</span>';
+const chgBadge = c => c === 'New' ? '<span class="badge b-info">New</span>' : c === 'Cheaper' ? '<span class="badge b-good">▼ Cheaper</span>' : '';
+const staleBadge = h => h > 48 ? '<span class="badge b-mute" title="Data older than 48 hours; not sent to Slack">Stale ' + h + 'h</span>' : '';
+
+/* ---------- Trips view ---------- */
+let tripId = 1, pickedDay = null;
+
+function renderTrips() {
+  const t = trips.find(x => x.id === tripId) || trips[0];
+  const opts = (options[t.id] || []).slice().sort((a, b) => a.pp - b.pp);
+  const best = opts.find(o => o.type === 'chart') || opts[0];
+  const cheaperUnv = best && opts[0] !== best && opts[0].pp < best.pp ? opts[0] : null;
+  const party = best ? best.pp * t.seats : 0;
+  const pct = best ? Math.min(100, party / (t.budget * 1.3) * 100) : 0;
+  const bud = t.budget / (t.budget * 1.3) * 100;
+  const under = best && party <= t.budget;
+  const trend = series(t.id * 7, best ? best.pp * t.seats : 2000, 30, best && best.drop ? best.drop / 100 : 0);
+  const delta = trend[29] - trend[0];
+
+  const days = []; // calendar from d1..d2
+  const start = new Date(t.d1 + 'T00:00'), end = new Date(t.d2 + 'T00:00');
+  const n = Math.round((end - start) / 864e5) + 1;
+  let s = t.id * 13;
+  for (let i = 0; i < n; i++) { s = (s * 9301 + 49297) % 233280; days.push({ date: new Date(start.getTime() + i * 864e5), v: s % 7 === 0 ? null : (best ? best.pp * t.seats : 2000) * (1 + (s / 233280) * 0.5) }); }
+  const vals = days.filter(d => d.v).map(d => d.v), lo = Math.min(...vals), hi = Math.max(...vals);
+  const heat = v => 'var(--heat-' + Math.min(4, Math.floor((v - lo) / (hi - lo + 1) * 5)) + ')';
+  const lead = (start.getDay() + 6) % 7;
+  const cal = ['Mo','Tu','We','Th','Fr','Sa','Su'].map(d => `<div class="dow">${d}</div>`).join('')
+    + '<div class="empty"></div>'.repeat(lead)
+    + days.map(d => d.v
+      ? `<button style="background:${heat(d.v)}" class="${d.v === lo ? 'best' : ''}" data-day="${d.date.toDateString()}" aria-label="${d.date.toDateString()}: ${eur(d.v)} for all travellers${d.v === lo ? ', cheapest day' : ''}"><span class="d">${d.date.getDate()}</span><b class="num">${Math.round(d.v).toLocaleString('en-GB')}</b></button>`
+      : `<div class="empty" style="background:var(--surface-2);opacity:.5" aria-label="${d.date.toDateString()}: no award seats"><span class="d">${d.date.getDate()}</span></div>`).join('');
+
+  $('#app').innerHTML = `
+    <div class="page-head">
+      <div><h2>Your trips</h2><div class="muted small">Whole-party price: miles at ${MILE_CT} ct each plus fees, times ${t.seats} travellers.</div></div>
+      <div style="display:flex;gap:8px"><button class="btn" id="editTrip">Edit trip</button><button class="btn primary" id="newTrip">+ New trip</button></div>
+    </div>
+    <div class="tabs" role="tablist">${trips.map(x => `<button class="tab" role="tab" aria-selected="${x.id === t.id}" data-trip="${x.id}">${esc(x.name)}</button>`).join('')}</div>
+
+    <section class="card hero" aria-label="Best option">
+      <div>
+        <div class="muted small">Best option right now · ${esc(t.cabin)} · ${t.seats} travellers</div>
+        <div class="big num">${best ? eur(party) : 'No seats yet'}</div>
+        ${best ? `<div class="kv small muted">
+          <span><b>${eur(best.pp)}</b> per person</span><span><b>${mi(best.miles[0] + best.miles[1])}</b> miles each</span>
+          <span><b>${eur(best.fees[0] * USD_EUR + best.fees[1] * USD_EUR)}</b> fees each</span></div>
+        <div class="meter" role="img" aria-label="${eur(party)} of ${eur(t.budget)} budget"><div style="width:${pct}%;${under ? '' : 'background:var(--bad)'}"></div><span class="mark" style="left:${bud}%"></span></div>
+        <div class="small">${under ? `<span class="badge b-good">Within budget</span> ${eur(t.budget - party)} to spare` : `<span class="badge b-bad">Over budget</span> ${eur(party - t.budget)} too much`} <span class="muted">· budget ${eur(t.budget)}</span></div>
+        ${cheaperUnv ? `<div class="small muted" style="margin-top:8px">Best chart-price option shown. A cheaper ${priceBadge('dynamic')} option exists at ${eur(cheaperUnv.pp * t.seats)}; check it live first.</div>` : ''}` : ''}
+      </div>
+      <div>
+        <div style="display:flex;justify-content:space-between;align-items:baseline"><h3>Best price, last 30 days</h3>
+          <span class="badge ${delta <= 0 ? 'b-good' : 'b-warn'}">${delta <= 0 ? '▼' : '▲'} ${eur(Math.abs(delta))}</span></div>
+        ${spark(trend)}
+        <div class="muted small">Lowest ${eur(Math.min(...trend))} · highest ${eur(Math.max(...trend))}</div>
+      </div>
+    </section>
+
+    <div class="grid g2" style="margin-top:16px">
+      <section class="card" aria-label="Top options">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px"><h3>Best 5 round trips</h3>
+          <span class="muted small">Slack alerts: top ${t.alertTop}</span></div>
+        ${opts.length ? opts.map((o, i) => `
+        <div class="opt">
+          <div class="rank">${i + 1}</div>
+          <div class="legs">
+            <div><b>${o.out[0]} → ${o.out[1]}</b> <span class="muted">${o.out[2]} · ${o.out[3]} ${o.out[4]}</span></div>
+            <div><b>${o.back[0]} → ${o.back[1]}</b> <span class="muted">${o.back[2]} · ${o.back[3]} ${o.back[4]}</span></div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">${priceBadge(o.type)}${chgBadge(o.change)}${staleBadge(o.age)}
+              <span class="badge b-mute">${o.seats ? o.seats + ' seats' : 'Seats unknown'}</span></div>
+          </div>
+          <div class="price num">${eur(o.pp * t.seats)}<div class="muted small" style="font-weight:400">${eur(o.pp)} pp</div></div>
+          <div class="act"><a class="btn" href="#" onclick="return false">Book ↗</a></div>
+        </div>`).join('') : '<p class="muted">Nothing found for these dates yet. The next scan runs in about 37 minutes.</p>'}
+      </section>
+
+      <section class="card" aria-label="Cheapest day calendar">
+        <h3>Cheapest day to leave</h3>
+        <div class="muted small" style="margin-bottom:10px">${start.toLocaleDateString('en-GB', {month:'long', year:'numeric'})}, whole-party price. Greyed days have no award seats.</div>
+        <div class="cal">${cal}</div>
+        <div class="legend">Cheaper <i style="background:var(--heat-0)"></i><i style="background:var(--heat-1)"></i><i style="background:var(--heat-2)"></i><i style="background:var(--heat-3)"></i><i style="background:var(--heat-4)"></i> Dearer</div>
+        <div id="dayInfo" class="small" style="margin-top:10px;min-height:22px" aria-live="polite"></div>
+      </section>
+    </div>`;
+}
+
+/* ---------- Deals view ---------- */
+const F = { verdict: 'all', cabin: 'all', price: 'all', fresh: false, route: '', sort: 'total' };
+function renderDeals() {
+  let rows = deals.filter(r =>
+    (F.verdict === 'all' || r.v === F.verdict) && (F.cabin === 'all' || r.cab === F.cabin) &&
+    (F.price === 'all' || r.type === F.price) && (!F.fresh || r.age <= 48) &&
+    (!F.route || (r.o + r.d).toLowerCase().includes(F.route.toLowerCase())));
+  rows.sort((a, b) => F.sort === 'date' ? a.date.localeCompare(b.date) : F.sort === 'pct' ? a.pct - b.pct : a.total - b.total);
+  const chip = (k, v, label) => `<button class="chip" data-f="${k}" data-v="${v}" aria-pressed="${F[k] === v}">${label}</button>`;
+  $('#app').innerHTML = `
+    <div class="page-head"><div><h2>Deals</h2>
+      <div class="muted small">One-way, per person. Ranked by total cost, not miles.</div></div>
+      <div style="display:flex;gap:8px"><a class="btn" href="#" onclick="return false">Download .xlsx</a><a class="btn" href="#" onclick="return false">.csv</a></div></div>
+    <div class="grid g4" style="margin-bottom:16px">
+      <div class="card"><div class="muted small">Deals now</div><div class="stat num">${deals.filter(d => d.v === 'Deal').length}</div></div>
+      <div class="card"><div class="muted small">New since yesterday</div><div class="stat num">${deals.filter(d => d.chg === 'New').length}</div></div>
+      <div class="card"><div class="muted small">Cheapest total</div><div class="stat num">${eur(Math.min(...deals.map(d => d.total)))}</div></div>
+      <div class="card"><div class="muted small">Chart-based vs unverified</div><div class="stat num">${deals.filter(d => d.type === 'chart').length} / ${deals.filter(d => d.type !== 'chart').length}</div></div>
+    </div>
+    <div class="filters">
+      ${chip('verdict','all','All')}${chip('verdict','Deal','Deal')}${chip('verdict','Worth a look','Worth a look')}
+      <span class="muted">|</span>${chip('cabin','Economy','Economy')}${chip('cabin','Business','Business')}
+      <span class="muted">|</span>${chip('price','chart','Chart price only')}
+      <button class="chip" data-fresh aria-pressed="${F.fresh}">Hide stale</button>
+      <input type="text" id="routeQ" placeholder="Route, e.g. FRA SIN" value="${esc(F.route)}" aria-label="Filter by route" style="width:150px">
+      <select id="sortSel" aria-label="Sort"><option value="total">Sort: total cost</option><option value="date">Sort: date</option><option value="pct">Sort: route percentile</option></select>
+    </div>
+    <div class="card tbl-wrap" style="padding:0">
+    <table><thead><tr><th>Verdict</th><th>Date</th><th>Route</th><th>Cabin</th><th class="r">Miles</th><th class="r">Fees</th><th class="r">Total</th><th>Price basis</th><th class="r">Route pctl</th><th>Seats</th><th>Age</th></tr></thead>
+    <tbody>${rows.map(r => `<tr class="${r.age > 48 ? 'stale' : ''}" tabindex="0" data-route="1">
+      <td><span class="badge ${r.v === 'Deal' ? 'b-good' : 'b-warn'}">${r.v}</span> ${chgBadge(r.chg)}</td>
+      <td class="num">${r.date}</td><td><b>${r.o} → ${r.d}</b> <span class="muted small">${r.car}</span></td><td>${r.cab}</td>
+      <td class="r num">${mi(r.miles)}</td><td class="r num">${eur(r.fees * USD_EUR)}</td><td class="r num"><b>${eur(r.total)}</b></td>
+      <td>${priceBadge(r.type)}</td><td class="r num">${r.pct}</td><td>${r.seats || '<span class="muted">unknown</span>'}</td>
+      <td>${r.age > 48 ? staleBadge(r.age) : '<span class="muted small">' + r.age + 'h</span>'}</td></tr>`).join('')
+      || '<tr><td colspan="11" class="muted" style="padding:24px">No results match these filters.</td></tr>'}</tbody></table></div>
+    <p class="muted small">Click a row to see that route's price history and how today's price compares with its usual range.</p>`;
+  $('#sortSel').value = F.sort;
+}
+
+/* ---------- Route detail (from Deals row) ---------- */
+function renderRoute() {
+  const hist = series(42, 560, 90);
+  const sorted = hist.slice().sort((a, b) => a - b);
+  const p20 = sorted[Math.floor(sorted.length * .2)], med = sorted[Math.floor(sorted.length / 2)];
+  $('#app').innerHTML = `
+    <p><button class="btn" id="back">← Back to deals</button></p>
+    <div class="page-head"><div><h2>FRA → BKK · Economy</h2><div class="muted small">90 days of observed prices for this route, one-way per person.</div></div>
+      ${priceBadge('chart')}</div>
+    <div class="grid g2">
+      <section class="card"><h3>Lowest total seen per scan</h3>${spark(hist, 560, 160)}
+        <div class="muted small">Dashed lines in the real build: 20th percentile ${eur(p20)} and median ${eur(med)}.</div></section>
+      <section class="card"><h3>Where today's price sits</h3>
+        <div class="big num">${eur(cost(42500, 98))}</div>
+        <p class="muted">${eur(med - cost(42500,98))} below the route median (${eur(med)}). Cheaper than 88% of the prices seen on this route.</p>
+        <div class="kv small"><span>Chart rate <b>42,500</b> miles</span><span>Samples <b>312</b></span><span>Fees usually <b>€90–€130</b></span></div>
+        <p class="small"><a class="btn" href="#" onclick="return false">Open on miles-and-more.com ↗</a></p></section>
+    </div>`;
+}
+
+/* ---------- Data & alerts view ---------- */
+function renderHealth() {
+  $('#app').innerHTML = `
+    <div class="page-head"><div><h2>Data &amp; alerts</h2><div class="muted small">Is the tool healthy, and how far can the numbers be trusted?</div></div></div>
+    <div class="grid g3">
+      <section class="card"><h3>API quota today</h3><div class="stat num" style="margin-top:6px">64 <span class="muted" style="font-size:16px">/ 300 cap</span></div>
+        <div class="meter"><div style="width:21%"></div></div><div class="muted small">Allowance 1,000 a day · resets 00:00 UTC · hourly scan uses 2 calls plus 2 per trip.</div></section>
+      <section class="card"><h3>Scanner</h3><div style="margin-top:6px"><span class="badge b-good">● Healthy</span></div>
+        <div class="muted small" style="margin-top:8px">Last watch 23 min ago, ok.<br>Last full run today 05:37 UTC, ok.<br>Failed runs this week: <b>0</b></div></section>
+      <section class="card"><h3>USD → EUR rate</h3><div class="stat num" style="margin-top:6px">0.92</div>
+        <div class="muted small">Set 41 days ago.</div><div style="margin-top:6px"><span class="badge b-bad">Rate older than 30 days</span></div></section>
+    </div>
+    <div class="grid g2" style="margin-top:16px">
+      <section class="card"><h3>How far to trust cached miles</h3>
+        <p class="muted small">Cached versus live price on the sample checked by hand. Dynamic carriers drift; chart carriers do not.</p>
+        <div class="tbl-wrap"><table><thead><tr><th>Carrier</th><th>Basis</th><th class="r">Samples</th><th class="r">Live ÷ cached</th></tr></thead><tbody>
+          <tr><td>TK</td><td>${priceBadge('chart')}</td><td class="r num">24</td><td class="r num">1.00×</td></tr>
+          <tr><td>SQ</td><td>${priceBadge('chart')}</td><td class="r num">21</td><td class="r num">1.00×</td></tr>
+          <tr><td>LH</td><td>${priceBadge('dynamic')}</td><td class="r num">23</td><td class="r num">1.8× (1.0–2.9)</td></tr>
+          <tr><td>LX</td><td>${priceBadge('dynamic')}</td><td class="r num">20</td><td class="r num">1.5× (1.0–2.4)</td></tr>
+          <tr><td>WK</td><td><span class="badge b-mute">Unclear</span></td><td class="r num">3</td><td class="r muted">too few</td></tr>
+        </tbody></table></div></section>
+      <section class="card"><h3>Slack alerts</h3>
+        <div class="toggle"><div><b>Alerts on</b><div class="muted small">Quiet hour = no message.</div></div><input type="checkbox" checked aria-label="Alerts on"></div>
+        <div class="toggle"><div><b>Chart-price Deals</b><div class="muted small">New, or total fell 5% or more.</div></div><input type="checkbox" checked aria-label="Chart-price Deals"></div>
+        <div class="toggle"><div><b>Trip options</b><div class="muted small">Top 3 per trip, new or cheaper.</div></div><input type="checkbox" checked aria-label="Trip options"></div>
+        <div class="toggle"><div><b>Unverified dynamic prices</b><div class="muted small">Off until the gap table above is trusted.</div></div><input type="checkbox" aria-label="Unverified dynamic prices"></div>
+        <div class="toggle"><div><b>Stale results (over 48h)</b><div class="muted small">Never sent.</div></div><input type="checkbox" disabled aria-label="Stale results"></div>
+      </section>
+    </div>
+    <section class="card" style="margin-top:16px"><h3>Recent runs</h3><div class="tbl-wrap"><table>
+      <thead><tr><th>When (UTC)</th><th>Kind</th><th class="r">Calls</th><th class="r">Results</th><th class="r">New</th><th class="r">Cheaper</th><th>Status</th></tr></thead><tbody>
+      ${[['09:07','watch',2,3931,0,1,'ok'],['08:07','watch',2,3931,2,0,'ok'],['07:07','watch',2,3928,0,0,'ok'],['05:37','full run',48,30317,6,4,'ok'],['04:07','watch',2,3920,1,0,'ok']].map(r => `<tr><td class="num">${r[0]}</td><td>${r[1]}</td><td class="r num">${r[2]}</td><td class="r num">${r[3].toLocaleString('en-GB')}</td><td class="r num">${r[4]}</td><td class="r num">${r[5]}</td><td><span class="badge b-good">${r[6]}</span></td></tr>`).join('')}
+      </tbody></table></div></section>`;
+}
+
+/* ---------- router and events ---------- */
+let view = 'trips';
+function show(v) {
+  view = v;
+  document.querySelectorAll('#nav button').forEach(b => b.setAttribute('aria-current', b.dataset.view === (v === 'route' ? 'deals' : v) ? 'page' : 'false'));
+  ({ trips: renderTrips, deals: renderDeals, route: renderRoute, health: renderHealth })[v]();
+  window.scrollTo(0, 0);
+}
+document.addEventListener('click', e => {
+  const t = e.target.closest('button, tr[data-route]'); if (!t) return;
+  if (t.dataset.view) show(t.dataset.view);
+  else if (t.dataset.trip) { tripId = +t.dataset.trip; renderTrips(); }
+  else if (t.dataset.day) { const o = options[tripId][0]; $('#dayInfo').innerHTML = `<b>${t.dataset.day}</b>: ${t.getAttribute('aria-label').split(': ')[1]}. <a href="#" onclick="return false">Book this day ↗</a>`; }
+  else if (t.dataset.f) { F[t.dataset.f] = F[t.dataset.f] === t.dataset.v && t.dataset.v !== 'all' ? 'all' : t.dataset.v; renderDeals(); }
+  else if (t.hasAttribute('data-fresh')) { F.fresh = !F.fresh; renderDeals(); }
+  else if (t.dataset.route) show('route');
+  else if (t.id === 'back') show('deals');
+  else if (t.id === 'editTrip' || t.id === 'newTrip') openDialog(t.id === 'newTrip');
+});
+document.addEventListener('input', e => {
+  if (e.target.id === 'routeQ') { F.route = e.target.value; const p = e.target.selectionStart; renderDeals(); const q = $('#routeQ'); q.focus(); q.setSelectionRange(p, p); }
+});
+document.addEventListener('change', e => { if (e.target.id === 'sortSel') { F.sort = e.target.value; renderDeals(); } });
+document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.matches('tr[data-route]')) show('route'); });
+
+/* trip dialog with inline validation, naming the bad field */
+function openDialog(isNew) {
+  const f = $('#tripForm'), t = isNew ? { name: '', origins: '', destinations: '', d1: '', d2: '', r1: '', r2: '', seats: 2, budget: '', cabin: 'economy', stops: 1, openjaw: false } : trips.find(x => x.id === tripId);
+  $('#dlgTitle').textContent = isNew ? 'New trip' : 'Edit trip';
+  for (const k of ['name','origins','destinations','d1','d2','r1','r2','seats','budget','cabin','stops']) f.elements[k].value = t[k];
+  f.elements.openjaw.checked = !!t.openjaw; $('#formErr').textContent = '';
+  f.dataset.new = isNew ? '1' : ''; $('#tripDialog').showModal();
+}
+$('#saveTrip').addEventListener('click', e => {
+  const f = $('#tripForm'), v = k => f.elements[k].value.trim(), err = m => { e.preventDefault(); $('#formErr').textContent = m; };
+  const codes = s => s.split(/[ ,]+/).filter(Boolean);
+  if (!v('name')) return err('name: give the trip a name.');
+  if (!codes(v('origins')).every(c => /^[A-Za-z]{3}$/.test(c)) || !codes(v('origins')).length) return err('origins: use 3-letter airport codes, e.g. BRU, FRA.');
+  if (!codes(v('destinations')).every(c => /^[A-Za-z]{3}$/.test(c)) || !codes(v('destinations')).length) return err('destinations: use 3-letter airport codes, e.g. MNL, CEB.');
+  if (!v('d1') || !v('d2') || v('d1') > v('d2')) return err('depart: the end date must be on or after the start date.');
+  if (v('r1') && v('r1') <= v('d1')) return err('return: must start after the departure window starts.');
+  if (+v('seats') < 1) return err('seats: at least 1 traveller.');
+  const rec = { id: f.dataset.new ? Date.now() : tripId, name: v('name'), origins: v('origins').toUpperCase(), destinations: v('destinations').toUpperCase(), d1: v('d1'), d2: v('d2'), r1: v('r1'), r2: v('r2'),
+    seats: +v('seats'), budget: +v('budget') || 0, cabin: v('cabin'), stops: +v('stops'), openjaw: f.elements.openjaw.checked, alertTop: 3 };
+  if (f.dataset.new) { trips.push(rec); options[rec.id] = []; tripId = rec.id; } else trips = trips.map(x => x.id === rec.id ? { ...x, ...rec } : x);
+  renderTrips();
+});
+
+/* theme */
+$('#theme').addEventListener('click', () => {
+  const r = document.documentElement, dark = r.dataset.theme ? r.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  r.dataset.theme = dark ? 'light' : 'dark';
+});
+show('trips');
+</script>
+</body>
+</html>
