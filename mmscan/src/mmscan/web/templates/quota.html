@@ -1,15 +1,17 @@
 {% extends "base.html" %}
 {% block title %}Quota · mmscan{% endblock %}
 {% block body %}
-<h1>API quota</h1>
-<p><strong>{{ q.used }}</strong> of {{ q.cap }} calls used today (UTC).</p>
-<div class="meter" role="img" aria-label="{{ q.pct }} percent of the daily cap used"><div style="width: {{ q.pct }}%"></div></div>
-<p class="note">X-RateLimit-Remaining on the last call:
-  {{ q.remaining_header if q.remaining_header is not none else "unknown" }}.
-  This is the cap mmscan enforces on itself; seats.aero's own limit is counted separately.</p>
-<h1 style="margin-top:20px">Calls per day</h1>
-<div class="scroll"><table style="max-width:320px">
+<div class="page-head"><h1>API quota</h1><span class="sub">resets at 00:00 UTC</span></div>
+<div class="panel" style="padding:18px">
+  <p style="margin:0 0 10px"><strong style="font-size:28px;letter-spacing:-.02em">{{ q.used }}</strong> of {{ q.cap }} calls used today (UTC)</p>
+  <div class="meter {{ 'bad' if q.pct >= 90 else 'warn' if q.pct >= 70 }}" role="img" aria-label="{{ q.pct }} percent of the daily cap used"><div style="width: {{ q.pct }}%"></div></div>
+  <p class="note" style="margin-bottom:0">X-RateLimit-Remaining on the last call:
+    <strong>{{ q.remaining_header if q.remaining_header is not none else "unknown" }}</strong>.
+    This is the cap mmscan enforces on itself; seats.aero's own limit is counted separately.</p>
+</div>
+<h2>Calls per day</h2>
+<div class="panel" style="max-width:420px"><div class="scroll"><table>
 <thead><tr><th>Day (UTC)</th><th class="n">Calls</th></tr></thead>
-<tbody>{% for d, n in q.days %}<tr><td>{{ d }}</td><td class="n">{{ n }}</td></tr>{% else %}<tr><td colspan="2">No calls recorded.</td></tr>{% endfor %}</tbody>
-</table></div>
+<tbody>{% for d, n in q.days %}<tr><td>{{ d }}</td><td class="n">{{ n }}</td></tr>{% else %}<tr><td class="empty" colspan="2">No calls recorded.</td></tr>{% endfor %}</tbody>
+</table></div></div>
 {% endblock %}
