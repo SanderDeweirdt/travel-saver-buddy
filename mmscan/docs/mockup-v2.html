@@ -128,6 +128,21 @@ tr.stale td { opacity: .6; }
 .chip[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); font-weight: 600; }
 select, input[type=text], input[type=number], input[type=date] { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 7px 10px; }
 
+/* deal cards */
+.deal-list { display: grid; gap: 12px; }
+.deal.stale { opacity: .65; }
+.deal-top { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.route { font-size: 17px; } .tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.saving { text-align: right; } .big2 { font-size: 28px; font-weight: 700; letter-spacing: -.02em; line-height: 1.15; margin-top: 4px; } .big2.neg { color: var(--bad); }
+.cmp { display: grid; grid-template-columns: 120px 1fr 80px; gap: 10px; align-items: center; margin-top: 10px; }
+.cmp .cv { text-align: right; }
+.track { height: 14px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
+.fill { height: 100%; border-radius: 999px; } .fill.grey { background: var(--ink-2); opacity: .55; } .fill.acc { background: var(--accent); } .fill.bad { background: var(--bad); }
+.split { margin-top: 12px; } .deal-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+a.btn { text-decoration: none; display: inline-block; }
+.hero-deal { display: flex; justify-content: space-between; gap: 24px; flex-wrap: wrap; margin-bottom: 16px; background: var(--accent-soft); border-color: var(--accent); }
+.hero-stats { display: flex; gap: 28px; } label.inline { display: flex; align-items: center; gap: 8px; }
+@media (max-width: 600px) { .cmp { grid-template-columns: 90px 1fr 70px; } .saving { text-align: left; } }
 /* dialog */
 dialog { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--ink); padding: 0; width: min(560px, calc(100vw - 32px)); }
 dialog::backdrop { background: rgba(0,0,0,.45); }
@@ -150,8 +165,8 @@ label input, label select { font-weight: 400; width: 100%; }
   <div class="wrap">
     <div class="brand"><i></i> mmscan</div>
     <nav id="nav" aria-label="Main">
-      <button data-view="trips">Trips</button>
-      <button data-view="deals">Deals</button>
+      <button data-view="deals">Best deals</button>
+      <button data-view="trips">My trips</button>
       <button data-view="health">Data &amp; alerts</button>
     </nav>
     <button class="icon-btn" id="theme" aria-label="Toggle dark mode">Theme</button>
@@ -239,15 +254,16 @@ function series(seed, base, n = 30, drop = 0) {
 }
 
 const deals = [
-  { v: 'Deal', chg: 'New', date: '2027-03-09', o: 'FRA', d: 'BKK', cab: 'Economy', miles: 42500, fees: 98, type: 'chart', car: 'TG', pct: 12, seats: 4, age: 5 },
-  { v: 'Deal', chg: 'Cheaper', date: '2027-04-21', o: 'MUC', d: 'SIN', cab: 'Business', miles: 88000, fees: 150, type: 'chart', car: 'SQ', pct: 8, seats: 2, age: 3 },
-  { v: 'Deal', chg: '', date: '2027-05-04', o: 'BRU', d: 'KUL', cab: 'Economy', miles: 42500, fees: 121, type: 'chart', car: 'TK', pct: 15, seats: 2, age: 14 },
-  { v: 'Worth a look', chg: 'New', date: '2027-02-18', o: 'ZRH', d: 'SIN', cab: 'Business', miles: 61000, fees: 310, type: 'dynamic', car: 'LX', pct: 18, seats: 2, age: 8 },
-  { v: 'Worth a look', chg: '', date: '2027-06-03', o: 'VIE', d: 'MNL', cab: 'Economy', miles: 33000, fees: 188, type: 'dynamic', car: 'OS', pct: 22, seats: 2, age: 52 },
-  { v: 'Worth a look', chg: 'Cheaper', date: '2027-01-27', o: 'FRA', d: 'KUL', cab: 'Economy', miles: 37500, fees: 140, type: 'chart', car: 'TK', pct: 25, seats: 6, age: 21 },
-  { v: 'Deal', chg: 'New', date: '2027-03-30', o: 'MUC', d: 'BKK', cab: 'Business', miles: 99000, fees: 170, type: 'chart', car: 'TG', pct: 6, seats: 2, age: 2 },
-  { v: 'Worth a look', chg: '', date: '2027-04-08', o: 'BRU', d: 'SIN', cab: 'Economy', miles: 27500, fees: 205, type: 'dynamic', car: 'SN', pct: 19, seats: 0, age: 60 },
-].map(r => ({ ...r, total: cost(r.miles, r.fees) }));
+  { date: '2027-04-21', o: 'MUC', d: 'SIN', cab: 'Business', miles: 88000, fees: 150, cash: 2350, type: 'chart', car: 'SQ', chg: 'Cheaper', seats: 2, age: 3 },
+  { date: '2027-03-30', o: 'MUC', d: 'BKK', cab: 'Business', miles: 99000, fees: 170, cash: 2400, type: 'chart', car: 'TG', chg: 'New', seats: 2, age: 2 },
+  { date: '2027-02-18', o: 'ZRH', d: 'SIN', cab: 'Business', miles: 61000, fees: 310, cash: 2600, type: 'dynamic', car: 'LX', chg: 'New', seats: 2, age: 8 },
+  { date: '2027-03-09', o: 'FRA', d: 'BKK', cab: 'Economy', miles: 42500, fees: 98, cash: 690, type: 'chart', car: 'TG', chg: 'New', seats: 4, age: 5 },
+  { date: '2027-01-27', o: 'FRA', d: 'KUL', cab: 'Economy', miles: 37500, fees: 140, cash: 640, type: 'chart', car: 'TK', chg: 'Cheaper', seats: 6, age: 21 },
+  { date: '2027-06-03', o: 'VIE', d: 'MNL', cab: 'Economy', miles: 33000, fees: 188, cash: 780, type: 'dynamic', car: 'OS', chg: '', seats: 2, age: 52 },
+  { date: '2027-05-04', o: 'BRU', d: 'KUL', cab: 'Economy', miles: 42500, fees: 121, cash: 590, type: 'chart', car: 'TK', chg: '', seats: 2, age: 14 },
+  { date: '2027-04-08', o: 'BRU', d: 'SIN', cab: 'Economy', miles: 27500, fees: 205, cash: 720, type: 'dynamic', car: 'SN', chg: '', seats: 0, age: 60 },
+].map(r => { const total = cost(r.miles, r.fees); return { ...r, total, save: r.cash - total, pct: (r.cash - total) / r.cash * 100,
+  vpm: (r.cash - r.fees * USD_EUR) / r.miles * 100 }; });
 
 /* ---------- helpers ---------- */
 const $ = (s, el = document) => el.querySelector(s);
@@ -355,43 +371,56 @@ function renderTrips() {
     </div>`;
 }
 
-/* ---------- Deals view ---------- */
-const F = { verdict: 'all', cabin: 'all', price: 'all', fresh: false, route: '', sort: 'total' };
+/* ---------- Deals view (landing) ---------- */
+const F = { cabin: 'all', price: 'all', fresh: true, route: '', sort: 'pct', pax: 2 };
+const verdictOf = r => r.pct >= 30 ? ['Great deal', 'b-good'] : r.pct >= 10 ? ['Good deal', 'b-good'] : r.pct >= 0 ? ['Marginal', 'b-warn'] : ['Cash is cheaper', 'b-bad'];
+function dealCard(r, rank) {
+  const [vl, vc] = verdictOf(r), x = F.pax, mx = Math.max(r.cash, r.total);
+  const bar = (label, val, cls) => `<div class="cmp"><span class="small muted cl">${label}</span><div class="track"><div class="fill ${cls}" style="width:${val / mx * 100}%"></div></div><b class="num cv">${eur(val * x)}</b></div>`;
+  return `<article class="card deal ${r.age > 48 ? 'stale' : ''}">
+    <div class="deal-top">
+      <div><div class="route"><b>${r.o} → ${r.d}</b> <span class="muted">${r.cab} · ${r.car} · ${new Date(r.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span></div>
+        <div class="tags">${priceBadge(r.type)}${chgBadge(r.chg)}${staleBadge(r.age)}<span class="badge b-mute">${r.seats ? r.seats + ' seats' : 'Seats unknown'}</span></div></div>
+      <div class="saving"><span class="badge ${vc}">${vl}</span>
+        <div class="big2 num ${r.save < 0 ? 'neg' : ''}">${r.save >= 0 ? 'Save ' : 'Pay '}${eur(Math.abs(r.save) * x)}</div>
+        <div class="small muted">${r.save >= 0 ? Math.round(r.pct) + '% below' : Math.round(-r.pct) + '% above'} the usual cash price</div></div>
+    </div>
+    ${bar('Usual cash price', r.cash, 'grey')}
+    ${bar('With miles', r.total, r.save >= 0 ? 'acc' : 'bad')}
+    <div class="split small muted">Pay <b class="num">${mi(r.miles * x)}</b> miles <span title="at ${MILE_CT} ct per mile">(≈ ${eur(r.miles * MILE_CT / 100 * x)})</span> + <b class="num">${eur(r.fees * USD_EUR * x)}</b> cash fees
+      · <span title="Cash saved per mile spent. Above ${MILE_CT} ct you gain over buying the miles.">${r.vpm.toFixed(1)} ct per mile</span></div>
+    <div class="deal-actions"><a class="btn primary" href="#" onclick="return false">Book on Miles &amp; More ↗</a><button class="btn" data-route="1">Price history</button></div>
+  </article>`;
+}
 function renderDeals() {
-  let rows = deals.filter(r =>
-    (F.verdict === 'all' || r.v === F.verdict) && (F.cabin === 'all' || r.cab === F.cabin) &&
-    (F.price === 'all' || r.type === F.price) && (!F.fresh || r.age <= 48) &&
-    (!F.route || (r.o + r.d).toLowerCase().includes(F.route.toLowerCase())));
-  rows.sort((a, b) => F.sort === 'date' ? a.date.localeCompare(b.date) : F.sort === 'pct' ? a.pct - b.pct : a.total - b.total);
+  let rows = deals.filter(r => (F.cabin === 'all' || r.cab === F.cabin) && (F.price === 'all' || r.type === F.price) && (!F.fresh || r.age <= 48) && r.seats !== 1 &&
+    (!F.route || (r.o + r.d).toLowerCase().includes(F.route.toLowerCase().replace(/\W/g, ''))));
+  rows = rows.filter(r => !r.seats || r.seats >= F.pax);
+  rows.sort((a, b) => F.sort === 'save' ? b.save - a.save : F.sort === 'total' ? a.total - b.total : F.sort === 'date' ? a.date.localeCompare(b.date) : b.pct - a.pct);
+  const top = rows.find(r => r.type === 'chart' && r.save > 0), good = rows.filter(r => r.pct >= 10).length;
   const chip = (k, v, label) => `<button class="chip" data-f="${k}" data-v="${v}" aria-pressed="${F[k] === v}">${label}</button>`;
   $('#app').innerHTML = `
-    <div class="page-head"><div><h2>Deals</h2>
-      <div class="muted small">One-way, per person. Ranked by total cost, not miles.</div></div>
-      <div style="display:flex;gap:8px"><a class="btn" href="#" onclick="return false">Download .xlsx</a><a class="btn" href="#" onclick="return false">.csv</a></div></div>
-    <div class="grid g4" style="margin-bottom:16px">
-      <div class="card"><div class="muted small">Deals now</div><div class="stat num">${deals.filter(d => d.v === 'Deal').length}</div></div>
-      <div class="card"><div class="muted small">New since yesterday</div><div class="stat num">${deals.filter(d => d.chg === 'New').length}</div></div>
-      <div class="card"><div class="muted small">Cheapest total</div><div class="stat num">${eur(Math.min(...deals.map(d => d.total)))}</div></div>
-      <div class="card"><div class="muted small">Chart-based vs unverified</div><div class="stat num">${deals.filter(d => d.type === 'chart').length} / ${deals.filter(d => d.type !== 'chart').length}</div></div>
-    </div>
+    <div class="page-head"><div><h2>Best deals right now</h2>
+      <div class="muted small">What you pay with miles (miles at ${MILE_CT} ct each plus cash fees), against the usual cash price for that route.</div></div>
+      <label class="inline">Travellers <select id="paxSel" aria-label="Travellers">${[1,2,3,4].map(n => `<option ${n === F.pax ? 'selected' : ''}>${n}</option>`).join('')}</select></label></div>
+    ${top ? `<section class="card hero-deal" aria-label="Top deal">
+      <div><div class="muted small">Best verified deal today</div>
+        <div class="big"><span class="num">${eur(top.save * F.pax)}</span> saved</div>
+        <div><b>${top.o} → ${top.d}</b> ${top.cab}, ${top.car} · pay ${eur(top.total * F.pax)} instead of ${eur(top.cash * F.pax)} for ${F.pax}</div></div>
+      <div class="hero-stats"><div><div class="stat num">${good}</div><div class="muted small">deals 10%+ below usual</div></div>
+        <div><div class="stat num">${rows.filter(r => r.chg === 'New').length}</div><div class="muted small">new since yesterday</div></div></div>
+    </section>` : ''}
     <div class="filters">
-      ${chip('verdict','all','All')}${chip('verdict','Deal','Deal')}${chip('verdict','Worth a look','Worth a look')}
-      <span class="muted">|</span>${chip('cabin','Economy','Economy')}${chip('cabin','Business','Business')}
+      ${chip('cabin','all','All cabins')}${chip('cabin','Economy','Economy')}${chip('cabin','Business','Business')}
       <span class="muted">|</span>${chip('price','chart','Chart price only')}
       <button class="chip" data-fresh aria-pressed="${F.fresh}">Hide stale</button>
-      <input type="text" id="routeQ" placeholder="Route, e.g. FRA SIN" value="${esc(F.route)}" aria-label="Filter by route" style="width:150px">
-      <select id="sortSel" aria-label="Sort"><option value="total">Sort: total cost</option><option value="date">Sort: date</option><option value="pct">Sort: route percentile</option></select>
+      <input type="text" id="routeQ" placeholder="Route, e.g. FRA SIN" value="${esc(F.route)}" aria-label="Filter by route" style="width:180px">
+      <select id="sortSel" aria-label="Sort"><option value="pct">Biggest % saving</option><option value="save">Biggest € saving</option><option value="total">Lowest price</option><option value="date">Earliest date</option></select>
     </div>
-    <div class="card tbl-wrap" style="padding:0">
-    <table><thead><tr><th>Verdict</th><th>Date</th><th>Route</th><th>Cabin</th><th class="r">Miles</th><th class="r">Fees</th><th class="r">Total</th><th>Price basis</th><th class="r">Route pctl</th><th>Seats</th><th>Age</th></tr></thead>
-    <tbody>${rows.map(r => `<tr class="${r.age > 48 ? 'stale' : ''}" tabindex="0" data-route="1">
-      <td><span class="badge ${r.v === 'Deal' ? 'b-good' : 'b-warn'}">${r.v}</span> ${chgBadge(r.chg)}</td>
-      <td class="num">${r.date}</td><td><b>${r.o} → ${r.d}</b> <span class="muted small">${r.car}</span></td><td>${r.cab}</td>
-      <td class="r num">${mi(r.miles)}</td><td class="r num">${eur(r.fees * USD_EUR)}</td><td class="r num"><b>${eur(r.total)}</b></td>
-      <td>${priceBadge(r.type)}</td><td class="r num">${r.pct}</td><td>${r.seats || '<span class="muted">unknown</span>'}</td>
-      <td>${r.age > 48 ? staleBadge(r.age) : '<span class="muted small">' + r.age + 'h</span>'}</td></tr>`).join('')
-      || '<tr><td colspan="11" class="muted" style="padding:24px">No results match these filters.</td></tr>'}</tbody></table></div>
-    <p class="muted small">Click a row to see that route's price history and how today's price compares with its usual range.</p>`;
+    <div class="deal-list">${rows.map(dealCard).join('') || '<p class="card muted">No deals match these filters.</p>'}</div>
+    <details class="card" style="margin-top:16px"><summary><b>How is this calculated?</b></summary>
+      <p class="small muted">Price with miles = miles × ${MILE_CT} ct (what a mile costs you) + cash fees (taxes and surcharges, converted from USD at ${USD_EUR}). The usual cash price is the typical one-way fare for that route and cabin that you entered in <code>cash_fares.csv</code> (last updated 12 Oct). seats.aero has no cash prices, so keep that file current. "Cash is cheaper" means buying a ticket costs less than paying for the miles and fees.</p>
+      <p class="small muted"><b>Unverified</b> prices come from Lufthansa-group flights, which Miles &amp; More prices dynamically. The cached miles can be well below the live price, so open the booking link and check before you rely on them.</p></details>`;
   $('#sortSel').value = F.sort;
 }
 
@@ -405,11 +434,11 @@ function renderRoute() {
     <div class="page-head"><div><h2>FRA → BKK · Economy</h2><div class="muted small">90 days of observed prices for this route, one-way per person.</div></div>
       ${priceBadge('chart')}</div>
     <div class="grid g2">
-      <section class="card"><h3>Lowest total seen per scan</h3>${spark(hist, 560, 160)}
+      <section class="card"><h3>Price with miles, lowest seen per scan</h3>${spark(hist, 560, 160)}
         <div class="muted small">Dashed lines in the real build: 20th percentile ${eur(p20)} and median ${eur(med)}.</div></section>
       <section class="card"><h3>Where today's price sits</h3>
         <div class="big num">${eur(cost(42500, 98))}</div>
-        <p class="muted">${eur(med - cost(42500,98))} below the route median (${eur(med)}). Cheaper than 88% of the prices seen on this route.</p>
+        <p class="muted">${eur(690 - cost(42500,98))} below the usual cash price (${eur(690)}). Cheaper than 88% of the award prices seen on this route (median ${eur(med)}).</p>
         <div class="kv small"><span>Chart rate <b>42,500</b> miles</span><span>Samples <b>312</b></span><span>Fees usually <b>€90–€130</b></span></div>
         <p class="small"><a class="btn" href="#" onclick="return false">Open on miles-and-more.com ↗</a></p></section>
     </div>`;
@@ -452,7 +481,7 @@ function renderHealth() {
 }
 
 /* ---------- router and events ---------- */
-let view = 'trips';
+let view = 'deals';
 function show(v) {
   view = v;
   document.querySelectorAll('#nav button').forEach(b => b.setAttribute('aria-current', b.dataset.view === (v === 'route' ? 'deals' : v) ? 'page' : 'false'));
@@ -473,7 +502,7 @@ document.addEventListener('click', e => {
 document.addEventListener('input', e => {
   if (e.target.id === 'routeQ') { F.route = e.target.value; const p = e.target.selectionStart; renderDeals(); const q = $('#routeQ'); q.focus(); q.setSelectionRange(p, p); }
 });
-document.addEventListener('change', e => { if (e.target.id === 'sortSel') { F.sort = e.target.value; renderDeals(); } });
+document.addEventListener('change', e => { if (e.target.id === 'paxSel') { F.pax = +e.target.value; renderDeals(); } if (e.target.id === 'sortSel') { F.sort = e.target.value; renderDeals(); } });
 document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.matches('tr[data-route]')) show('route'); });
 
 /* trip dialog with inline validation, naming the bad field */
@@ -504,7 +533,7 @@ $('#theme').addEventListener('click', () => {
   const r = document.documentElement, dark = r.dataset.theme ? r.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
   r.dataset.theme = dark ? 'light' : 'dark';
 });
-show('trips');
+show('deals');
 </script>
 </body>
 </html>
