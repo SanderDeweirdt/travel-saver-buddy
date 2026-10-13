@@ -27,9 +27,11 @@ def cfg(default_config_dict):
     )
 
 
-def route(totals, origin="MUC", dest="SIN", cabin="business"):
+def route(totals, origin="MUC", dest="SIN", cabin="business", carriers="SQ"):
     return [
-        scored(t, origin=origin, dest=dest, cabin=cabin, date=f"2026-12-{i + 1:02d}")
+        scored(
+            t, origin=origin, dest=dest, cabin=cabin, date=f"2026-12-{i + 1:02d}", carriers=carriers
+        )
         for i, t in enumerate(totals)
     ]
 
@@ -80,9 +82,9 @@ def test_destination_baseline_groups_by_origin_region(cfg):
 
 def test_ceiling_good_needs_miles_and_fees(cfg):
     ok, high_fee, high_miles = (
-        scored(800, miles=60000, fees=450),
-        scored(900, miles=60000, fees=451, date="2026-12-02"),
-        scored(900, miles=60001, fees=50, date="2026-12-03"),
+        scored(800, miles=100000, fees=450),
+        scored(900, miles=100000, fees=451, date="2026-12-02"),
+        scored(900, miles=100001, fees=50, date="2026-12-03"),
     )
     score_rows([ok, high_fee, high_miles], [], cfg)
     assert (ok.ceiling_good, high_fee.ceiling_good, high_miles.ceiling_good) == (True, False, False)
@@ -117,7 +119,7 @@ def test_route_without_priced_result_excluded(cfg):
 
 def test_thin_data_uses_ceiling(cfg):
     good = scored(500, miles=50000, fees=100)
-    bad = scored(900, miles=70000, fees=100, date="2026-12-02")
+    bad = scored(900, miles=100001, fees=100, date="2026-12-02")
     score_rows([good, bad], [], cfg)
     assert (good.route_good, good.destination_good, good.verdict) == (True, True, DEAL)
     assert bad.verdict == SKIP
@@ -209,3 +211,51 @@ def test_score_run_prices_from_stored_trips(tmp_path, cfg):
     assert any("empty TaxesCurrency" in w for w in warnings)
     stored = store.conn.execute("SELECT count(*) FROM results WHERE run_id=?", (run,)).fetchone()[0]
     assert stored == 2
+
+
+# --- Pricing model: fixed partner charts against dynamic Lufthansa Group fares ----------------
+
+
+def test_pricing_model_by_carrier(cfg):
+    assert cfg.pricing_model("SQ") == "fixed"
+    assert cfg.pricing_model("TG, UA") == "fixed"
+    assert cfg.pricing_model("LH, OS") == "dynamic"
+    assert cfg.pricing_model("lh") == "dynamic"  # case does not matter
+    assert cfg.pricing_model("TG, LH") == "mixed"  # long-haul operator unknown
+    assert cfg.pricing_model("") == "mixed" and cfg.pricing_model(None) == "mixed"
+
+
+def test_dynamic_carrier_never_gets_a_ceiling_deal(cfg):
+    lh = scored(300, miles=17000, fees=100, carriers="LH, OS")
+    sq = scored(300, miles=17000, fees=100, date="2026-12-02", carriers="SQ")
+    score_rows([lh, sq], [], cfg)
+    assert sq.verdict == DEAL and sq.ceiling_good is True
+    assert lh.ceiling_good is None
+    assert lh.verdict == "Unranked"  # no history to judge a moving price against
+
+
+def test_mixed_routing_is_judged_like_dynamic(cfg):
+    mixed = scored(300, miles=17000, fees=100, carriers="TG, LH")
+    score_rows([mixed], [], cfg)
+    assert mixed.verdict == "Unranked" and mixed.ceiling_good is None
+
+
+def test_fixed_carrier_above_the_chart_is_no_deal(cfg):
+    above = scored(900, miles=101000, fees=100, carriers="SQ")
+    score_rows([above], [], cfg)
+    assert above.ceiling_good is False and above.verdict == SKIP
+
+
+def test_dynamic_fare_is_ranked_against_observed_history(cfg):
+    history = route([700, 720, 740, 760, 780, 800], carriers="LH")
+    cheap = scored(500, date="2026-12-20", carriers="LH")
+    score_rows([cheap], history, cfg)
+    assert cheap.verdict == DEAL and cheap.route_good is True
+
+
+def test_unranked_is_not_on_the_shortlist(cfg):
+    from mmscan.report import shortlist
+
+    lh = scored(300, miles=17000, fees=100, carriers="LH")
+    score_rows([lh], [], cfg)
+    assert shortlist([lh], cfg) == []

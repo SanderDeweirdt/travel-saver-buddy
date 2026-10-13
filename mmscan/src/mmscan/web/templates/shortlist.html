@@ -35,7 +35,7 @@
   <th>Verdict</th><th>Change</th><th>Date</th><th>Route</th><th>Cabin</th>
   <th class="n">Miles</th><th class="n">Fees €</th><th class="n">Total €</th>
   <th class="n">Baseline €</th><th class="n">Route pct</th><th class="n">Seats</th>
-  <th>Flags</th><th class="n">Data age h</th><th></th>
+  <th>Pricing</th><th>Flags</th><th class="n">Data age h</th><th></th>
 </tr></thead>
 <tbody>
 {% for r in view.rows %}{% set s = r.s %}
@@ -51,11 +51,12 @@
   <td class="n" title="{{ r.samples }} samples">{{ r.baseline|money }}</td>
   <td class="n">{{ "%.0f"|format(s.route_pct) if s.route_pct is not none else "–" }}</td>
   <td class="n">{{ s.seats if s.seats is not none else "?" }}</td>
+  <td>{% if r.pricing == "fixed" %}chart{% else %}<span class="tag worth" title="Dynamic Miles &amp; More price: the cached figure can be far off. Verify on miles-and-more.com.">{{ "dynamic" if r.pricing == "dynamic" else "mixed" }}, verify</span>{% endif %}</td>
   <td>{% if s.chart_rate %}chart_rate {% endif %}{% if s.ceiling_good %}ceiling_good{% endif %}</td>
   <td class="n">{{ "%.0f"|format(r.age_h) if r.age_h is not none else "–" }}{{ " (stale)" if r.age_h and r.age_h > 48 }}</td>
   <td>{% if s.booking_link %}<a href="{{ s.booking_link }}" rel="noopener noreferrer" target="_blank">book</a>{% endif %}</td>
 </tr>
-{% else %}<tr><td colspan="14">Nothing matches.</td></tr>{% endfor %}
+{% else %}<tr><td colspan="15">Nothing matches.</td></tr>{% endfor %}
 </tbody></table></div>
 {% endif %}
 {% endblock %}

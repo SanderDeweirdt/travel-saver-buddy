@@ -19,7 +19,8 @@ log = logging.getLogger("mmscan.scoring")
 DEAL = "Deal"
 WORTH = "Worth a look"
 SKIP = "Skip"
-VERDICT_ORDER = {DEAL: 0, WORTH: 1, SKIP: 2}
+UNRANKED = "Unranked"  # dynamic fare with too little observed history to judge
+VERDICT_ORDER = {DEAL: 0, WORTH: 1, SKIP: 2, UNRANKED: 3}
 CHART_RATE_SHARE = 0.95
 
 
@@ -336,26 +337,35 @@ def score_rows(
         bm = cfg.benchmark_for(
             s.cabin, s.origin, s.origin_region, s.destination, s.destination_region
         )
+        model = cfg.pricing_model(s.carriers)
+        fixed = model == "fixed"
         if bm:
-            s.ceiling_good = s.miles <= bm.good_miles_max and s.fees_eur <= bm.fees_max_eur
             s.chart_rate = s.miles >= CHART_RATE_SHARE * bm.chart_rate_miles
+            # The chart saver level only means something on fixed-chart carriers.
+            if fixed:
+                s.ceiling_good = s.miles <= bm.chart_rate_miles and s.fees_eur <= bm.fees_max_eur
         capped = False
+        thin = 0
         layers = []
         for values in (by_route.get(_route(s), []), by_dest.get(_dest(s), [])):
             if len(values) >= n_min:
                 cut = min(percentile(values, pg), percentile(values, 50) * (1 - disc))
                 layers.append(s.total_eur <= cut)
-            elif bm:
-                layers.append(bool(s.ceiling_good))
             else:
-                layers.append(False)
-                capped = True
+                thin += 1
+                if fixed and bm:
+                    layers.append(bool(s.ceiling_good))  # chart saver stands in for history
+                else:
+                    layers.append(False)
+                    capped = True
         s.route_good, s.destination_good = layers
         s.route_pct = percentile_rank(by_route.get(_route(s), []), s.total_eur)
         s.destination_pct = percentile_rank(by_dest.get(_dest(s), []), s.total_eur)
         s.verdict = verdict(s.route_good, s.destination_good, bool(s.seats_ok), capped)
-        if cfg.deals.by_ceiling and s.ceiling_good and s.seats_ok:
+        if fixed and cfg.deals.by_ceiling and s.ceiling_good and s.seats_ok:
             s.verdict = DEAL
+        elif not fixed and thin == 2:
+            s.verdict = UNRANKED
 
         if s.date and s.origin and s.destination:
             cash = fares.fare(s.origin, s.destination, s.cabin, s.date[:7])
