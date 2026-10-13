@@ -64,6 +64,11 @@ prescreen:
 enrich:
   max_calls: 150
 
+# Deals page verdict: % below the route's usual price (median of the last relative.history_days).
+savings:
+  great_pct: 30
+  good_pct: 10
+
 value_per_mile_cents:
   good: 2.0
   fair: 1.5

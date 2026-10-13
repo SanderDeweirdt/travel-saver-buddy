@@ -6,9 +6,10 @@ import json
 import statistics
 from datetime import datetime, timedelta
 
-from mmscan.baseline import baseline_for, route_baselines
+from mmscan.baseline import baseline_for, route_baselines, thin_routes
 from mmscan.config import Config
-from mmscan.report import _age_hours, load_results, shortlist
+from mmscan.deals import rank_deals
+from mmscan.report import _age_hours, eligible, load_results, shortlist
 from mmscan.scoring import rank_key
 from mmscan.store import Store
 
@@ -93,6 +94,15 @@ def shortlist_view(
         "verdicts": sorted({s.verdict for s in results}),
         "total": len(results),
     }
+
+
+def deals_view(store: Store, cfg: Config, run_id: int, now: datetime, **filters) -> dict:
+    results = eligible(load_results(store, run_id), cfg)
+    baselines = route_baselines(store, cfg, run_id, now)
+    out = rank_deals(results, baselines, cfg, now, **filters)
+    out["total"] = len(results)
+    out["thin_routes"] = thin_routes(baselines)
+    return out
 
 
 def route_history(store: Store, origin: str, destination: str, cabin: str, now: datetime) -> dict:

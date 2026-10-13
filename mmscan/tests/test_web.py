@@ -220,3 +220,15 @@ def test_shortlist_labels_dynamic_prices(tmp_path, default_config_dict):
     assert "dynamic, verify" in page and ">chart<" in page
     assert ">Unranked</span>" in page  # the dynamic fare has no history yet
     assert ">Unranked</span>" not in c.get("/").text  # and never reaches the Shortlist
+
+
+def test_deals_view_reads_the_store(db, default_config_dict):
+    from mmscan.web import queries
+
+    cfg = config(default_config_dict, relative={"percentile_good": 20, "min_samples": 2})
+    store = Store(db)
+    view = queries.deals_view(store, cfg, store.latest_scored_run(), NOW, pax=2, hide_stale=False)
+    store.close()
+    # one flight date seen three times is one observation: too little history for a baseline
+    assert view["deals"] == [] and len(view["building"]) == 1
+    assert view["thin_routes"] == 1 and view["total"] >= 1

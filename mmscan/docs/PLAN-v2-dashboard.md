@@ -48,12 +48,12 @@ makes no API calls.
   do not share a baseline.
 - *Done when* a helper returns the baseline for every route in the latest run and the thin routes are counted.
 
-### M2. Deals query and verdicts
+### M2. Deals query and verdicts — done
 
 - New `queries.deals_view(store, cfg, run_id, now, filters, pax)`: reuse `load_results`, keep results with a
   total cost and a baseline, add `save_eur` and `save_pct` against the route baseline, `value_cents`, `age_h`, `pricing`, then sort.
   Results with no baseline go in a separate "Building history" list so they are visible, not silently dropped.
-- Saving verdict from new `config.yaml` keys `value.great_pct: 30` and `value.good_pct: 10`: Great, Good,
+- Saving verdict from new `config.yaml` keys `savings.great_pct: 30` and `savings.good_pct: 10`: Great, Good,
   Marginal (0 to good), Above usual (below 0). Validate on load like other keys.
 - Sorts: percent saving (default), euro saving, lowest price, earliest date.
 - Filters as query params: cabin, route, chart-price only, hide stale (default on), `pax` 1 to 4.

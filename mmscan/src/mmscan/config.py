@@ -142,6 +142,18 @@ class ValueBands(_Model):
     poor: float = 1.2
 
 
+class Savings(_Model):
+    # Verdict on the deals page: how far below the route's usual price (median total) a result is.
+    great_pct: float = Field(30, gt=0, lt=100)
+    good_pct: float = Field(10, gt=0, lt=100)
+
+    @model_validator(mode="after")
+    def _ordered(self):
+        if self.good_pct >= self.great_pct:
+            raise ValueError("good_pct must be below great_pct")
+        return self
+
+
 class Api(_Model):
     take: int = Field(1000, ge=10, le=1000)
     min_cabin_pct: int = Field(100, ge=0, le=100)
@@ -197,6 +209,7 @@ class Config(_Model):
     prescreen: Prescreen = Prescreen()
     enrich: Enrich = Enrich()
     value_per_mile_cents: ValueBands = ValueBands()
+    savings: Savings = Savings()
     api: Api = Api()
     output: Output = Output()
     notify: Notify = Notify()
