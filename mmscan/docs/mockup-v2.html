@@ -263,16 +263,16 @@ function series(seed, base, n = 30, drop = 0) {
 }
 
 const deals = [
-  { date: '2027-04-21', o: 'MUC', d: 'SIN', cab: 'Business', miles: 88000, fees: 150, cash: 2350, type: 'chart', car: 'SQ', chg: 'Cheaper', seats: 2, age: 3 },
-  { date: '2027-03-30', o: 'MUC', d: 'BKK', cab: 'Business', miles: 99000, fees: 170, cash: 2400, type: 'chart', car: 'TG', chg: 'New', seats: 2, age: 2 },
-  { date: '2027-02-18', o: 'ZRH', d: 'SIN', cab: 'Business', miles: 61000, fees: 310, cash: 2600, type: 'dynamic', car: 'LX', chg: 'New', seats: 2, age: 8 },
-  { date: '2027-03-09', o: 'FRA', d: 'BKK', cab: 'Economy', miles: 42500, fees: 98, cash: 690, type: 'chart', car: 'TG', chg: 'New', seats: 4, age: 5 },
-  { date: '2027-01-27', o: 'FRA', d: 'KUL', cab: 'Economy', miles: 37500, fees: 140, cash: 640, type: 'chart', car: 'TK', chg: 'Cheaper', seats: 6, age: 21 },
-  { date: '2027-06-03', o: 'VIE', d: 'MNL', cab: 'Economy', miles: 33000, fees: 188, cash: 780, type: 'dynamic', car: 'OS', chg: '', seats: 2, age: 52 },
-  { date: '2027-05-04', o: 'BRU', d: 'KUL', cab: 'Economy', miles: 42500, fees: 121, cash: 590, type: 'chart', car: 'TK', chg: '', seats: 2, age: 14 },
-  { date: '2027-04-08', o: 'BRU', d: 'SIN', cab: 'Economy', miles: 27500, fees: 205, cash: 720, type: 'dynamic', car: 'SN', chg: '', seats: 0, age: 60 },
-].map(r => { const total = cost(r.miles, r.fees); return { ...r, total, save: r.cash - total, pct: (r.cash - total) / r.cash * 100,
-  vpm: (r.cash - r.fees * USD_EUR) / r.miles * 100 }; });
+  { date: '2027-04-21', o: 'MUC', d: 'SIN', cab: 'Business', miles: 88000, fees: 150, usual: 1650, type: 'chart', car: 'SQ', chg: 'Cheaper', seats: 2, age: 3 },
+  { date: '2027-03-30', o: 'MUC', d: 'BKK', cab: 'Business', miles: 99000, fees: 170, usual: 1750, type: 'chart', car: 'TG', chg: 'New', seats: 2, age: 2 },
+  { date: '2027-02-18', o: 'ZRH', d: 'SIN', cab: 'Business', miles: 61000, fees: 310, usual: 1450, type: 'dynamic', car: 'LX', chg: 'New', seats: 2, age: 8 },
+  { date: '2027-03-09', o: 'FRA', d: 'BKK', cab: 'Economy', miles: 42500, fees: 98, usual: 700, type: 'chart', car: 'TG', chg: 'New', seats: 4, age: 5 },
+  { date: '2027-01-27', o: 'FRA', d: 'KUL', cab: 'Economy', miles: 37500, fees: 140, usual: 640, type: 'chart', car: 'TK', chg: 'Cheaper', seats: 6, age: 21 },
+  { date: '2027-06-03', o: 'VIE', d: 'MNL', cab: 'Economy', miles: 33000, fees: 188, usual: 650, type: 'dynamic', car: 'OS', chg: '', seats: 2, age: 52 },
+  { date: '2027-05-04', o: 'BRU', d: 'KUL', cab: 'Economy', miles: 42500, fees: 121, usual: 590, type: 'chart', car: 'TK', chg: '', seats: 2, age: 14 },
+  { date: '2027-04-08', o: 'BRU', d: 'SIN', cab: 'Economy', miles: 27500, fees: 205, usual: 600, type: 'dynamic', car: 'SN', chg: '', seats: 0, age: 60 },
+].map(r => { const total = cost(r.miles, r.fees); return { ...r, total, save: r.usual - total, pct: (r.usual - total) / r.usual * 100,
+  vpm: (r.usual - r.fees * USD_EUR) / r.miles * 100 }; });
 
 /* ---------- helpers ---------- */
 const $ = (s, el = document) => el.querySelector(s);
@@ -382,9 +382,9 @@ function renderTrips() {
 
 /* ---------- Deals view (landing) ---------- */
 const F = { cabin: 'all', price: 'all', fresh: true, route: '', sort: 'pct', pax: 2 };
-const verdictOf = r => r.pct >= 30 ? ['Great deal', 'b-good'] : r.pct >= 10 ? ['Good deal', 'b-good'] : r.pct >= 0 ? ['Marginal', 'b-warn'] : ['Cash is cheaper', 'b-bad'];
+const verdictOf = r => r.pct >= 30 ? ['Great deal', 'b-good'] : r.pct >= 10 ? ['Good deal', 'b-good'] : r.pct >= 0 ? ['Marginal', 'b-warn'] : ['Above usual', 'b-bad'];
 function dealCard(r, rank) {
-  const [vl, vc] = verdictOf(r), x = F.pax, mx = Math.max(r.cash, r.total);
+  const [vl, vc] = verdictOf(r), x = F.pax, mx = Math.max(r.usual, r.total);
   const bar = (label, val, cls) => `<div class="cmp"><span class="small muted cl">${label}</span><div class="track"><div class="fill ${cls}" style="width:${val / mx * 100}%"></div></div><b class="num cv">${eur(val * x)}</b></div>`;
   return `<article class="card deal ${r.age > 48 ? 'stale' : ''}">
     <div class="deal-top">
@@ -392,12 +392,12 @@ function dealCard(r, rank) {
         <div class="tags">${priceBadge(r.type)}${chgBadge(r.chg)}${staleBadge(r.age)}<span class="badge b-mute">${r.seats ? r.seats + ' seats' : 'Seats unknown'}</span></div></div>
       <div class="saving"><span class="badge ${vc}">${vl}</span>
         <div class="big2 num ${r.save < 0 ? 'neg' : ''}">${r.save >= 0 ? 'Save ' : 'Pay '}${eur(Math.abs(r.save) * x)}</div>
-        <div class="small muted">${r.save >= 0 ? Math.round(r.pct) + '% below' : Math.round(-r.pct) + '% above'} the usual cash price</div></div>
+        <div class="small muted">${r.save >= 0 ? Math.round(r.pct) + '% below' : Math.round(-r.pct) + '% above'} the usual price</div></div>
     </div>
-    ${bar('Usual cash price', r.cash, 'grey')}
+    ${bar('Usual price', r.usual, 'grey')}
     ${bar('With miles', r.total, r.save >= 0 ? 'acc' : 'bad')}
     <div class="split small muted">Pay <b class="num">${mi(r.miles * x)}</b> miles <span title="at ${MILE_CT} ct per mile">(≈ ${eur(r.miles * MILE_CT / 100 * x)})</span> + <b class="num">${eur(r.fees * USD_EUR * x)}</b> cash fees
-      · <span title="Cash saved per mile spent. Above ${MILE_CT} ct you gain over buying the miles.">${r.vpm.toFixed(1)} ct per mile</span></div>
+      · <span title="Saving per mile spent.">${r.vpm.toFixed(1)} ct per mile</span></div>
     <div class="deal-actions"><a class="btn primary" href="#" onclick="return false">Book on Miles &amp; More ↗</a><button class="btn" data-route="1">Price history</button></div>
   </article>`;
 }
@@ -410,12 +410,12 @@ function renderDeals() {
   const chip = (k, v, label) => `<button class="chip" data-f="${k}" data-v="${v}" aria-pressed="${F[k] === v}">${label}</button>`;
   $('#app').innerHTML = `
     <div class="page-head"><div><h2>Best deals right now</h2>
-      <div class="muted small">What you pay with miles (miles at ${MILE_CT} ct each plus cash fees), against the usual cash price for that route.</div></div>
+      <div class="muted small">What you pay with miles (miles at ${MILE_CT} ct each plus cash fees), against what that route usually costs (median of the last 30 days).</div></div>
       <label class="inline">Travellers <select id="paxSel" aria-label="Travellers">${[1,2,3,4].map(n => `<option ${n === F.pax ? 'selected' : ''}>${n}</option>`).join('')}</select></label></div>
     ${top ? `<section class="card hero-deal" aria-label="Top deal">
       <div><div class="muted small">Best verified deal today</div>
         <div class="big" style="font-size:28px"><span class="num">${eur(top.save * F.pax)}</span> saved</div>
-        <div><b>${top.o} → ${top.d}</b> ${top.cab}, ${top.car} · pay ${eur(top.total * F.pax)} instead of ${eur(top.cash * F.pax)} for ${F.pax}</div></div>
+        <div><b>${top.o} → ${top.d}</b> ${top.cab}, ${top.car} · pay ${eur(top.total * F.pax)} instead of ${eur(top.usual * F.pax)} for ${F.pax}</div></div>
       <div class="hero-stats"><div><div class="stat num">${good}</div><div class="muted small">deals 10%+ below usual</div></div>
         <div><div class="stat num">${rows.filter(r => r.chg === 'New').length}</div><div class="muted small">new since yesterday</div></div></div>
     </section>` : ''}
@@ -427,23 +427,23 @@ function renderDeals() {
       <select id="sortSel" aria-label="Sort"><option value="pct">Biggest % saving</option><option value="save">Biggest € saving</option><option value="total">Lowest price</option><option value="date">Earliest date</option></select>
     </div>
     <div class="card tbl-wrap compact" style="padding:0"><table>
-      <thead><tr><th>Deal</th><th>Route</th><th>Date</th><th class="r">Miles</th><th class="r">Fees</th><th class="r">With miles</th><th class="r">Usual cash</th><th class="r">Saving</th><th class="bar-col" aria-label="Price versus usual"></th><th class="r">ct/mile</th><th>Flags</th><th></th></tr></thead>
-      <tbody>${rows.map(r => { const [vl, vc] = verdictOf(r), x = F.pax, w = Math.max(0, Math.min(100, r.total / r.cash * 100));
+      <thead><tr><th>Deal</th><th>Route</th><th>Date</th><th class="r">Miles</th><th class="r">Fees</th><th class="r">With miles</th><th class="r">Usual price</th><th class="r">Saving</th><th class="bar-col" aria-label="Price versus usual"></th><th class="r">ct/mile</th><th>Flags</th><th></th></tr></thead>
+      <tbody>${rows.map(r => { const [vl, vc] = verdictOf(r), x = F.pax, w = Math.max(0, Math.min(100, r.total / r.usual * 100));
         return `<tr class="${r.age > 48 ? 'stale' : ''}" tabindex="0" data-route="1" title="Click for price history">
         <td><span class="badge ${vc}">${vl}</span></td>
         <td><b>${r.o} → ${r.d}</b> <span class="muted small">${r.cab === 'Business' ? 'Biz' : 'Eco'} · ${r.car}</span></td>
         <td class="num">${new Date(r.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</td>
         <td class="r num">${mi(r.miles * x)}</td><td class="r num">${eur(r.fees * USD_EUR * x)}</td>
-        <td class="r num"><b>${eur(r.total * x)}</b></td><td class="r num muted">${eur(r.cash * x)}</td>
+        <td class="r num"><b>${eur(r.total * x)}</b></td><td class="r num muted">${eur(r.usual * x)}</td>
         <td class="r num ${r.save < 0 ? 'neg' : 'pos'}"><b>${r.save >= 0 ? '−' : '+'}${eur(Math.abs(r.save) * x)}</b> <span class="small">${Math.round(Math.abs(r.pct))}%</span></td>
-        <td class="bar-col"><div class="track mini" role="img" aria-label="${Math.round(w)}% of the usual cash price"><div class="fill ${r.save >= 0 ? 'acc' : 'bad'}" style="width:${w}%"></div></div></td>
+        <td class="bar-col"><div class="track mini" role="img" aria-label="${Math.round(w)}% of the usual price"><div class="fill ${r.save >= 0 ? 'acc' : 'bad'}" style="width:${w}%"></div></div></td>
         <td class="r num">${r.vpm.toFixed(1)}</td>
         <td>${r.type === 'chart' ? '<span class="badge b-good">Chart</span>' : '<span class="badge b-warn" title="Dynamic price: cached miles can differ a lot from the live price">⚠ Unverified</span>'}${r.chg === 'New' ? ' <span class="badge b-info">New</span>' : r.chg === 'Cheaper' ? ' <span class="badge b-good">▼</span>' : ''}${r.age > 48 ? ' <span class="badge b-mute" title="Data older than 48 hours">Stale</span>' : ''}${r.seats && r.seats < F.pax ? '' : ''}</td>
         <td><a class="btn sm" href="#" onclick="return false" aria-label="Book ${r.o} to ${r.d} on Miles and More">Book</a></td></tr>`; }).join('')
         || '<tr><td colspan="12" class="muted" style="padding:24px">No deals match these filters.</td></tr>'}</tbody></table></div>
-    <p class="muted small">Prices are for ${F.pax} traveller${F.pax > 1 ? 's' : ''}, one-way. Saving is against the usual cash price (− means you pay less). Click a row for its price history.</p>
+    <p class="muted small">Prices are for ${F.pax} traveller${F.pax > 1 ? 's' : ''}, one-way. Saving is against the route's usual price (− means you pay less). Click a row for its price history.</p>
     <details class="card" style="margin-top:16px"><summary><b>How is this calculated?</b></summary>
-      <p class="small muted">Price with miles = miles × ${MILE_CT} ct (what a mile costs you) + cash fees (taxes and surcharges, converted from USD at ${USD_EUR}). The usual cash price is the typical one-way fare for that route and cabin that you entered in <code>cash_fares.csv</code> (last updated 12 Oct). seats.aero has no cash prices, so keep that file current. "Cash is cheaper" means buying a ticket costs less than paying for the miles and fees.</p>
+      <p class="small muted">Price with miles = miles × ${MILE_CT} ct (what a mile costs you) + cash fees (taxes and surcharges, converted from USD at ${USD_EUR}). The usual price is the median of that same total for the route and cabin over the last 30 days of scans, so a saving means "cheaper than this route normally is". It is not a cash ticket price. Routes with too little history show no saving yet.</p>
       <p class="small muted"><b>Unverified</b> prices come from Lufthansa-group flights, which Miles &amp; More prices dynamically. The cached miles can be well below the live price, so open the booking link and check before you rely on them.</p></details>`;
   $('#sortSel').value = F.sort;
 }
@@ -462,7 +462,7 @@ function renderRoute() {
         <div class="muted small">Dashed lines in the real build: 20th percentile ${eur(p20)} and median ${eur(med)}.</div></section>
       <section class="card"><h3>Where today's price sits</h3>
         <div class="big num">${eur(cost(42500, 98))}</div>
-        <p class="muted">${eur(690 - cost(42500,98))} below the usual cash price (${eur(690)}). Cheaper than 88% of the award prices seen on this route (median ${eur(med)}).</p>
+        <p class="muted">${eur(690 - cost(42500,98))} below the usual price (${eur(690)}). Cheaper than 88% of the award prices seen on this route (median ${eur(med)}).</p>
         <div class="kv small"><span>Chart rate <b>42,500</b> miles</span><span>Samples <b>312</b></span><span>Fees usually <b>€90–€130</b></span></div>
         <p class="small"><a class="btn" href="#" onclick="return false">Open on miles-and-more.com ↗</a></p></section>
     </div>`;

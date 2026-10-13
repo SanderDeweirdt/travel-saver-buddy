@@ -5,14 +5,16 @@ of [`PRD-v2.md`](PRD-v2.md). Server-rendered Jinja, same stack as today; no JS f
 
 ## What the user needs
 
-Open the page, see the best ways to fly with miles ranked by how much cheaper they are than paying cash:
-price with miles (miles at 1.16 ct + fees) against the usual cash price for that route, per traveller count.
+Open the page, see the best ways to fly with miles ranked by how much cheaper they are than that route usually is:
+price with miles (miles at 1.16 ct + fees) against the **usual price for the route**, per traveller count. The
+usual price is the baseline mmscan already builds: the median total cost seen for that origin, destination and
+cabin over `relative.history_days` (30). No cash fares are needed; `cash_fares.csv` stays an optional extra column.
 
 ## Starting point (read from the code)
 
 | Already there | Where |
 | --- | --- |
-| Total cost per result, saving vs cash, value per mile, all stored on each result | `scoring.py` (`Scored.cash_fare_eur`, `saving_eur`, `value_cents`), `results` table |
+| Total cost per result, optional saving vs cash, value per mile, stored on each result; route median already computed for the shortlist | `scoring.py` (`Scored.cash_fare_eur`, `saving_eur`, `value_cents`), `results` table |
 | Fixed-chart vs dynamic carrier logic | `config.pricing_model(carriers)`, already used in `queries.shortlist_view` |
 | Data age per result | `queries.shortlist_view` (`age_h`) |
 | Login, routes, templates, downloads, tests with `TestClient` | `web/app.py`, `web/templates/`, `tests/test_web.py` |
@@ -20,42 +22,44 @@ price with miles (miles at 1.16 ct + fees) against the usual cash price for that
 
 ## Gaps (what the mockup needs that does not exist)
 
-1. **Cash prices are the weak link.** A fare must match an exact `YYYY-MM`, and the CSV is read only by the scanner.
-   Without a match a result has no saving. The mockup's whole ranking depends on this.
+1. **The baseline exists but is not on any list.** `queries.shortlist_view` already computes the route median
+   (`baseline`, `samples`) but the page only shows it on the route page. Routes with fewer than
+   `relative.min_samples` (15) results have no baseline and must be handled.
 2. No page ranks by saving; the Shortlist ranks by verdict, then total cost.
-3. No verdict based on saving ("Great deal", "Cash is cheaper").
+3. No verdict based on saving against the baseline ("Great deal", "Above usual").
 4. No traveller multiplier in the UI.
 5. Dynamic-carrier results are not marked "Unverified" in the list.
-6. The route page has no cash line; Trips has no hero, 30-day trend or calendar.
+6. The route page does not compare today's price with the usual price; Trips has no hero, 30-day trend or calendar.
 
 ## Milestones
 
 Each one ships alone, passes `uv run pytest -q && uv run ruff check . && uv run ruff format --check .`, and
 makes no API calls.
 
-### M1. Cash price coverage (prerequisite)
+### M1. Baseline on every row (prerequisite)
 
-- Let `cash_fares.csv` accept `month` of `*` (any month) as a fallback, so one row per route and cabin is enough.
-  Exact month wins. Add the rule to `CsvFareSource.fare` and `docs`/README.
-- Count results with and without a cash price per run and put both numbers in the run log.
-- Check that `cash_fares.csv` reaches the scanner on Railway (it is read from `config.yaml`'s folder, so it must be
-  in the image). Commit a starter file with Sander's best-guess fares for the watchlist routes.
-- Tests: `test_fares.py` for the wildcard and precedence; `test_scoring.py` for a result matched via wildcard.
-- *Done when* a scan prints "cash price for N of M shortlist results" and the starter file covers every watchlist
-  route in economy and business.
+- Expose the route median and sample count for every scored result, not only on the route page: one helper in
+  `queries.py` that groups `history_rows` by `_route` once and returns `{route: (median, n)}`.
+- Rule for thin data: below `relative.min_samples` there is no baseline, so no saving and no verdict; the row goes in
+  a "Building history" list with its price and sample count.
+- Keep the baseline honest: it is built from prices mmscan has seen, so include fixed-chart and dynamic carriers
+  separately (group key gains the pricing model), otherwise a chart-rate fare is compared with dynamic fares.
+- Tests in `test_scoring.py`/`test_deals.py`: median and sample count, thin route has no baseline, pricing models
+  do not share a baseline.
+- *Done when* a helper returns the baseline for every route in the latest run and the thin routes are counted.
 
 ### M2. Deals query and verdicts
 
 - New `queries.deals_view(store, cfg, run_id, now, filters, pax)`: reuse `load_results`, keep results with a
-  total cost and a cash price, add `save_eur`, `save_pct`, `value_cents`, `age_h`, `pricing`, then sort.
-  Results with no cash price go in a separate "No cash price yet" list so they are visible, not silently dropped.
+  total cost and a baseline, add `save_eur` and `save_pct` against the route baseline, `value_cents`, `age_h`, `pricing`, then sort.
+  Results with no baseline go in a separate "Building history" list so they are visible, not silently dropped.
 - Saving verdict from new `config.yaml` keys `value.great_pct: 30` and `value.good_pct: 10`: Great, Good,
-  Marginal (0 to good), Cash is cheaper (below 0). Validate on load like other keys.
+  Marginal (0 to good), Above usual (below 0). Validate on load like other keys.
 - Sorts: percent saving (default), euro saving, lowest price, earliest date.
 - Filters as query params: cabin, route, chart-price only, hide stale (default on), `pax` 1 to 4.
   Multiply miles, fees and totals by `pax`; seats below `pax` are hidden, unknown seats stay with a flag.
 - Tests in `test_web.py`/new `test_deals.py`: ranking, verdict thresholds at the edges, negative saving, pax scaling,
-  stale hidden, missing cash price listed apart, dynamic marked unverified.
+  stale hidden, thin-history rows listed apart, dynamic marked unverified.
 
 ### M3. Page and navigation
 
@@ -72,9 +76,9 @@ makes no API calls.
 
 ### M4. Route page
 
-- Add the usual cash price and "below usual by X" to `route.html`, using the cash fare for that route and cabin.
+- Show "below usual by X" on `route.html` from the same baseline; show the optional cash fare when one exists.
 - Show median and 20th percentile lines on the history chart (`web/charts.py`).
-- Tests: `route_history` returns the cash price when present and `None` otherwise.
+- Tests: `route_history` returns the baseline and, when present, the optional cash fare.
 
 ### M5. Trips page upgrade (R5, R7, R8)
 
@@ -97,7 +101,7 @@ makes no API calls.
 
 | Order | Milestone | Rough size | Why this order |
 | --- | --- | --- | --- |
-| 1 | M1 cash price coverage | small | The page is empty or misleading without it |
+| 1 | M1 baseline on every row | small | Every saving figure depends on it |
 | 2 | M2 deals query | medium | Pure Python, easy to test |
 | 3 | M3 page and navigation | medium | First visible result; deploy here |
 | 4 | M4 route page | small | Uses M1 and M2 |
@@ -106,15 +110,22 @@ makes no API calls.
 
 ## Risks
 
-- **Stale or wrong cash prices make every saving wrong.** Mitigation: show the date the fare file was last changed on
-  the page, count results without a cash price, and mark wildcard-month fares as "typical".
-- **Dynamic carriers look like great deals** when the cached miles are too low. They are marked Unverified,
-  excluded from the banner and from Slack until M6 gives a measured ratio.
+- **"Usual" is what mmscan has seen, not the market.** A route that is always expensive looks normal. The page says
+  so in its explainer and labels the column "Usual price", never "cash price".
+- **Fixed-chart fares barely move**, so savings against their own median are small. `relative.min_discount_pct`
+  already guards the Deal verdict; the page shows the real percentage and lets 30% and 10% decide the label.
+- **New routes have no history.** They sit in "Building history" for roughly the first 15 scans of that route.
+- **Dynamic carriers look like great deals** when cached miles are too low. They are marked Unverified, excluded from
+  the banner and from Slack until M6 gives a measured ratio.
 - **Schema change in M6** must work on SQLite and Postgres; test both (`TEST_DATABASE_URL`).
-- **Moving `/` breaks bookmarks.** Keep `/shortlist` and redirect nothing else.
+- **Moving `/` breaks bookmarks.** Keep `/shortlist`.
+
+## Decisions
+
+- Baseline: the existing route median of total cost (miles at 1.16 ct + fees), 30 days. No cash fare source.
+- Verdict thresholds: Great at 30% below usual, Good at 10%, below 0 is "Above usual". Same for both cabins.
 
 ## Open questions
 
-1. Where do usual cash prices come from: hand-typed CSV, or a table edited on the dashboard later?
-2. Should "usual cash price" be per month, or one typical value per route and cabin (the wildcard in M1)?
-3. Are the verdict thresholds (30% and 10%) right for a business cabin, where cash fares are far higher?
+1. Should economy and business use the same thresholds? Kept the same for now.
+2. Is a 30-day window right, given hourly watch scans and a daily full run? Configurable via `relative.history_days`.
