@@ -36,7 +36,7 @@ cabin over `relative.history_days` (30). No cash fares are needed; `cash_fares.c
 Each one ships alone, passes `uv run pytest -q && uv run ruff check . && uv run ruff format --check .`, and
 makes no API calls.
 
-### M1. Baseline on every row (prerequisite)
+### M1. Baseline on every row (prerequisite) — done
 
 - Expose the route median and sample count for every scored result, not only on the route page: one helper in
   `queries.py` that groups `history_rows` by `_route` once and returns `{route: (median, n)}`.

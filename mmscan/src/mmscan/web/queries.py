@@ -6,9 +6,10 @@ import json
 import statistics
 from datetime import datetime, timedelta
 
+from mmscan.baseline import baseline_for, route_baselines
 from mmscan.config import Config
 from mmscan.report import _age_hours, load_results, shortlist
-from mmscan.scoring import _group, _route, history_rows, rank_key
+from mmscan.scoring import rank_key
 from mmscan.store import Store
 
 SORTS = {
@@ -72,15 +73,15 @@ def shortlist_view(
     if verdict:
         rows = [s for s in rows if s.verdict == verdict]
     rows = sorted(rows, key=SORTS.get(sort, rank_key))
-    base = _group(history_rows(store, cfg, run_id, now), _route)
+    baselines = route_baselines(store, cfg, run_id, now)
     out = []
     for s in rows:
-        samples = base.get(_route(s))
+        b = baseline_for(baselines, cfg, s)
         out.append(
             {
                 "s": s,
-                "baseline": statistics.median(samples) if samples else None,
-                "samples": len(samples) if samples else 0,
+                "baseline": b.median if b else None,
+                "samples": b.n if b else 0,
                 "age_h": _age_hours(s.updated_at, now),
                 "pricing": cfg.pricing_model(s.carriers),
             }
