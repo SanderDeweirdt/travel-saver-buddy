@@ -135,7 +135,7 @@ def test_run_prices_from_summary_then_enriches_only_the_shortlist(
                         "RemainingSeats": 4,
                         "Stops": 0,
                         "FlightNumbers": "LH778",
-                        "Carriers": "LH",
+                        "Carriers": "SQ",
                     }
                 ],
                 "booking_links": [

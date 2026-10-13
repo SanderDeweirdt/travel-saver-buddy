@@ -26,6 +26,7 @@ def avail(
     updated: str = "2026-10-10T08:00:00Z",
     taxes: dict[str, int] | None = None,
     currency: str = "USD",
+    airlines: str = "SQ",
     **cabins: int,
 ) -> dict:
     """`cabins` maps cabin name to miles, e.g. business=60000. `taxes` maps cabin name to the
@@ -50,7 +51,7 @@ def avail(
         a[f"{p}Available"] = miles is not None
         a[f"{p}MileageCost"] = str(miles) if miles is not None else "0"
         a[f"{p}RemainingSeats"] = 4 if miles is not None else 0
-        a[f"{p}Airlines"] = "LH" if miles is not None else ""
+        a[f"{p}Airlines"] = airlines if miles is not None else ""
         a[f"{p}Direct"] = miles is not None
     return a
 
@@ -64,6 +65,7 @@ def trip(
     currency: str = "EUR",
     seats: int | None = 4,
     stops: int = 0,
+    carriers: str = "SQ",
 ) -> Trip:
     return Trip(
         id=id,
@@ -74,7 +76,7 @@ def trip(
         currency=currency,
         seats=seats,
         stops=stops,
-        carriers="LH",
+        carriers=carriers,
         flight_numbers="LH778",
         departs_at="2026-12-10T22:05:00Z",
         arrives_at="2026-12-11T17:10:00Z",
@@ -95,6 +97,7 @@ def scored(
     seats_ok: bool = True,
     direct: bool = True,
     id: str | None = None,
+    carriers: str = "SQ",
 ) -> Scored:
     return Scored(
         availability_id=id or f"{origin}{dest}{date}{cabin}",
@@ -110,7 +113,7 @@ def scored(
         total_eur=total,
         seats=4,
         stops=0 if direct else 1,
-        carriers="LH",
+        carriers=carriers,
         flight_numbers="LH778",
         departs_at=None,
         arrives_at=None,

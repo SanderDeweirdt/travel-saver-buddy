@@ -169,3 +169,28 @@ def test_refuses_to_start_without_secrets(monkeypatch):
     monkeypatch.delenv("SESSION_SECRET")
     with pytest.raises(SettingsError, match="SESSION_SECRET"):
         settings_from_env()
+
+
+def test_shortlist_labels_dynamic_prices(tmp_path, default_config_dict):
+    cfg = config(default_config_dict, relative={"percentile_good": 20, "min_samples": 2})
+    path = tmp_path / "mix.db"
+    store = Store(path)
+    run = store.start_run("watch", "{}", now=NOW)
+    for aid, airlines in (("fx", "SQ"), ("dyn", "LH")):
+        store.save_availability(run, avail(aid, airlines=airlines, business=60000), "watchlist")
+        store.save_trips(
+            aid,
+            "2026-10-10T08:00:00Z",
+            [trip(f"t{aid}", avail_id=aid, miles=60000, taxes=30000, carriers=airlines)],
+            None,
+            {},
+        )
+    score_run(store, cfg, run, NOW)
+    store.close()
+    settings = WebSettings(PASSWORD, "s" * 32, path, ROOT / "config.yaml")
+    c = TestClient(create_app(settings), base_url="https://testserver")
+    login(c)
+    page = c.get("/?all=1").text
+    assert "dynamic, verify" in page and ">chart<" in page
+    assert ">Unranked</span>" in page  # the dynamic fare has no history yet
+    assert ">Unranked</span>" not in c.get("/").text  # and never reaches the Shortlist

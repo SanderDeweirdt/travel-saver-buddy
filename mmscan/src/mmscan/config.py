@@ -97,8 +97,9 @@ class Watch(_Model):
 
 
 class Deals(_Model):
-    # An absolute price: miles and fees within the matching benchmark's ceilings is a Deal
-    # (seats permitting), even where the relative baselines say otherwise.
+    # Fixed-chart carriers only: miles at or under the matching benchmark's chart saver level,
+    # with fees inside fees_max_eur, is a Deal (seats permitting). Dynamic carriers have no chart
+    # and are only ever judged against the prices this tool has observed.
     by_ceiling: bool = True
 
 
@@ -123,6 +124,9 @@ class Output(_Model):
 
 class Config(_Model):
     source: str = "lufthansa"
+    # IATA codes of Miles & More carriers that price awards dynamically (no chart). Everything
+    # else on the program is a fixed partner chart. The list has grown before: keep it current.
+    dynamic_airlines: list[str] = ["LH", "LX", "OS", "CL", "4Y", "EN", "WK"]
     cabins: list[Cabin] = Field(min_length=1)
     min_seats: int = Field(2, ge=1)
     mile_cost_eur_cents: float = Field(gt=0)
@@ -181,6 +185,20 @@ class Config(_Model):
         if place == region:
             return True
         return airport in self.subregions.get(place, [])
+
+    def pricing_model(self, carriers: str | None) -> str:
+        """ "fixed" when no carrier on the result prices dynamically, "dynamic" when all do, and
+        "mixed" when both or none are known. Mixed is judged like dynamic: the long-haul operator
+        decides in reality, and the stored result does not say which that is."""
+        codes = {c.strip().upper() for c in (carriers or "").split(",") if c.strip()}
+        if not codes:
+            return "mixed"
+        dynamic = {c.upper() for c in self.dynamic_airlines}
+        if codes <= dynamic:
+            return "dynamic"
+        if codes.isdisjoint(dynamic):
+            return "fixed"
+        return "mixed"
 
     def benchmark_for(
         self, cabin: str, origin: str, origin_region: str, dest: str, dest_region: str

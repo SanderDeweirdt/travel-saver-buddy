@@ -2,6 +2,12 @@ source: lufthansa
 cabins: [economy, business]
 min_seats: 2
 
+# Miles & More prices these carriers dynamically (no chart): their miles move with fare, date and
+# demand, so they are judged only against prices this tool has seen, and shown "Unranked" until
+# there is enough history. Every other carrier follows the fixed partner chart (benchmarks below).
+# This list has grown before; Brussels, Eurowings and ITA are the likely next. IATA codes.
+dynamic_airlines: [LH, LX, OS, CL, 4Y, EN, WK]  # WK (Edelweiss): reported by one source, verify
+
 # What one mile costs you, in euro cents. Turns miles into euros.
 mile_cost_eur_cents: 1.16
 

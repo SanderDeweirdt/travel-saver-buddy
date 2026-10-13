@@ -89,6 +89,22 @@ Optional `cash_fares.csv`, next to `config.yaml`, with columns
 results get a cash fare, saving and value per mile. Bad rows are skipped
 with a warning naming the line.
 
+## Fixed charts and dynamic prices
+
+Miles & More prices Lufthansa Group carriers dynamically and everyone else on a fixed partner
+chart. `dynamic_airlines` in `config.yaml` lists the dynamic ones (IATA codes; it has grown before,
+keep it current).
+
+- **Fixed-chart carriers:** a Deal when miles are at or under the benchmark's `chart_rate_miles`
+  and fees inside `fees_max_eur`. Above the chart is no Deal.
+- **Dynamic carriers:** no chart exists, so they are judged only against prices this tool has
+  observed (the percentile and `min_discount_pct` rules). With too little history the verdict is
+  **Unranked** and the row stays off the Shortlist and out of Slack. The cached figure can be far
+  from the live price (seen live: 5,956 cached against about 17,000 on miles-and-more.com), so
+  confirm on miles-and-more.com before acting.
+- **Mixed routings** (a dynamic and a fixed carrier) are judged as dynamic, since the stored
+  result does not say which carrier flies the long-haul segment.
+
 ## Slack alerts
 
 1. In Slack, create an app at <https://api.slack.com/apps> ("From scratch"),
