@@ -1,10 +1,27 @@
 {% extends "base.html" %}
 {% block title %}Shortlist · mmscan{% endblock %}
 {% block body %}
-<h1>Shortlist</h1>
+<div class="page-head">
+  <h1>Shortlist</h1>
+  {% if view %}<span class="sub">Run #{{ run_id }}{% if run %} · {{ run.kind }} · {{ run.started_at|when }} UTC{% endif %}</span>{% endif %}
+</div>
 {% if not view %}
-<p>No scored run yet. The scanner has not stored results.</p>
+<div class="panel"><p class="empty" style="padding:32px;text-align:center;margin:0">No scored run yet. The scanner has not stored results.</p></div>
 {% else %}
+{% set rows = view.rows %}
+{% set deals = rows|selectattr("s.verdict", "equalto", "Deal")|list|length %}
+{% set worth = rows|selectattr("s.verdict", "equalto", "Worth a look")|list|length %}
+{% set totals = rows|map(attribute="s.total_eur")|reject("none")|list %}
+{% set ages = rows|map(attribute="age_h")|reject("none")|list %}
+<div class="banner" role="note">{{ disclaimer }}</div>
+
+<div class="tiles">
+  <div class="tile good"><div class="k">Deals</div><div class="v">{{ deals }}</div><div class="d">meet every benchmark</div></div>
+  <div class="tile warn"><div class="k">Worth a look</div><div class="v">{{ worth }}</div><div class="d">one benchmark met</div></div>
+  <div class="tile"><div class="k">Cheapest total</div><div class="v">{% if totals %}€{{ totals|min|money }}{% else %}–{% endif %}</div><div class="d">miles valued + fees</div></div>
+  <div class="tile {{ 'bad' if ages and ages|min > 48 }}"><div class="k">Freshest data</div><div class="v">{% if ages %}{{ "%.0f"|format(ages|min) }}h{% else %}–{% endif %}</div><div class="d">{{ rows|length }} of {{ view.total }} results shown</div></div>
+</div>
+
 <form class="filters" method="get" action="/">
   <label>Run
     <select name="run">
@@ -26,36 +43,50 @@
     <select name="sort">{% for s in sorts %}<option {{ 'selected' if s == f.sort }}>{{ s }}</option>{% endfor %}</select></label>
   <label>Scope
     <select name="all"><option value="0">Shortlist</option><option value="1" {{ 'selected' if f.all }}>All results</option></select></label>
-  <button type="submit">Apply</button>
+  <div class="actions">
+    <button type="submit" class="primary">Apply</button>
+    <a class="btn" href="/">Reset</a>
+  </div>
 </form>
-<p class="note">{{ disclaimer }} Run #{{ run_id }}{% if run %} ({{ run.kind }}, {{ run.status }}, {{ run.started_at|when }} UTC){% endif %}.
-  {{ view.rows|length }} of {{ view.total }} results shown.</p>
-<div class="scroll"><table>
+
+<div class="panel" style="margin-top:16px"><div class="scroll"><table class="cards">
 <thead><tr>
-  <th>Verdict</th><th>Change</th><th>Date</th><th>Route</th><th>Cabin</th>
+  <th>Verdict</th><th>Date</th><th>Route</th><th>Cabin</th>
   <th class="n">Miles</th><th class="n">Fees €</th><th class="n">Total €</th>
-  <th class="n">Baseline €</th><th class="n">Route pct</th><th class="n">Seats</th>
-  <th>Flags</th><th class="n">Data age h</th><th></th>
+  <th>Route percentile</th><th class="n">Seats</th><th>Notes</th><th></th>
 </tr></thead>
 <tbody>
-{% for r in view.rows %}{% set s = r.s %}
+{% for r in rows %}{% set s = r.s %}
 <tr>
-  <td><span class="tag {{ 'deal' if s.verdict == 'Deal' else 'worth' if s.verdict == 'Worth a look' }}">{{ s.verdict }}</span></td>
-  <td>{{ s.change or "" }}</td>
-  <td>{{ s.date }}</td>
-  <td><a href="/route/{{ s.origin }}/{{ s.destination }}/{{ s.cabin }}">{{ s.origin }}→{{ s.destination }}</a></td>
-  <td>{{ s.cabin }}</td>
-  <td class="n">{{ "{:,}".format(s.miles) if s.miles is not none else "–" }}</td>
-  <td class="n">{{ s.fees_eur|money }}</td>
-  <td class="n">{{ s.total_eur|money }}</td>
-  <td class="n" title="{{ r.samples }} samples">{{ r.baseline|money }}</td>
-  <td class="n">{{ "%.0f"|format(s.route_pct) if s.route_pct is not none else "–" }}</td>
-  <td class="n">{{ s.seats if s.seats is not none else "?" }}</td>
-  <td>{% if s.chart_rate %}chart_rate {% endif %}{% if s.ceiling_good %}ceiling_good{% endif %}</td>
-  <td class="n">{{ "%.0f"|format(r.age_h) if r.age_h is not none else "–" }}{{ " (stale)" if r.age_h and r.age_h > 48 }}</td>
-  <td>{% if s.booking_link %}<a href="{{ s.booking_link }}" rel="noopener noreferrer" target="_blank">book</a>{% endif %}</td>
+  <td data-label="Verdict"><span>
+    <span class="tag {{ 'deal' if s.verdict == 'Deal' else 'worth' if s.verdict == 'Worth a look' }}">{{ s.verdict }}</span>
+    {% if s.change %}<div class="muted {{ 'chg-down' if 'drop' in s.change|lower or 'cheaper' in s.change|lower }}">{{ s.change }}</div>{% endif %}
+  </span></td>
+  <td data-label="Date" class="nowrap">{{ s.date }}</td>
+  <td data-label="Route" class="route"><a href="/route/{{ s.origin }}/{{ s.destination }}/{{ s.cabin }}">{{ s.origin }}→{{ s.destination }}</a></td>
+  <td data-label="Cabin">{{ s.cabin }}</td>
+  <td data-label="Miles" class="n">{{ "{:,}".format(s.miles) if s.miles is not none else "–" }}</td>
+  <td data-label="Fees €" class="n">{{ s.fees_eur|money }}{% if s.fee_estimated %}<span class="muted" title="Fee estimated"> ~</span>{% endif %}</td>
+  <td data-label="Total €" class="n"><span>
+    <span class="total">{{ s.total_eur|money }}</span>
+    <div class="muted" title="{{ r.samples }} samples">{% if r.baseline is not none %}typical {{ r.baseline|money }}{% else %}no baseline{% endif %}</div>
+  </span></td>
+  <td data-label="Route percentile">
+    {% if s.route_pct is not none %}
+    <div class="pct" title="Cheaper than {{ "%.0f"|format(100 - s.route_pct) }}% of this route's history"><div class="bar"><i style="width: {{ [100 - s.route_pct, 100]|min|round|int }}%"></i></div><span class="muted">{{ "%.0f"|format(s.route_pct) }}</span></div>
+    {% else %}–{% endif %}
+  </td>
+  <td data-label="Seats" class="n">{{ s.seats if s.seats is not none else "?" }}</td>
+  <td data-label="Notes"><span>
+    {% if r.pricing == "fixed" %}<span class="chip">chart</span>
+    {% else %}<span class="chip warn" title="Dynamic Miles &amp; More price: the cached figure can be far off. Verify on miles-and-more.com.">{{ "dynamic" if r.pricing == "dynamic" else "mixed" }}, verify</span>{% endif %}
+    {% if s.chart_rate %}<span class="chip good">chart_rate</span>{% endif %}
+    {% if s.ceiling_good %}<span class="chip good">ceiling_good</span>{% endif %}
+    {% if r.age_h is not none %}<span class="chip {{ 'bad' if r.age_h > 48 }}">{{ "%.0f"|format(r.age_h) }}h old{{ " (stale)" if r.age_h > 48 }}</span>{% endif %}
+  </span></td>
+  <td data-label="">{% if s.booking_link %}<a class="btn sm primary" href="{{ s.booking_link }}" rel="noopener noreferrer" target="_blank">Book</a>{% endif %}</td>
 </tr>
-{% else %}<tr><td colspan="14">Nothing matches.</td></tr>{% endfor %}
-</tbody></table></div>
+{% else %}<tr><td class="empty" colspan="11">Nothing matches.</td></tr>{% endfor %}
+</tbody></table></div></div>
 {% endif %}
 {% endblock %}

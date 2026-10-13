@@ -194,4 +194,29 @@ def test_trips_page_lists_pairs(tmp_path, default_config_dict, write_config):
     login(c)
     text = c.get("/trips").text
     assert "Family stay" in text and "2027-06-10" in text and "2027-08-25" in text
-    assert "options" in text
+    assert "Cheapest for 2" in text and "pairs" in text
+
+
+def test_shortlist_labels_dynamic_prices(tmp_path, default_config_dict):
+    cfg = config(default_config_dict, relative={"percentile_good": 20, "min_samples": 2})
+    path = tmp_path / "mix.db"
+    store = Store(path)
+    run = store.start_run("watch", "{}", now=NOW)
+    for aid, airlines in (("fx", "SQ"), ("dyn", "LH")):
+        store.save_availability(run, avail(aid, airlines=airlines, business=60000), "watchlist")
+        store.save_trips(
+            aid,
+            "2026-10-10T08:00:00Z",
+            [trip(f"t{aid}", avail_id=aid, miles=60000, taxes=30000, carriers=airlines)],
+            None,
+            {},
+        )
+    score_run(store, cfg, run, NOW)
+    store.close()
+    settings = WebSettings(PASSWORD, "s" * 32, path, ROOT / "config.yaml")
+    c = TestClient(create_app(settings), base_url="https://testserver")
+    login(c)
+    page = c.get("/?all=1").text
+    assert "dynamic, verify" in page and ">chart<" in page
+    assert ">Unranked</span>" in page  # the dynamic fare has no history yet
+    assert ">Unranked</span>" not in c.get("/").text  # and never reaches the Shortlist

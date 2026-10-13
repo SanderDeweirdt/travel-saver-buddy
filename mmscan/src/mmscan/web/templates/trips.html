@@ -1,8 +1,11 @@
 {% extends "base.html" %}
 {% block title %}Trips · mmscan{% endblock %}
 {% block body %}
-<h1>Trips</h1>
-<p class="note">{{ disclaimer }} Outbound and return pairs, ranked by what the whole trip costs all travellers (miles at your mile value plus fees). Results seen in the last {{ freshness }} h.</p>
+<div class="page-head">
+  <h1>Trips</h1>
+  <span class="sub">Results seen in the last {{ freshness }} h</span>
+</div>
+<div class="banner" role="note">{{ disclaimer }} Pairs are ranked by what the whole trip costs all travellers: miles at your mile value plus fees.</div>
 {% for v in views %}{% set t = v.profile %}
 <section class="trip">
   <h2>{{ t.name }}</h2>
@@ -16,16 +19,16 @@
     {% if t.max_total_eur %}· budget €{{ t.max_total_eur|money }}{% endif %}
   </p>
   {% if not v.pairs %}
-  <p>{{ v.note }}</p>
+  <div class="panel"><p class="empty" style="padding:24px;text-align:center;margin:0">{{ v.note }}</p></div>
   {% else %}
   {% set b = v.best %}
-  <div class="best">
-    Cheapest: <b>€{{ b.party_total|money }}</b> for {{ v.seats }}
-    (€{{ b.total_pp|money }} each, {{ "{:,}".format(b.miles_pp) }} mi + €{{ b.fees_pp|money }} fees pp)
-    · {{ b.out.date }}{% if b.back %} → {{ b.back.date }}, {{ b.stay_days }} days{% endif %}
-    {% if t.max_total_eur %}· {{ v.n_within_budget }} of {{ v.n_pairs }} options within budget{% else %}· {{ v.n_pairs }} options{% endif %}
+  <div class="tiles">
+    <div class="tile good"><div class="k">Cheapest for {{ v.seats }}</div><div class="v">€{{ b.party_total|money }}</div><div class="d">€{{ b.total_pp|money }} each</div></div>
+    <div class="tile"><div class="k">Dates</div><div class="v" style="font-size:18px">{{ b.out.date }}{% if b.back %} → {{ b.back.date }}{% endif %}</div><div class="d">{% if b.back %}{{ b.stay_days }} days away{% else %}one way{% endif %}</div></div>
+    <div class="tile"><div class="k">Per person</div><div class="v" style="font-size:18px">{{ "{:,}".format(b.miles_pp) }} mi</div><div class="d">+ €{{ b.fees_pp|money }} fees</div></div>
+    <div class="tile {{ 'warn' if t.max_total_eur and not v.n_within_budget }}"><div class="k">{{ "Within budget" if t.max_total_eur else "Options" }}</div><div class="v">{{ v.n_within_budget if t.max_total_eur else v.n_pairs }}</div><div class="d">of {{ v.n_pairs }} pairs</div></div>
   </div>
-  <div class="scroll"><table>
+  <div class="panel" style="margin-top:16px"><div class="scroll"><table class="cards">
   <thead><tr>
     <th class="n">Total € ({{ v.seats }})</th><th class="n">Each €</th><th class="n">Miles each</th><th class="n">Fees each €</th>
     <th>Out</th>{% if t.round_trip %}<th>Back</th><th class="n">Days</th>{% endif %}
@@ -34,29 +37,29 @@
   <tbody>
   {% for p in v.pairs[:show] %}
   <tr>
-    <td class="n"><b>{{ p.party_total|money }}</b></td>
-    <td class="n">{{ p.total_pp|money }}</td>
-    <td class="n">{{ "{:,}".format(p.miles_pp) }}</td>
-    <td class="n">{{ p.fees_pp|money }}</td>
-    <td>{{ p.out.date }} <a href="/route/{{ p.out.origin }}/{{ p.out.destination }}/{{ p.out.cabin }}">{{ p.out.origin }}→{{ p.out.destination }}</a>
-      {% if p.out.flight_numbers %}<small>{{ p.out.flight_numbers }}</small>{% endif %}</td>
-    {% if t.round_trip %}<td>{{ p.back.date }} <a href="/route/{{ p.back.origin }}/{{ p.back.destination }}/{{ p.back.cabin }}">{{ p.back.origin }}→{{ p.back.destination }}</a>
-      {% if p.back.flight_numbers %}<small>{{ p.back.flight_numbers }}</small>{% endif %}</td>
-    <td class="n">{{ p.stay_days }}</td>{% endif %}
-    <td>{{ p.cabin }}</td>
-    <td>{% for s in p.legs %}{{ "direct" if s.stops == 0 or (s.stops is none and s.direct) else (s.stops ~ " stop" if s.stops is not none else "?") }}{{ " / " if not loop.last }}{% endfor %}</td>
-    <td>{% if p.within_budget is none %}–{% elif p.within_budget %}<span class="tag ok">within</span>{% else %}<span class="tag over">over</span>{% endif %}</td>
-    <td>{% for s in p.legs %}{{ s.verdict }}{{ " / " if not loop.last }}{% endfor %}</td>
+    <td data-label="Total € ({{ v.seats }})" class="n"><b>{{ p.party_total|money }}</b></td>
+    <td data-label="Each €" class="n">{{ p.total_pp|money }}</td>
+    <td data-label="Miles each" class="n">{{ "{:,}".format(p.miles_pp) }}</td>
+    <td data-label="Fees each €" class="n">{{ p.fees_pp|money }}</td>
+    <td data-label="Out"><span>{{ p.out.date }} <a href="/route/{{ p.out.origin }}/{{ p.out.destination }}/{{ p.out.cabin }}">{{ p.out.origin }}→{{ p.out.destination }}</a>
+      {% if p.out.flight_numbers %}<small>{{ p.out.flight_numbers }}</small>{% endif %}</span></td>
+    {% if t.round_trip %}<td data-label="Back"><span>{{ p.back.date }} <a href="/route/{{ p.back.origin }}/{{ p.back.destination }}/{{ p.back.cabin }}">{{ p.back.origin }}→{{ p.back.destination }}</a>
+      {% if p.back.flight_numbers %}<small>{{ p.back.flight_numbers }}</small>{% endif %}</span></td>
+    <td data-label="Days" class="n">{{ p.stay_days }}</td>{% endif %}
+    <td data-label="Cabin">{{ p.cabin }}</td>
+    <td data-label="Stops">{% for s in p.legs %}{{ "direct" if s.stops == 0 or (s.stops is none and s.direct) else (s.stops ~ " stop" if s.stops is not none else "?") }}{{ " / " if not loop.last }}{% endfor %}</td>
+    <td data-label="Budget">{% if p.within_budget is none %}–{% elif p.within_budget %}<span class="tag ok">within</span>{% else %}<span class="tag over">over</span>{% endif %}</td>
+    <td data-label="Verdicts">{% for s in p.legs %}{{ s.verdict }}{{ " / " if not loop.last }}{% endfor %}</td>
     {% set age = age_hours(p, now) %}
-    <td class="n">{{ "%.0f"|format(age) if age is not none else "–" }}{{ " (stale)" if age and age > 48 }}</td>
-    <td>{% for s in p.legs %}{% if s.booking_link %}<a href="{{ s.booking_link }}" rel="noopener noreferrer" target="_blank">{{ "out" if loop.first else "back" }}</a> {% endif %}{% endfor %}</td>
+    <td data-label="Data age h" class="n">{{ "%.0f"|format(age) if age is not none else "–" }}{{ " (stale)" if age and age > 48 }}</td>
+    <td data-label="Book">{% for s in p.legs %}{% if s.booking_link %}<a href="{{ s.booking_link }}" rel="noopener noreferrer" target="_blank">{{ "out" if loop.first else "back" }}</a> {% endif %}{% endfor %}</td>
   </tr>
   {% endfor %}
-  </tbody></table></div>
+  </tbody></table></div></div>
   {% if v.pairs|length > show %}<p class="note"><a href="/trips?show={{ show + 25 }}">Show more</a></p>{% endif %}
   {% endif %}
 </section>
 {% else %}
-<p>No trips configured. Add a <code>trips:</code> block to <code>config.yaml</code> (see the README).</p>
+<div class="panel"><p class="empty" style="padding:32px;text-align:center;margin:0">No trips configured. Add a <code>trips:</code> block to <code>config.yaml</code> (see the README).</p></div>
 {% endfor %}
 {% endblock %}

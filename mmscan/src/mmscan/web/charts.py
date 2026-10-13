@@ -62,9 +62,14 @@ def price_chart(points: list[dict]) -> str:
         )
         out.append(f'<path class="line {cls}" d="{path}"/>')
         lx, ly = coords[-1]
+        label_y = ly + 4
+        if key == "median":
+            label_y = ly + 4 - 7  # the cheapest label sits at the same height when they coincide
+        elif abs(coords[-1][1] - y(points[-1]["median"])) < 14:
+            label_y = ly + 4 + 7
         out.append(
             f'<circle class="end {cls}" cx="{lx:.1f}" cy="{ly:.1f}" r="4"/>'
-            f'<text class="label" x="{lx + 10:.1f}" y="{ly + 4:.1f}">{name}</text>'
+            f'<text class="label" x="{lx + 10:.1f}" y="{label_y:.1f}">{name}</text>'
         )
     for t, p in zip(times, points, strict=True):  # wide invisible hit targets for the tooltip
         tip = (

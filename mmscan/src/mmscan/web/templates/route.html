@@ -1,25 +1,46 @@
 {% extends "base.html" %}
 {% block title %}{{ origin }}→{{ destination }} · mmscan{% endblock %}
 {% block body %}
-<h1>{{ origin }} → {{ destination }}, {{ cabin }}</h1>
-<p class="note">{{ disclaimer }} Cheapest and median total cost (miles at your mile value plus fees) per run, last 180 days.</p>
+<p class="sub" style="margin:0 0 6px"><a href="/">← Shortlist</a></p>
+<div class="page-head">
+  <h1>{{ origin }} → {{ destination }} <span class="tag plain">{{ cabin }}</span></h1>
+</div>
+<div class="banner" role="note">{{ disclaimer }}</div>
 {% if points %}
-{{ chart|safe }}
-<p class="note"><span style="color:var(--series-1)">━</span> Cheapest &nbsp; <span style="color:var(--series-2)">━</span> Median</p>
-<details><summary>Table view</summary>
-<div class="scroll"><table>
-<thead><tr><th>Run</th><th>Started (UTC)</th><th class="n">Cheapest €</th><th class="n">Median €</th><th class="n">Results</th></tr></thead>
-<tbody>{% for p in points|reverse %}<tr><td>#{{ p.run_id }}</td><td>{{ p.ts|when }}</td>
-<td class="n">{{ p.low|money }}</td><td class="n">{{ p.median|money }}</td><td class="n">{{ p.n }}</td></tr>{% endfor %}</tbody>
-</table></div></details>
-<h1 style="margin-top:20px">Latest run (#{{ latest_run }})</h1>
-<div class="scroll"><table>
+{% set last = points[-1] %}
+<div class="tiles">
+  <div class="tile"><div class="k">Cheapest, latest run</div><div class="v">€{{ last.low|money }}</div><div class="d">run #{{ last.run_id }}</div></div>
+  <div class="tile"><div class="k">Median, latest run</div><div class="v">€{{ last.median|money }}</div><div class="d">{{ last.n }} results</div></div>
+  <div class="tile good"><div class="k">All-time low</div><div class="v">€{{ points|map(attribute="low")|min|money }}</div><div class="d">last 180 days</div></div>
+  <div class="tile"><div class="k">Runs tracked</div><div class="v">{{ points|length }}</div><div class="d">with priced results</div></div>
+</div>
+
+<h2>Price history</h2>
+<p class="note" style="margin-top:0">Total cost per run: miles at your mile value plus fees.</p>
+<div class="panel">
+  <div class="chart-wrap">{{ chart|safe }}</div>
+  <div class="legend"><span><i style="background:var(--series-1)"></i>Cheapest</span><span><i style="background:var(--series-2)"></i>Median</span></div>
+  <details><summary>Table view</summary>
+  <div class="scroll"><table>
+  <thead><tr><th>Run</th><th>Started (UTC)</th><th class="n">Cheapest €</th><th class="n">Median €</th><th class="n">Results</th></tr></thead>
+  <tbody>{% for p in points|reverse %}<tr><td>#{{ p.run_id }}</td><td>{{ p.ts|when }}</td>
+  <td class="n">{{ p.low|money }}</td><td class="n">{{ p.median|money }}</td><td class="n">{{ p.n }}</td></tr>{% endfor %}</tbody>
+  </table></div></details>
+</div>
+
+<h2>Latest run (#{{ latest_run }})</h2>
+<div class="panel"><div class="scroll"><table class="cards">
 <thead><tr><th>Verdict</th><th>Date</th><th class="n">Miles</th><th class="n">Fees €</th><th class="n">Total €</th><th class="n">Seats</th></tr></thead>
-<tbody>{% for s in current %}<tr><td>{{ s.verdict }}</td><td>{{ s.date }}</td>
-<td class="n">{{ "{:,}".format(s.miles) if s.miles is not none else "–" }}</td><td class="n">{{ s.fees_eur|money }}</td>
-<td class="n">{{ s.total_eur|money }}</td><td class="n">{{ s.seats if s.seats is not none else "?" }}</td></tr>
-{% else %}<tr><td colspan="6">No results for this route in the latest run.</td></tr>{% endfor %}</tbody>
-</table></div>
-{% else %}<p>No priced results for this route yet.</p>{% endif %}
-<p><a href="/">← Shortlist</a></p>
+<tbody>{% for s in current %}<tr>
+<td data-label="Verdict"><span class="tag {{ 'deal' if s.verdict == 'Deal' else 'worth' if s.verdict == 'Worth a look' }}">{{ s.verdict }}</span></td>
+<td data-label="Date">{{ s.date }}</td>
+<td data-label="Miles" class="n">{{ "{:,}".format(s.miles) if s.miles is not none else "–" }}</td>
+<td data-label="Fees €" class="n">{{ s.fees_eur|money }}</td>
+<td data-label="Total €" class="n"><span class="total">{{ s.total_eur|money }}</span></td>
+<td data-label="Seats" class="n">{{ s.seats if s.seats is not none else "?" }}</td></tr>
+{% else %}<tr><td class="empty" colspan="6">No results for this route in the latest run.</td></tr>{% endfor %}</tbody>
+</table></div></div>
+{% else %}
+<div class="panel"><p style="padding:32px;text-align:center;margin:0" class="sub">No priced results for this route yet.</p></div>
+{% endif %}
 {% endblock %}

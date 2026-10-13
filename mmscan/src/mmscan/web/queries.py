@@ -82,6 +82,7 @@ def shortlist_view(
                 "baseline": statistics.median(samples) if samples else None,
                 "samples": len(samples) if samples else 0,
                 "age_h": _age_hours(s.updated_at, now),
+                "pricing": cfg.pricing_model(s.carriers),
             }
         )
     return {
