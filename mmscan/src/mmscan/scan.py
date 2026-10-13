@@ -85,6 +85,10 @@ def region_requests(cfg: Config, today: date) -> list[tuple[str, dict]]:
 
 
 def watchlist_requests(cfg: Config, today: date) -> list[tuple[str, dict]]:
+    return _wide_watchlist_requests(cfg, today) + trip_requests(cfg, today)
+
+
+def _wide_watchlist_requests(cfg: Config, today: date) -> list[tuple[str, dict]]:
     wl = cfg.watchlist
     if not wl.origins or not wl.destinations:
         return []
@@ -104,6 +108,33 @@ def watchlist_requests(cfg: Config, today: date) -> list[tuple[str, dict]]:
             **_common(cfg, today),
         }
         out.append(("search", {k: v for k, v in params.items() if v is not None}))
+    return out
+
+
+def trip_requests(cfg: Config, today: date) -> list[tuple[str, dict]]:
+    """One narrow Cached Search per trip leg, so a trip's dates are never crowded out of the
+    cheapest-first page of the wide watchlist search."""
+    out = []
+    for trip in cfg.trips:
+        cabins = cfg.trip_cabins(trip)
+        legs = [(trip.origins, trip.destinations, trip.depart)]
+        if trip.return_window:
+            legs.append((trip.destinations, trip.origins, trip.return_window))
+        for origins, dests, window in legs:
+            if window.end < today:
+                continue
+            params = {
+                "origin_airport": ",".join(origins),
+                "destination_airport": ",".join(dests),
+                "sources": cfg.source,
+                "cabins": cabins[0] if len(cabins) == 1 else None,
+                "order_by": "lowest_mileage",
+                "include_trips": True,
+                **_common(cfg, today),
+                "start_date": max(window.start, today).isoformat(),
+                "end_date": window.end.isoformat(),
+            }
+            out.append(("search", {k: v for k, v in params.items() if v is not None}))
     return out
 
 

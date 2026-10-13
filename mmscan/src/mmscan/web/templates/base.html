@@ -171,6 +171,15 @@ details[open] summary { border-bottom: 1px solid var(--line); }
 @media (prefers-reduced-motion: no-preference) {
   .meter > div { transition: width .4s ease; }
 }
+.tag.ok { color: var(--good); border-color: var(--good); }
+.tag.over { color: var(--bad); border-color: var(--bad); }
+.trip { margin: 0 0 28px; }
+.trip h2 { font-size: 17px; margin: 0 0 2px; }
+.trip .meta { color: var(--ink-2); font-size: 13px; margin: 0 0 8px; }
+.trip .best { background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+  padding: 10px 14px; margin: 0 0 10px; }
+.trip .best b { font-size: 18px; }
+td small { color: var(--ink-2); }
 </style>
 </head>
 <body>
@@ -181,6 +190,7 @@ details[open] summary { border-bottom: 1px solid var(--line); }
     mmscan
   </a>
   <nav aria-label="Main">
+    <a href="/trips" class="{{ 'on' if page == 'trips' }}">Trips</a>
     <a href="/" class="{{ 'on' if page in ('shortlist', 'route') }}">Shortlist</a>
     <a href="/runs" class="{{ 'on' if page == 'runs' }}">Runs</a>
     <a href="/quota" class="{{ 'on' if page == 'quota' }}">Quota</a>

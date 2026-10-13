@@ -17,6 +17,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from mmscan.config import Config, load_config
 from mmscan.report import DISCLAIMER, SHORTLIST_COLUMNS, row_values, shortlist, write_report
 from mmscan.store import Store
+from mmscan.trips import age_hours, trip_views
 from mmscan.web import queries
 from mmscan.web.auth import LoginLimiter, password_ok
 from mmscan.web.charts import price_chart
@@ -135,6 +136,19 @@ def create_app(settings: WebSettings) -> FastAPI:
             runs=queries.scored_runs(store),
             f={"route": route, "cabin": cabin, "verdict": verdict, "sort": sort, "all": all},
             sorts=list(queries.SORTS),
+        )
+
+    @app.get("/trips", response_class=HTMLResponse, dependencies=[Depends(require_login)])
+    def trips_page(request: Request, store: Store = Depends(open_store), show: int = 12):
+        now = datetime.now(UTC)
+        return render(
+            request,
+            "trips.html",
+            views=trip_views(store, cfg, now),
+            now=now,
+            age_hours=age_hours,
+            show=max(1, min(show, 200)),
+            freshness=cfg.trip_freshness_hours,
         )
 
     @app.get(

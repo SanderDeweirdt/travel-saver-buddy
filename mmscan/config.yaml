@@ -111,3 +111,21 @@ notify:
 # Calls per watch run: 2 x max_pages.
 watch:
   max_pages: 1
+
+# Trips you actually want to take. Each one gets its own narrow searches every scan, outbound and
+# return legs paired into round trips, a page in the dashboard (/trips) and Slack alerts on its
+# best options. Leave out `return` for a one-way trip. Remove the leading # to switch one on.
+# trips:
+#   - name: Family stay Philippines
+#     origins: [BRU, FRA]
+#     destinations: [MNL, CEB]
+#     depart: {start: 2027-06-01, end: 2027-06-20}
+#     return: {start: 2027-08-15, end: 2027-08-31}
+#     stay_days: {min: 40, max: 90}   # optional
+#     cabins: [economy]               # default: top-level cabins
+#     seats: 2                        # default: min_seats
+#     max_stops: 1                    # optional
+#     max_total_eur: 3000             # optional: whole trip, all travellers
+#     open_jaw: false                 # true: return from another airport / to another origin
+#     alert_top: 3                    # Slack: new or cheaper among the best N options
+# trip_freshness_hours: 72            # ignore results from runs older than this

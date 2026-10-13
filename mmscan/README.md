@@ -46,6 +46,7 @@ Every command takes `--config PATH` (default `config.yaml`), `--dry-run`
 | `mmscan run` | Scan, score, fetch trip details for Shortlist results only, score again, report, notify; prints the planned calls first | Scan plus at most `enrich.max_calls` |
 | `mmscan watch` | Watchlist only: scan (first `watch.max_pages` page per direction), score against stored history, post new deals to Slack. For hourly runs | 2 with the default config |
 | `mmscan notify` | Posts the latest run's new or cheaper Deals to Slack; nothing when there are none | 0 |
+| `mmscan trips` | Best round trips per trip profile, from stored results (`--top N`) | 0 |
 | `mmscan quota` | Calls left today (last `X-RateLimit-Remaining`) and calls made by mmscan today | 0 |
 
 `enrich` and `score` work on the latest `scan` or `run`, and `report` on
@@ -88,6 +89,25 @@ Optional `cash_fares.csv`, next to `config.yaml`, with columns
 `origin,destination,cabin,month,fare_eur` (`month` as `YYYY-MM`). Matching
 results get a cash fare, saving and value per mile. Bad rows are skipped
 with a warning naming the line.
+
+## Trips
+
+A trip profile in `config.yaml` (`trips:`, example at the bottom of the file) describes a journey
+you want to take: airports, departure and return windows, travellers, cabins, stop limit and an
+optional budget. For each trip mmscan:
+
+- searches only that trip's dates, one call per leg (so `watch` and `run` cost 2 extra calls per
+  round trip), instead of hoping it shows up in the wide watchlist page;
+- pairs every outbound with every return that fits the stay length (same airports unless
+  `open_jaw: true`, same cabin) and ranks the pairs by what the whole party pays: miles at
+  `mile_cost_eur_cents` plus fees, times the number of travellers;
+- shows them on the dashboard's **Trips** page, with a budget marker and booking links;
+- alerts on Slack when one of the best `alert_top` pairs is new or at least `drops.min_pct`
+  cheaper than the last time it was seen. The first run alerts nothing.
+
+Trip results come from the latest observation of each flight within `trip_freshness_hours`
+(default 72). `mmscan trips` prints the same ranking in the terminal. Trip alerts follow the
+`notify.slack` switch like the others.
 
 ## Fixed charts and dynamic prices
 
