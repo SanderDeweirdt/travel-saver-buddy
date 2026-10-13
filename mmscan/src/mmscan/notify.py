@@ -15,6 +15,7 @@ from mmscan.models import local_time
 from mmscan.report import DISCLAIMER, eligible, load_results
 from mmscan.scoring import SKIP, Scored, rank_key
 from mmscan.store import Store
+from mmscan.trips import TripAlert, trip_alerts
 
 WEBHOOK_ENV = "SLACK_WEBHOOK_URL"
 log = logging.getLogger("mmscan.notify")
@@ -74,13 +75,48 @@ def _line(s: Scored) -> str:
     return line
 
 
-def build_message(alerts: list[Scored], run_id: int, cfg: Config, now: datetime) -> dict:
-    shown = alerts[: cfg.notify.max_items]
-    title = f"mmscan: {len(alerts)} new or cheaper award{'s' if len(alerts) != 1 else ''}"
+def _trip_line(a: TripAlert) -> str:
+    p = a.pair
+    label = a.change + (f" (was €{a.was:,.0f})" if a.was is not None else "")
+    head = f"*{_esc(label)}* · {_esc(p.trip)} · {p.cabin}"
+    legs = [f"Out {p.out.date} {p.out.origin}→{p.out.destination}"]
+    if p.back:
+        legs.append(f"Back {p.back.date} {p.back.origin}→{p.back.destination}")
+        legs.append(f"{p.stay_days} days")
+    money = (
+        f"{p.seats} travellers: {p.miles_pp * p.seats:,} mi + €{p.fees_pp * p.seats:,.0f} fees = "
+        f"*€{p.party_total:,.0f}* (€{p.total_pp:,.0f} each)"
+    )
+    if p.within_budget:
+        money += " · within budget"
+    line = f"{head}\n{' · '.join(legs)}\n{money}"
+    links = [
+        f"<{s.booking_link}|Book {w}>"
+        for w, s in zip(("out", "back"), p.legs, strict=False)
+        if s.booking_link
+    ]
+    return line + ("\n" + " · ".join(links) if links else "")
+
+
+def build_message(
+    alerts: list[Scored],
+    run_id: int,
+    cfg: Config,
+    now: datetime,
+    trips: list[TripAlert] | None = None,
+) -> dict:
+    trips = trips or []
+    total = len(alerts) + len(trips)
+    title = f"mmscan: {total} new or cheaper award{'s' if total != 1 else ''}"
     blocks: list[dict] = [{"type": "header", "text": {"type": "plain_text", "text": title}}]
+    room = cfg.notify.max_items
+    shown_trips = trips[:room]
+    for a in shown_trips:
+        blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": _trip_line(a)}})
+    shown = alerts[: max(room - len(shown_trips), 0)]
     for s in shown:
         blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": _line(s)}})
-    more = len(alerts) - len(shown)
+    more = total - len(shown) - len(shown_trips)
     footer = f"Run {run_id}, {now.strftime('%Y-%m-%d %H:%M')} UTC. "
     if more:
         footer += f"{more} more in the report. "
@@ -111,10 +147,12 @@ def notify_run(
     """Post the run's alerts. Returns (alert count, payload). Sends nothing when there are no
     alerts, or when `url` is None (dry run)."""
     alerts = select_alerts(load_results(store, run_id), cfg)
-    if not alerts:
+    trips = trip_alerts(store, cfg, run_id, now)
+    if not alerts and not trips:
         return 0, None
-    payload = build_message(alerts, run_id, cfg, now)
+    payload = build_message(alerts, run_id, cfg, now, trips)
+    n = len(alerts) + len(trips)
     if url is not None:
         send_slack(url, payload, transport)
-        log.info("posted %d alerts to Slack", len(alerts))
-    return len(alerts), payload
+        log.info("posted %d alerts to Slack", n)
+    return n, payload

@@ -61,6 +61,7 @@ def test_healthz_is_public(client):
     [
         "/",
         "/runs",
+        "/trips",
         "/quota",
         "/route/MUC/SIN/business",
         "/reports/latest.xlsx",
@@ -169,3 +170,28 @@ def test_refuses_to_start_without_secrets(monkeypatch):
     monkeypatch.delenv("SESSION_SECRET")
     with pytest.raises(SettingsError, match="SESSION_SECRET"):
         settings_from_env()
+
+
+def test_trips_page_without_trips_explains_setup(client):
+    login(client)
+    r = client.get("/trips")
+    assert r.status_code == 200 and "No trips configured" in r.text
+
+
+def test_trips_page_lists_pairs(tmp_path, default_config_dict, write_config):
+    from tests.test_trips import LEGS, TRIP, add_run
+    from tests.test_trips import NOW as T_NOW
+
+    cfg_path = write_config({**default_config_dict, "trips": [TRIP]})
+    path = tmp_path / "trips.db"
+    store = Store(path)
+    add_run(store, config(default_config_dict, trips=[TRIP]), LEGS, at=T_NOW)
+    store.close()
+    c = TestClient(
+        create_app(WebSettings(PASSWORD, "s" * 32, path, cfg_path, secure_cookies=True)),
+        base_url="https://testserver",
+    )
+    login(c)
+    text = c.get("/trips").text
+    assert "Family stay" in text and "2027-06-10" in text and "2027-08-25" in text
+    assert "options" in text

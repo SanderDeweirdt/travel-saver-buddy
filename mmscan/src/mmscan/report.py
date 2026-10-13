@@ -54,24 +54,28 @@ SHORTLIST_COLUMNS = [
 ALL_COLUMNS = SHORTLIST_COLUMNS + ["Fee source", "Seats OK", "Direct", "Expired"]
 
 
+_BOOL_COLUMNS = (
+    "fee_estimated",
+    "expired",
+    "route_good",
+    "destination_good",
+    "ceiling_good",
+    "seats_ok",
+    "direct",
+    "chart_rate",
+)
+
+
+def scored_from_row(r) -> Scored:
+    values = {c: r[c] for c in SCORED_COLUMNS}
+    for c in _BOOL_COLUMNS:
+        values[c] = None if values[c] is None else bool(values[c])
+    return Scored(**values)
+
+
 def load_results(store: Store, run_id: int) -> list[Scored]:
     rows = store.conn.execute("SELECT * FROM results WHERE run_id=?", (run_id,)).fetchall()
-    out = []
-    for r in rows:
-        values = {c: r[c] for c in SCORED_COLUMNS}
-        for c in (
-            "fee_estimated",
-            "expired",
-            "route_good",
-            "destination_good",
-            "ceiling_good",
-            "seats_ok",
-            "direct",
-            "chart_rate",
-        ):
-            values[c] = None if values[c] is None else bool(values[c])
-        out.append(Scored(**values))
-    return sorted(out, key=rank_key)
+    return sorted((scored_from_row(r) for r in rows), key=rank_key)
 
 
 def eligible(results: list[Scored], cfg: Config | None = None) -> list[Scored]:

@@ -46,6 +46,63 @@ class Watchlist(_Model):
     both_directions: bool = True
 
 
+class DateRange(_Model):
+    start: date
+    end: date
+
+    @model_validator(mode="after")
+    def _ordered(self) -> DateRange:
+        if self.start > self.end:
+            raise ValueError("start must not be after end")
+        return self
+
+
+class StayDays(_Model):
+    min: int = Field(0, ge=0)
+    max: int = Field(365, ge=0)
+
+    @model_validator(mode="after")
+    def _ordered(self) -> StayDays:
+        if self.min > self.max:
+            raise ValueError("min must not exceed max")
+        return self
+
+
+class TripProfile(_Model):
+    """A trip you actually want to take. Scanned, paired and alerted on its own."""
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    name: str = Field(min_length=1)
+    origins: list[str] = Field(min_length=1)
+    destinations: list[str] = Field(min_length=1)
+    depart: DateRange
+    # Leave out for a one-way trip.
+    return_window: DateRange | None = Field(None, alias="return")
+    stay_days: StayDays | None = None
+    cabins: list[Cabin] | None = None  # default: the top-level cabins
+    seats: int | None = Field(None, ge=1)  # default: the top-level min_seats
+    max_stops: int | None = Field(None, ge=0)
+    # Ceiling for the whole trip and all travellers, miles valued at mile_cost_eur_cents.
+    max_total_eur: float | None = Field(None, gt=0)
+    # Return from a different airport than you flew into (and back to a different origin).
+    open_jaw: bool = False
+    alert_top: int = Field(3, ge=1, le=20)
+
+    @model_validator(mode="after")
+    def _consistent(self) -> TripProfile:
+        if self.return_window:
+            if self.return_window.end < self.depart.start:
+                raise ValueError("return window ends before the trip departs")
+        elif self.stay_days:
+            raise ValueError("stay_days needs a return window")
+        return self
+
+    @property
+    def round_trip(self) -> bool:
+        return self.return_window is not None
+
+
 class Benchmark(_Model):
     name: str
     cabin: Cabin
@@ -143,6 +200,9 @@ class Config(_Model):
     deals: Deals = Deals()
     drops: Drops = Drops()
     watch: Watch = Watch()
+    trips: list[TripProfile] = []
+    # Trip results older than this (by run start) are ignored when pairing legs.
+    trip_freshness_hours: int = Field(72, ge=1)
 
     warnings: list[str] = Field(default_factory=list, exclude=True)
 
@@ -156,7 +216,16 @@ class Config(_Model):
                         f"benchmarks.{i}.between: {place!r} is neither an API region "
                         f"nor a subregion key"
                     )
+        names = [t.name for t in self.trips]
+        if len(set(names)) != len(names):
+            raise ValueError("trips: names must be unique")
         return self
+
+    def trip_cabins(self, trip: TripProfile) -> list[str]:
+        return list(trip.cabins or self.cabins)
+
+    def trip_seats(self, trip: TripProfile) -> int:
+        return trip.seats or self.min_seats
 
     def in_focus(
         self, origin: str, origin_region: str, dest: str, dest_region: str, cabin: str
@@ -215,6 +284,9 @@ def _airport_warnings(cfg: Config) -> list[str]:
         "watchlist.destinations": cfg.watchlist.destinations,
     }
     lists.update({f"subregions.{k}": v for k, v in cfg.subregions.items()})
+    for t in cfg.trips:
+        lists[f"trips.{t.name}.origins"] = t.origins
+        lists[f"trips.{t.name}.destinations"] = t.destinations
     for where, codes in lists.items():
         for code in codes:
             if not _IATA.match(code):

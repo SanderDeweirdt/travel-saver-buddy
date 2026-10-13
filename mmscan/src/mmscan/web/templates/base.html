@@ -67,6 +67,15 @@ tr.partial td { background: color-mix(in srgb, var(--bad) 8%, transparent); }
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
   padding: 16px; max-width: 360px; margin: 48px auto; }
 .card form { display: flex; flex-direction: column; gap: 10px; }
+.tag.ok { color: var(--good); border-color: var(--good); }
+.tag.over { color: var(--bad); border-color: var(--bad); }
+.trip { margin: 0 0 28px; }
+.trip h2 { font-size: 17px; margin: 0 0 2px; }
+.trip .meta { color: var(--ink-2); font-size: 13px; margin: 0 0 8px; }
+.trip .best { background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+  padding: 10px 14px; margin: 0 0 10px; }
+.trip .best b { font-size: 18px; }
+td small { color: var(--ink-2); }
 .err { color: var(--bad); }
 </style>
 </head>
@@ -75,6 +84,7 @@ tr.partial td { background: color-mix(in srgb, var(--bad) 8%, transparent); }
 <header>
   <span class="brand">mmscan</span>
   <nav>
+    <a href="/trips" class="{{ 'on' if page == 'trips' }}">Trips</a>
     <a href="/" class="{{ 'on' if page == 'shortlist' }}">Shortlist</a>
     <a href="/runs" class="{{ 'on' if page == 'runs' }}">Runs</a>
     <a href="/quota" class="{{ 'on' if page == 'quota' }}">Quota</a>

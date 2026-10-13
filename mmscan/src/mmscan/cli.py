@@ -416,6 +416,32 @@ def watch(
 
 
 @app.command()
+def trips(
+    config: ConfigOpt = Path("config.yaml"),
+    top: Annotated[int, typer.Option(help="Pairs to show per trip.")] = 5,
+) -> None:
+    """Best round trips per trip profile, from stored results. Makes no API calls."""
+    from mmscan.trips import trip_views
+
+    cfg = _load(config)
+    if not cfg.trips:
+        typer.echo("No trips configured; add a trips: block to config.yaml.", err=True)
+        raise typer.Exit(1)
+    store = _store()
+    for v in trip_views(store, cfg, datetime.now(UTC)):
+        typer.echo(f"\n{v.profile.name} ({v.seats} seat{'s' if v.seats != 1 else ''})")
+        if not v.pairs:
+            typer.echo(f"  {v.note}")
+        for p in v.pairs[:top]:
+            back = f" -> {p.back.date} {p.back.origin}-{p.back.destination}" if p.back else ""
+            budget = {True: " [within budget]", False: " [over budget]", None: ""}[p.within_budget]
+            typer.echo(
+                f"  EUR {p.party_total:,.0f} ({p.total_pp:,.0f} each) {p.cabin}: "
+                f"{p.out.date} {p.out.origin}-{p.out.destination}{back}{budget}"
+            )
+
+
+@app.command()
 def quota(
     config: ConfigOpt = Path("config.yaml"),
     dry_run: DryRunOpt = False,
