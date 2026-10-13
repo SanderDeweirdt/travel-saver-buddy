@@ -140,9 +140,18 @@ select, input[type=text], input[type=number], input[type=date] { border: 1px sol
 .fill { height: 100%; border-radius: 999px; } .fill.grey { background: var(--ink-2); opacity: .55; } .fill.acc { background: var(--accent); } .fill.bad { background: var(--bad); }
 .split { margin-top: 12px; } .deal-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
 a.btn { text-decoration: none; display: inline-block; }
-.hero-deal { display: flex; justify-content: space-between; gap: 24px; flex-wrap: wrap; margin-bottom: 16px; background: var(--accent-soft); border-color: var(--accent); }
+.hero-deal { padding: 12px 20px; display: flex; justify-content: space-between; gap: 24px; flex-wrap: wrap; margin-bottom: 16px; background: var(--accent-soft); border-color: var(--accent); }
 .hero-stats { display: flex; gap: 28px; } label.inline { display: flex; align-items: center; gap: 8px; }
 @media (max-width: 600px) { .cmp { grid-template-columns: 90px 1fr 70px; } .saving { text-align: left; } }
+/* compact table */
+.compact th, .compact td { padding: 6px 7px; font-size: 13px; }
+.compact th { font-size: 11px; }
+.compact .bar-col { width: 70px; min-width: 70px; }
+.compact td:nth-child(11) { white-space: nowrap; }
+.track.mini { height: 8px; }
+.pos { color: var(--good); } .neg { color: var(--bad); }
+.btn.sm { padding: 3px 10px; font-size: 12px; }
+.compact tbody tr { cursor: pointer; }
 /* dialog */
 dialog { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--ink); padding: 0; width: min(560px, calc(100vw - 32px)); }
 dialog::backdrop { background: rgba(0,0,0,.45); }
@@ -405,7 +414,7 @@ function renderDeals() {
       <label class="inline">Travellers <select id="paxSel" aria-label="Travellers">${[1,2,3,4].map(n => `<option ${n === F.pax ? 'selected' : ''}>${n}</option>`).join('')}</select></label></div>
     ${top ? `<section class="card hero-deal" aria-label="Top deal">
       <div><div class="muted small">Best verified deal today</div>
-        <div class="big"><span class="num">${eur(top.save * F.pax)}</span> saved</div>
+        <div class="big" style="font-size:28px"><span class="num">${eur(top.save * F.pax)}</span> saved</div>
         <div><b>${top.o} → ${top.d}</b> ${top.cab}, ${top.car} · pay ${eur(top.total * F.pax)} instead of ${eur(top.cash * F.pax)} for ${F.pax}</div></div>
       <div class="hero-stats"><div><div class="stat num">${good}</div><div class="muted small">deals 10%+ below usual</div></div>
         <div><div class="stat num">${rows.filter(r => r.chg === 'New').length}</div><div class="muted small">new since yesterday</div></div></div>
@@ -417,7 +426,22 @@ function renderDeals() {
       <input type="text" id="routeQ" placeholder="Route, e.g. FRA SIN" value="${esc(F.route)}" aria-label="Filter by route" style="width:180px">
       <select id="sortSel" aria-label="Sort"><option value="pct">Biggest % saving</option><option value="save">Biggest € saving</option><option value="total">Lowest price</option><option value="date">Earliest date</option></select>
     </div>
-    <div class="deal-list">${rows.map(dealCard).join('') || '<p class="card muted">No deals match these filters.</p>'}</div>
+    <div class="card tbl-wrap compact" style="padding:0"><table>
+      <thead><tr><th>Deal</th><th>Route</th><th>Date</th><th class="r">Miles</th><th class="r">Fees</th><th class="r">With miles</th><th class="r">Usual cash</th><th class="r">Saving</th><th class="bar-col" aria-label="Price versus usual"></th><th class="r">ct/mile</th><th>Flags</th><th></th></tr></thead>
+      <tbody>${rows.map(r => { const [vl, vc] = verdictOf(r), x = F.pax, w = Math.max(0, Math.min(100, r.total / r.cash * 100));
+        return `<tr class="${r.age > 48 ? 'stale' : ''}" tabindex="0" data-route="1" title="Click for price history">
+        <td><span class="badge ${vc}">${vl}</span></td>
+        <td><b>${r.o} → ${r.d}</b> <span class="muted small">${r.cab === 'Business' ? 'Biz' : 'Eco'} · ${r.car}</span></td>
+        <td class="num">${new Date(r.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</td>
+        <td class="r num">${mi(r.miles * x)}</td><td class="r num">${eur(r.fees * USD_EUR * x)}</td>
+        <td class="r num"><b>${eur(r.total * x)}</b></td><td class="r num muted">${eur(r.cash * x)}</td>
+        <td class="r num ${r.save < 0 ? 'neg' : 'pos'}"><b>${r.save >= 0 ? '−' : '+'}${eur(Math.abs(r.save) * x)}</b> <span class="small">${Math.round(Math.abs(r.pct))}%</span></td>
+        <td class="bar-col"><div class="track mini" role="img" aria-label="${Math.round(w)}% of the usual cash price"><div class="fill ${r.save >= 0 ? 'acc' : 'bad'}" style="width:${w}%"></div></div></td>
+        <td class="r num">${r.vpm.toFixed(1)}</td>
+        <td>${r.type === 'chart' ? '<span class="badge b-good">Chart</span>' : '<span class="badge b-warn" title="Dynamic price: cached miles can differ a lot from the live price">⚠ Unverified</span>'}${r.chg === 'New' ? ' <span class="badge b-info">New</span>' : r.chg === 'Cheaper' ? ' <span class="badge b-good">▼</span>' : ''}${r.age > 48 ? ' <span class="badge b-mute" title="Data older than 48 hours">Stale</span>' : ''}${r.seats && r.seats < F.pax ? '' : ''}</td>
+        <td><a class="btn sm" href="#" onclick="return false" aria-label="Book ${r.o} to ${r.d} on Miles and More">Book</a></td></tr>`; }).join('')
+        || '<tr><td colspan="12" class="muted" style="padding:24px">No deals match these filters.</td></tr>'}</tbody></table></div>
+    <p class="muted small">Prices are for ${F.pax} traveller${F.pax > 1 ? 's' : ''}, one-way. Saving is against the usual cash price (− means you pay less). Click a row for its price history.</p>
     <details class="card" style="margin-top:16px"><summary><b>How is this calculated?</b></summary>
       <p class="small muted">Price with miles = miles × ${MILE_CT} ct (what a mile costs you) + cash fees (taxes and surcharges, converted from USD at ${USD_EUR}). The usual cash price is the typical one-way fare for that route and cabin that you entered in <code>cash_fares.csv</code> (last updated 12 Oct). seats.aero has no cash prices, so keep that file current. "Cash is cheaper" means buying a ticket costs less than paying for the miles and fees.</p>
       <p class="small muted"><b>Unverified</b> prices come from Lufthansa-group flights, which Miles &amp; More prices dynamically. The cached miles can be well below the live price, so open the booking link and check before you rely on them.</p></details>`;
@@ -489,6 +513,7 @@ function show(v) {
   window.scrollTo(0, 0);
 }
 document.addEventListener('click', e => {
+  if (e.target.closest('a')) return;
   const t = e.target.closest('button, tr[data-route]'); if (!t) return;
   if (t.dataset.view) show(t.dataset.view);
   else if (t.dataset.trip) { tripId = +t.dataset.trip; renderTrips(); }
