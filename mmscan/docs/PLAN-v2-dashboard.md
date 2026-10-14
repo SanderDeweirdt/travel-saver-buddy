@@ -61,7 +61,7 @@ makes no API calls.
 - Tests in `test_web.py`/new `test_deals.py`: ranking, verdict thresholds at the edges, negative saving, pax scaling,
   stale hidden, thin-history rows listed apart, dynamic marked unverified.
 
-### M3. Page and navigation
+### M3. Page and navigation — done
 
 - `templates/deals.html`: banner with the best verified deal, filter bar (plain GET form, works without JS), compact
   table with the columns in the mockup, the "How is this calculated?" note. Row link goes to the route page; the

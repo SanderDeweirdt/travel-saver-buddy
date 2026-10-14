@@ -60,6 +60,7 @@ def test_healthz_is_public(client):
     "path",
     [
         "/",
+        "/shortlist",
         "/runs",
         "/trips",
         "/quota",
@@ -117,14 +118,14 @@ def test_limiter_window_and_compare():
 
 def test_shortlist_page_shows_fixture_data(client):
     login(client)
-    r = client.get("/")
+    r = client.get("/shortlist")
     assert r.status_code == 200
     assert "Cached data. Confirm price and seats on miles-and-more.com" in r.text
     assert "MUC→SIN" in r.text and "58,000" in r.text
     assert "https://example.test/book" in r.text
     # filters narrow the table
-    assert "58,000" not in client.get("/?cabin=economy").text
-    assert "Nothing matches" in client.get("/?route=FRA-KUL").text
+    assert "58,000" not in client.get("/shortlist?cabin=economy").text
+    assert "Nothing matches" in client.get("/shortlist?route=FRA-KUL").text
 
 
 def test_route_runs_quota_pages(client):
@@ -216,10 +217,10 @@ def test_shortlist_labels_dynamic_prices(tmp_path, default_config_dict):
     settings = WebSettings(PASSWORD, "s" * 32, path, ROOT / "config.yaml")
     c = TestClient(create_app(settings), base_url="https://testserver")
     login(c)
-    page = c.get("/?all=1").text
+    page = c.get("/shortlist?all=1").text
     assert "dynamic, verify" in page and ">chart<" in page
     assert ">Unranked</span>" in page  # the dynamic fare has no history yet
-    assert ">Unranked</span>" not in c.get("/").text  # and never reaches the Shortlist
+    assert ">Unranked</span>" not in c.get("/shortlist").text  # and never reaches the Shortlist
 
 
 def test_deals_view_reads_the_store(db, default_config_dict):
@@ -232,3 +233,68 @@ def test_deals_view_reads_the_store(db, default_config_dict):
     # one flight date seen three times is one observation: too little history for a baseline
     assert view["deals"] == [] and len(view["building"]) == 1
     assert view["thin_routes"] == 1 and view["total"] >= 1
+
+
+@pytest.fixture
+def deals_client(tmp_path, default_config_dict, write_config):
+    """Eight flight dates on MUC-SIN business; the newest run holds the cheapest one."""
+    cfg = config(default_config_dict, relative={"percentile_good": 20, "min_samples": 3})
+    path = tmp_path / "deals.db"
+    store = Store(path)
+    at = NOW - timedelta(hours=1)
+    run = store.start_run("watch", "{}", now=at)
+    prices = [70000, 68000, 66000, 64000, 62000, 60000, 58000, 36000]
+    for i, miles in enumerate(prices):
+        aid = f"d{i}"
+        store.save_availability(
+            run,
+            avail(aid, date=f"2026-12-1{i}", business=miles, updated=at.isoformat()),
+            "watchlist",
+        )
+        store.save_trips(
+            aid,
+            at.isoformat(),
+            [trip(f"t{i}", avail_id=aid, miles=miles, taxes=30000)],
+            "https://example.test/book",
+            {},
+        )
+    score_run(store, cfg, run, at)
+    store.finish_run(run, "ok", {}, [], now=at)
+    store.close()
+    cfg_path = write_config(
+        {**default_config_dict, "relative": {"percentile_good": 20, "min_samples": 3}}
+    )
+    settings = WebSettings(PASSWORD, "s" * 32, path, cfg_path, secure_cookies=True)
+    c = TestClient(create_app(settings), base_url="https://testserver")
+    login(c)
+    return c
+
+
+def test_deals_page_ranks_against_the_usual_price(deals_client):
+    r = deals_client.get("/")
+    assert r.status_code == 200
+    assert "Best deals right now" in r.text
+    assert "Great deal" in r.text and "Chart" in r.text
+    assert "https://example.test/book" in r.text
+    assert r.text.index("2026-12-17") < r.text.index("2026-12-10")  # biggest saving first
+
+
+def test_deals_page_filters_and_traveller_scaling(deals_client):
+    one = deals_client.get("/?pax=1&fresh=0").text
+    two = deals_client.get("/?pax=2&fresh=0").text
+    assert "36,000" in one and "72,000" in two
+    assert "Nothing matches" in deals_client.get("/?cabin=economy").text
+    assert "Nothing matches" in deals_client.get("/?route=FRA").text
+    assert "Nothing matches" in deals_client.get("/?pax=9").text  # only 4 seats each
+
+
+def test_deals_page_survives_bad_params(deals_client):
+    assert deals_client.get("/?sort=bogus&pax=0").status_code == 200
+    assert deals_client.get("/?pax=99").status_code == 200
+
+
+def test_deals_page_empty_database(tmp_path):
+    settings = WebSettings(PASSWORD, "s" * 32, tmp_path / "e.db", ROOT / "config.yaml")
+    c = TestClient(create_app(settings), base_url="https://testserver")
+    login(c)
+    assert "No scored run yet" in c.get("/").text

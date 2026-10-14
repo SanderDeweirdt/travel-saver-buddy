@@ -22,7 +22,7 @@
   <div class="tile {{ 'bad' if ages and ages|min > 48 }}"><div class="k">Freshest data</div><div class="v">{% if ages %}{{ "%.0f"|format(ages|min) }}h{% else %}–{% endif %}</div><div class="d">{{ rows|length }} of {{ view.total }} results shown</div></div>
 </div>
 
-<form class="filters" method="get" action="/">
+<form class="filters" method="get" action="/shortlist">
   <label>Run
     <select name="run">
       {% for r in runs %}<option value="{{ r.id }}" {{ 'selected' if r.id == run_id }}>#{{ r.id }} {{ r.kind }} {{ r.started_at|when }}</option>{% endfor %}
@@ -45,7 +45,7 @@
     <select name="all"><option value="0">Shortlist</option><option value="1" {{ 'selected' if f.all }}>All results</option></select></label>
   <div class="actions">
     <button type="submit" class="primary">Apply</button>
-    <a class="btn" href="/">Reset</a>
+    <a class="btn" href="/shortlist">Reset</a>
   </div>
 </form>
 
