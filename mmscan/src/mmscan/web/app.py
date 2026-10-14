@@ -250,6 +250,12 @@ def create_app(settings: WebSettings) -> FastAPI:
             **data,
         )
 
+    @app.get("/data", response_class=HTMLResponse, dependencies=[Depends(require_login)])
+    def data_page(request: Request, store: Store = Depends(open_store)):
+        return render(
+            request, "data.html", d=queries.data_view(store, cfg, datetime.now(UTC)), cfg=cfg
+        )
+
     @app.get("/runs", response_class=HTMLResponse, dependencies=[Depends(require_login)])
     def runs_page(request: Request, store: Store = Depends(open_store)):
         return render(request, "runs.html", runs=queries.recent_runs(store))

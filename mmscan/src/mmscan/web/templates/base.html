@@ -142,7 +142,7 @@ td.empty { text-align: center; color: var(--ink-2); padding: 32px 12px; }
   justify-content: center; font-size: 12px; line-height: 1.2; border: 1px solid transparent; font-variant-numeric: tabular-nums; }
 .cal .cell small { font-size: 10px; color: var(--ink-2); }
 .cal .none { background: var(--surface-2); color: var(--ink-2); opacity: .7; }
-.cal .l0 { background: color-mix(in srgb, var(--good) 28%, var(--surface)); } .cal .l1 { background: color-mix(in srgb, var(--good) 14%, var(--surface)); }
+.cal .l0 { background: color-mix(in srgb, var(--good) 45%, var(--surface)); } .cal .l1 { background: color-mix(in srgb, var(--good) 22%, var(--surface)); }
 .cal .l2 { background: color-mix(in srgb, var(--warn) 18%, var(--surface)); } .cal .l3 { background: color-mix(in srgb, var(--bad) 14%, var(--surface)); }
 .cal .l4 { background: color-mix(in srgb, var(--bad) 26%, var(--surface)); }
 .cal .best { outline: 2px solid var(--ink); }
@@ -234,8 +234,7 @@ td small { color: var(--ink-2); }
     <a href="/" class="{{ 'on' if page in ('deals', 'route') }}">Best deals</a>
     <a href="/trips" class="{{ 'on' if page == 'trips' }}">My trips</a>
     <a href="/shortlist" class="{{ 'on' if page == 'shortlist' }}">Shortlist</a>
-    <a href="/runs" class="{{ 'on' if page == 'runs' }}">Runs</a>
-    <a href="/quota" class="{{ 'on' if page == 'quota' }}">Quota</a>
+    <a href="/data" class="{{ 'on' if page in ('data', 'runs', 'quota') }}">Data &amp; alerts</a>
     <span class="sep"></span>
     <a href="/reports/latest.xlsx" title="Download the latest report as Excel">Excel ↓</a>
     <a href="/reports/latest-shortlist.csv" title="Download the shortlist as CSV">CSV ↓</a>

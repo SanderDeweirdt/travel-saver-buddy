@@ -62,7 +62,7 @@
   <td data-label="Usual €" class="n muted">{{ d.party_usual|money }}</td>
   <td data-label="Saving" class="n {{ 'pos' if d.save >= 0 else 'neg' }}"><b>{{ "−" if d.save >= 0 else "+" }}€{{ d.party_save|abs|money }}</b> <span class="muted">{{ "%.0f"|format(d.save_pct|abs) }}%</span></td>
   <td><span class="mini {{ 'neg' if d.save < 0 }}" role="img" aria-label="{{ '%.0f'|format(100 - d.save_pct) }}% of the usual price"><i style="width: {{ [[100 - d.save_pct, 0]|max, 100]|min }}%"></i></span></td>
-  <td data-label="ct/mile" class="n">{{ "%.1f"|format(d.save_ct_per_mile) if d.save_ct_per_mile is not none else "–" }}</td>
+  <td data-label="ct/mile" class="n">{% set c = d.save_ct_per_mile %}{{ ("%.1f"|format(c) if c|abs >= 0.05 else "0.0") if c is not none else "–" }}</td>
   <td data-label="Flags"><span class="flags">
     {% if d.verified %}<span class="chip good" data-tip="Fixed partner chart: the cached miles can be trusted">Chart</span>
     {% else %}<span class="chip warn" data-tip="Dynamic Miles &amp; More price: the cached miles can be far below the live price. Check before you rely on it.">⚠ Unverified</span>{% endif %}

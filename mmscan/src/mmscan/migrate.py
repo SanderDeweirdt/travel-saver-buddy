@@ -8,7 +8,7 @@ from pathlib import Path
 from mmscan.store import Store
 
 # Parents before children; each table's primary key is its idempotency guard.
-ORDER = ("runs", "api_calls", "availabilities", "trip_fetches", "trips", "results")
+ORDER = ("runs", "api_calls", "availabilities", "trip_fetches", "trips", "results", "price_checks")
 BATCH = 1000
 
 
@@ -35,7 +35,7 @@ def migrate(source: Path, url: str) -> list[tuple[str, int, int]]:
                         copied += cur.rowcount
             out.append((table, copied, total))
         with dest.conn:
-            for table in ("runs", "api_calls"):
+            for table in ("runs", "api_calls", "price_checks"):
                 dest.conn.execute(
                     f"SELECT setval(pg_get_serial_sequence('{table}', 'id'), "
                     f"GREATEST((SELECT max(id) FROM {table}), 1))"

@@ -88,7 +88,7 @@ makes no API calls.
 - Mark results older than 48 h stale and leave them out of Slack (`notify.py`).
 - Tests for trend and calendar grouping; one for the stale filter in `notify`.
 
-### M6. Data & alerts page (R1, R2, R4)
+### M6. Data & alerts page (R1, R2, R4) — done
 
 - Merge Runs and Quota into one page; add scanner health, USD rate age (warn over 30 days) and the Slack switches
   as read-only status (the switches themselves stay in `config.yaml`).
@@ -129,3 +129,13 @@ makes no API calls.
 
 1. Should economy and business use the same thresholds? Kept the same for now.
 2. Is a 30-day window right, given hourly watch scans and a daily full run? Configurable via `relative.history_days`.
+
+## Status (Oct 14)
+
+M1 to M6 are built and tested on SQLite and Postgres. Left for Sander, not code:
+
+- Turn `notify.slack` on once the Best deals page has run a few days; chart-price Deals and trip alerts only,
+  because `notify.unverified` defaults to off.
+- Record hand checks with `mmscan verify-add` until each dynamic carrier has a measured live-to-cached ratio (R1).
+- Update `usd_to_eur` and `usd_to_eur_date` in `config.yaml` with today's rate.
+- Not built (later): editing trip profiles from the dashboard (R6), per-user logins.

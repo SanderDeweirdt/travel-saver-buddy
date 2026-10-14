@@ -170,6 +170,55 @@ def route_history(
     }
 
 
+def carrier_trust(checks: list[dict], cfg: Config) -> list[dict]:
+    """Live-to-cached mile ratio per carrier from the manual checks. Dynamic carriers are always
+    listed, even before a first check; fixed-chart carriers only once they have one."""
+    by: dict[str, list[float]] = {}
+    for c in checks:
+        if c["cached_miles"]:
+            by.setdefault(c["carrier"], []).append(c["live_miles"] / c["cached_miles"])
+    dynamic = {c.upper() for c in cfg.dynamic_airlines}
+    out = []
+    for carrier in sorted(dynamic | set(by)):
+        r = by.get(carrier, [])
+        out.append(
+            {
+                "carrier": carrier,
+                "basis": "dynamic" if carrier in dynamic else "fixed",
+                "n": len(r),
+                "median": statistics.median(r) if r else None,
+                "lo": min(r) if r else None,
+                "hi": max(r) if r else None,
+            }
+        )
+    return out
+
+
+def data_view(store: Store, cfg: Config, now: datetime) -> dict:
+    runs = recent_runs(store, 30)
+    week = (now - timedelta(days=7)).isoformat()
+    last_watch = next((r for r in runs if r["kind"] == "watch"), None)
+    last_full = next((r for r in runs if r["kind"] == "run"), None)
+    age = cfg.usd_rate_age_days(now.date())
+    watch_age_h = (
+        (now - datetime.fromisoformat(last_watch["started_at"])).total_seconds() / 3600
+        if last_watch
+        else None
+    )
+    return {
+        "quota": quota_view(store, cfg.api.daily_call_cap, now),
+        "runs": runs[:10],
+        "last_watch": last_watch,
+        "last_full": last_full,
+        "watch_age_h": watch_age_h,
+        "failed_week": sum(
+            1 for r in runs if r["status"] in ("failed", "partial") and r["started_at"] >= week
+        ),
+        "fx": {"rate": cfg.usd_to_eur, "age_days": age, "stale": age is None or age > 30},
+        "trust": carrier_trust(store.price_checks(), cfg),
+    }
+
+
 def quota_view(store: Store, cap: int, now: datetime) -> dict:
     days = store.conn.execute(
         "SELECT substr(ts, 1, 10) AS day, count(*) AS n FROM api_calls "

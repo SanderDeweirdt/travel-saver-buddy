@@ -117,6 +117,16 @@ CREATE TABLE IF NOT EXISTS results (
     PRIMARY KEY (run_id, availability_id, cabin)
 );
 CREATE INDEX IF NOT EXISTS results_route ON results(origin, destination, cabin, run_id);
+CREATE TABLE IF NOT EXISTS price_checks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    checked_at TEXT NOT NULL,
+    carrier TEXT NOT NULL,
+    route TEXT,
+    cabin TEXT,
+    cached_miles INTEGER NOT NULL,
+    live_miles INTEGER NOT NULL,
+    note TEXT
+);
 CREATE INDEX IF NOT EXISTS runs_started ON runs(started_at);
 CREATE INDEX IF NOT EXISTS api_calls_run ON api_calls(run_id);
 CREATE INDEX IF NOT EXISTS trip_fetches_fetched ON trip_fetches(fetched_at);
@@ -271,6 +281,40 @@ class Store:
             "ORDER BY ts DESC, id DESC LIMIT 1"
         ).fetchone()
         return None if row is None else int(row[0])
+
+    # Manual price checks: what seats.aero cached against what miles-and-more.com showed
+
+    def add_price_check(
+        self,
+        carrier: str,
+        cached_miles: int,
+        live_miles: int,
+        route: str | None = None,
+        cabin: str | None = None,
+        note: str | None = None,
+        now: datetime | None = None,
+    ) -> None:
+        self.conn.execute(
+            "INSERT INTO price_checks(checked_at, carrier, route, cabin, cached_miles, "
+            "live_miles, note) VALUES (?,?,?,?,?,?,?)",
+            (
+                (now or utcnow()).isoformat(),
+                carrier.upper(),
+                route,
+                cabin,
+                cached_miles,
+                live_miles,
+                note,
+            ),
+        )
+        self.conn.commit()
+
+    def price_checks(self) -> list[dict]:
+        rows = self.conn.execute(
+            "SELECT checked_at, carrier, route, cabin, cached_miles, live_miles, note "
+            "FROM price_checks ORDER BY id"
+        ).fetchall()
+        return [dict(zip(rows[0].keys(), tuple(r), strict=True)) for r in rows] if rows else []
 
     # Retention
 

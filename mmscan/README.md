@@ -47,6 +47,7 @@ Every command takes `--config PATH` (default `config.yaml`), `--dry-run`
 | `mmscan watch` | Watchlist only: scan (first `watch.max_pages` page per direction), score against stored history, post new deals to Slack. For hourly runs | 2 with the default config |
 | `mmscan notify` | Posts the latest run's new or cheaper Deals to Slack; nothing when there are none | 0 |
 | `mmscan trips` | Best round trips per trip profile, from stored results (`--top N`) | 0 |
+| `mmscan verify-add` | Records one hand check of a cached price against the live one (carrier, cached miles, live miles); feeds the dashboard's trust table | 0 |
 | `mmscan quota` | Calls left today (last `X-RateLimit-Remaining`) and calls made by mmscan today | 0 |
 
 `enrich` and `score` work on the latest `scan` or `run`, and `report` on
@@ -89,6 +90,21 @@ Optional `cash_fares.csv`, next to `config.yaml`, with columns
 `origin,destination,cabin,month,fare_eur` (`month` as `YYYY-MM`). Matching
 results get a cash fare, saving and value per mile. Bad rows are skipped
 with a warning naming the line.
+
+## Dashboard pages
+
+| Page | What it shows |
+| --- | --- |
+| **Best deals** (`/`) | One row per result, ranked by how far below the route's usual price it is: miles at `mile_cost_eur_cents` plus fees, against the median of the last `relative.history_days` days for that origin, destination and cabin (fixed-chart and dynamic carriers kept apart). Verdicts: Great deal at `savings.great_pct` (30%) below usual, Good deal at `savings.good_pct` (10%), Marginal, Above usual. Filters for cabin, route, travellers, chart price only, hide stale (over 48 h). Routes with fewer than `relative.min_samples` observations are listed under "Building history" instead. |
+| **My trips** (`/trips`) | Per trip: best whole-party price, budget bar, 30-day trend of the best price, a calendar of the cheapest price per departure day, and the ranked round trips. |
+| **Shortlist** (`/shortlist`) | The v1 view: Deal and Worth a look by verdict. |
+| **Route** (`/route/...`) | Price history with the usual price as a dashed line, and today's results against it. |
+| **Data & alerts** (`/data`) | Quota, scanner health, the USD rate age, a table of live-to-cached mile ratios per carrier (from `mmscan verify-add`), Slack status and recent runs. |
+
+"Usual price" is what the route normally costs with miles, from this tool's own history. It is not a cash ticket price.
+**Unverified** marks Lufthansa-group (dynamic) prices: the cached miles can be far below the live price.
+Those, and results older than 48 hours, are never posted to Slack unless `notify.unverified: true`.
+`usd_to_eur_date` records when you last checked the USD rate; past 30 days the dashboard and the run log warn.
 
 ## Trips
 

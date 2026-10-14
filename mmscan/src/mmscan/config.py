@@ -202,6 +202,7 @@ class Config(_Model):
     min_seats: int = Field(2, ge=1)
     mile_cost_eur_cents: float = Field(gt=0)
     usd_to_eur: float | None = Field(None, gt=0)
+    usd_to_eur_date: date | None = None  # when the rate above was last checked
     date_window: DateWindow = DateWindow()
     region_pairs: list[RegionPair] = []
     watchlist: Watchlist = Watchlist()
@@ -269,6 +270,9 @@ class Config(_Model):
         if place == region:
             return True
         return airport in self.subregions.get(place, [])
+
+    def usd_rate_age_days(self, today: date) -> int | None:
+        return None if self.usd_to_eur_date is None else (today - self.usd_to_eur_date).days
 
     def pricing_model(self, carriers: str | None) -> str:
         """ "fixed" when no carrier on the result prices dynamically, "dynamic" when all do, and

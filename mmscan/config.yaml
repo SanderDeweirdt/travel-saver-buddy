@@ -15,6 +15,7 @@ mile_cost_eur_cents: 1.16
 # then. Fees run 30-700 EUR, so a few percent of drift barely moves a total. Without it, USD
 # fees are unpriced and the Shortlist stays empty.
 usd_to_eur: 0.92
+usd_to_eur_date: "2026-10-12"   # update this whenever you update the rate; the dashboard warns after 30 days
 
 date_window:
   start_offset_days: 0

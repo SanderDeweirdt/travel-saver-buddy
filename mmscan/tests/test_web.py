@@ -368,3 +368,38 @@ def test_trips_page_marks_dynamic_carriers(tmp_path, default_config_dict, write_
     d = {**default_config_dict, "dynamic_airlines": ["SQ"]}
     c = _trips_client(tmp_path, d, write_config)
     assert "Unverified" in c.get("/trips").text
+
+
+def test_data_page(deals_client):
+    text = deals_client.get("/data").text
+    assert "Data &amp; alerts" in text and "API calls today" in text
+    assert "How far to trust cached miles" in text and "not checked yet" in text  # LH etc.
+    assert "Slack alerts" in text and "not sent" in text  # dynamic prices off by default
+    assert "Healthy" in text or "Late" in text
+
+
+def test_data_page_shows_manual_price_checks(db, default_config_dict):
+    store = Store(db)
+    store.add_price_check("lh", 6000, 17000, "MUC-SIN", "business")
+    store.add_price_check("LH", 10000, 12000)
+    store.close()
+    c = TestClient(
+        create_app(WebSettings(PASSWORD, "s" * 32, db, ROOT / "config.yaml", secure_cookies=True)),
+        base_url="https://testserver",
+    )
+    login(c)
+    text = c.get("/data").text
+    assert "2.02×" in text  # median of 2.83 and 1.2
+    assert "1.20× to 2.83×" in text
+
+
+def test_usd_rate_warning_when_old(default_config_dict):
+    from datetime import date
+
+    from mmscan.scoring import _currency_warnings
+
+    old = config(default_config_dict, usd_to_eur=0.92, usd_to_eur_date=date(2020, 1, 1))
+    assert any("last checked" in w for w in _currency_warnings({"USD": 3}, old))
+    fresh = config(default_config_dict, usd_to_eur=0.92, usd_to_eur_date=date.today())
+    assert not any("last checked" in w for w in _currency_warnings({"USD": 3}, fresh))
+    assert old.usd_rate_age_days(date(2020, 2, 1)) == 31
