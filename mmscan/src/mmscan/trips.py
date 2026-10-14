@@ -72,6 +72,7 @@ class TripView:
     n_out: int = 0
     n_back: int = 0
     note: str = ""
+    by_day: dict[str, float] = field(default_factory=dict)  # departure date -> cheapest party total
 
     @property
     def best(self) -> TripPair | None:
@@ -165,6 +166,8 @@ def build_trip(legs: list[Scored], trip: TripProfile, cfg: Config) -> TripView:
                     continue
                 pairs.append(TripPair(trip.name, o, b, seats, trip.max_total_eur))
     pairs.sort(key=lambda p: (p.party_total, p.out.date, p.key))
+    for p in pairs:  # pairs are sorted, so the first one seen for a day is its cheapest
+        view.by_day.setdefault(p.out.date, p.party_total)
     view.n_pairs = len(pairs)
     view.n_within_budget = sum(1 for p in pairs if p.within_budget)
     view.pairs = pairs[:MAX_PAIRS]
@@ -189,6 +192,40 @@ def _note(v: TripView) -> str:
     )
 
 
+def calendar_cells(view: TripView) -> dict:
+    """Cheapest whole-party price per departure day over the trip's departure window, as a grid
+    that starts on a Monday. `level` runs from 0 (cheapest fifth) to 4; None means no seats."""
+    w = view.profile.depart
+    days = [w.start + timedelta(days=i) for i in range((w.end - w.start).days + 1)]
+    prices = [view.by_day[d.isoformat()] for d in days if d.isoformat() in view.by_day]
+    lo, hi = (min(prices), max(prices)) if prices else (0.0, 0.0)
+    cells = []
+    for d in days:
+        total = view.by_day.get(d.isoformat())
+        level = None if total is None else min(4, int((total - lo) / (hi - lo + 0.01) * 5))
+        cells.append({"date": d, "total": total, "level": level, "best": total == lo and prices})
+    return {"cells": cells, "lead": w.start.weekday(), "low": lo, "high": hi}
+
+
+def trip_trend(store: Store, cfg: Config, trip: TripProfile, now: datetime, days: int = 30):
+    """Best whole-party price of a trip as it stood at the end of each day, from the stored runs.
+    One point per day (the day's last run), oldest first; days with no option are left out."""
+    cutoff = (now - timedelta(days=days)).isoformat()
+    rows = store.conn.execute(
+        "SELECT id, started_at FROM runs WHERE started_at >= ? ORDER BY id", (cutoff,)
+    ).fetchall()
+    last_of_day: dict[str, tuple[int, str]] = {}
+    for r in rows:
+        last_of_day[r["started_at"][:10]] = (r["id"], r["started_at"])
+    out = []
+    for day, (run_id, started) in sorted(last_of_day.items()):
+        legs = latest_legs(store, cfg, datetime.fromisoformat(started), max_run_id=run_id)
+        best = build_trip(legs, trip, cfg).best
+        if best:
+            out.append({"day": day, "total": best.party_total})
+    return out
+
+
 def trip_views(store: Store, cfg: Config, now: datetime) -> list[TripView]:
     legs = latest_legs(store, cfg, now)
     return [build_trip(legs, t, cfg) for t in cfg.trips]
@@ -198,6 +235,19 @@ def age_hours(pair: TripPair, now: datetime) -> float | None:
     ages = [_age_hours(s.updated_at, now) for s in pair.legs]
     ages = [a for a in ages if a is not None]
     return max(ages) if ages else None
+
+
+STALE_HOURS = 48
+
+
+def alertable(pair: TripPair, cfg: Config, now: datetime) -> bool:
+    """No alert on stale data, nor (unless notify.unverified) on dynamic-carrier prices."""
+    age = age_hours(pair, now)
+    if age is not None and age > STALE_HOURS:
+        return False
+    if not cfg.notify.unverified:
+        return all(cfg.pricing_model(s.carriers) == "fixed" for s in pair.legs)
+    return True
 
 
 @dataclass
@@ -224,7 +274,9 @@ def trip_alerts(store: Store, cfg: Config, run_id: int, now: datetime) -> list[T
     for trip in cfg.trips:
         prev = {p.key: p.party_total for p in build_trip(before, trip, cfg).pairs}
         cur = build_trip(now_legs, trip, cfg)
-        top = [p for p in cur.pairs if p.within_budget is not False][: trip.alert_top]
+        top = [p for p in cur.pairs if p.within_budget is not False and alertable(p, cfg, now)][
+            : trip.alert_top
+        ]
         for p in top:
             was = prev.get(p.key)
             if was is None:

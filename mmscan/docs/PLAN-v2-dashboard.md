@@ -80,7 +80,7 @@ makes no API calls.
 - Show median and 20th percentile lines on the history chart (`web/charts.py`).
 - Tests: `route_history` returns the baseline and, when present, the optional cash fare.
 
-### M5. Trips page upgrade (R5, R7, R8)
+### M5. Trips page upgrade (R5, R7, R8) — done
 
 - Hero with whole-party price and budget bar from the existing trip pairing in `trips.py`.
 - Best-price-per-scan series for the last 30 days: new `queries.trip_trend`, built from stored results.

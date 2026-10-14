@@ -17,10 +17,10 @@ from starlette.middleware.sessions import SessionMiddleware
 from mmscan.config import Config, load_config
 from mmscan.report import DISCLAIMER, SHORTLIST_COLUMNS, row_values, shortlist, write_report
 from mmscan.store import Store
-from mmscan.trips import age_hours, trip_views
+from mmscan.trips import age_hours, calendar_cells, trip_trend, trip_views
 from mmscan.web import queries
 from mmscan.web.auth import LoginLimiter, password_ok
-from mmscan.web.charts import price_chart
+from mmscan.web.charts import price_chart, sparkline
 from mmscan.web.settings import WebSettings
 
 HERE = Path(__file__).parent
@@ -198,10 +198,29 @@ def create_app(settings: WebSettings) -> FastAPI:
     @app.get("/trips", response_class=HTMLResponse, dependencies=[Depends(require_login)])
     def trips_page(request: Request, store: Store = Depends(open_store), show: int = 12):
         now = datetime.now(UTC)
+        views = trip_views(store, cfg, now)
+        extras = {}
+        for v in views:
+            trend = trip_trend(store, cfg, v.profile, now)
+            totals = [p["total"] for p in trend]
+            extras[v.profile.name] = {
+                "spark": sparkline(
+                    totals,
+                    f"Best price for {v.seats} travellers over the last 30 days: "
+                    f"{totals[0]:,.0f} to {totals[-1]:,.0f} euro"
+                    if totals
+                    else "",
+                ),
+                "trend": trend,
+                "calendar": calendar_cells(v) if v.pairs else None,
+            }
         return render(
             request,
             "trips.html",
-            views=trip_views(store, cfg, now),
+            views=views,
+            extras=extras,
+            cfg_unverified=cfg.notify.unverified,
+            pricing_model=cfg.pricing_model,
             now=now,
             age_hours=age_hours,
             show=max(1, min(show, 200)),

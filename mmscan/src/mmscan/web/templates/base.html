@@ -125,6 +125,29 @@ td.empty { text-align: center; color: var(--ink-2); padding: 32px 12px; }
 .checks label { flex-direction: row; align-items: center; gap: 6px; font-weight: 500; font-size: 13px; color: var(--ink); }
 .checks input { min-height: 0; }
 .flags { display: flex; gap: 4px; flex-wrap: wrap; }
+/* trips: sparkline, calendar, budget */
+.spark { width: 100%; height: auto; max-width: 420px; display: block; }
+.spark .area { fill: color-mix(in srgb, var(--series-1) 14%, transparent); }
+.spark .line { fill: none; stroke-width: 2.25; stroke-linejoin: round; } .spark .s1 { stroke: var(--series-1); }
+.spark .end { fill: var(--series-1); stroke: var(--surface); stroke-width: 2; }
+.triprow { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 0 0 16px; }
+@media (max-width: 760px) { .triprow { grid-template-columns: 1fr; } }
+.card2 { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; box-shadow: var(--shadow); }
+.card2 h3 { margin: 0 0 6px; font-size: 14px; }
+.budget { position: relative; margin: 14px 0 6px; }
+.budget .mark { position: absolute; top: -4px; width: 2px; height: 20px; background: var(--ink); }
+.cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.cal .dow { font-size: 11px; color: var(--ink-2); text-align: center; }
+.cal .cell { min-height: 46px; border-radius: 6px; padding: 3px 2px; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; font-size: 12px; line-height: 1.2; border: 1px solid transparent; font-variant-numeric: tabular-nums; }
+.cal .cell small { font-size: 10px; color: var(--ink-2); }
+.cal .none { background: var(--surface-2); color: var(--ink-2); opacity: .7; }
+.cal .l0 { background: color-mix(in srgb, var(--good) 28%, var(--surface)); } .cal .l1 { background: color-mix(in srgb, var(--good) 14%, var(--surface)); }
+.cal .l2 { background: color-mix(in srgb, var(--warn) 18%, var(--surface)); } .cal .l3 { background: color-mix(in srgb, var(--bad) 14%, var(--surface)); }
+.cal .l4 { background: color-mix(in srgb, var(--bad) 26%, var(--surface)); }
+.cal .best { outline: 2px solid var(--ink); }
+.calkey { display: flex; gap: 6px; align-items: center; font-size: 12px; color: var(--ink-2); margin-top: 8px; }
+.calkey i { width: 18px; height: 10px; border-radius: 3px; display: inline-block; }
 /* percentile bar: left = cheaper than most of this route's history */
 .pct { display: flex; align-items: center; gap: 8px; min-width: 96px; }
 .pct .bar { flex: 1; height: 6px; background: var(--mute-bg); border-radius: 3px; overflow: hidden; }

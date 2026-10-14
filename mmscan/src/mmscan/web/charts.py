@@ -88,3 +88,26 @@ def price_chart(points: list[dict], usual: float | None = None) -> str:
         )
     out.append("</svg>")
     return "".join(out)
+
+
+def sparkline(values: list[float], label: str, w: int = 360, h: int = 90) -> str:
+    """A small area chart of one series, newest value last. Needs two points to draw a line."""
+    if len(values) < 2:
+        return ""
+    lo, hi, pad = min(values), max(values), 6
+    span = (hi - lo) or 1
+
+    def x(i: int) -> float:
+        return pad + i * (w - 2 * pad) / (len(values) - 1)
+
+    def y(v: float) -> float:
+        return h - pad - (v - lo) / span * (h - 2 * pad)
+
+    pts = " ".join(f"{x(i):.1f},{y(v):.1f}" for i, v in enumerate(values))
+    return (
+        f'<svg class="spark" viewBox="0 0 {w} {h}" role="img" aria-label="{escape(label)}">'
+        f'<polygon class="area" points="{pad},{h - pad} {pts} {w - pad},{h - pad}"/>'
+        f'<polyline class="line s1" points="{pts}"/>'
+        f'<circle class="end s1" cx="{x(len(values) - 1):.1f}" cy="{y(values[-1]):.1f}" r="4"/>'
+        "</svg>"
+    )

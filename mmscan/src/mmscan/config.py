@@ -183,6 +183,8 @@ class Notify(_Model):
     on_drop: bool = True
     verdicts: list[Literal["Deal", "Worth a look"]] = ["Deal"]
     changes: list[Literal["New", "Cheaper"]] = ["New", "Cheaper"]
+    # Alert on dynamic-carrier prices too. Off: their cached miles can be far below the live price.
+    unverified: bool = False
     max_items: int = Field(10, ge=1, le=40)
 
 

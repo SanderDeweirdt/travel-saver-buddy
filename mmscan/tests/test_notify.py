@@ -18,6 +18,7 @@ URL = "https://hooks.slack.test/services/T000/B000/SECRET"
 
 def row(change, verdict=DEAL, **kw):
     s = scored(kw.pop("total", 700.0), **kw)
+    s.updated_at = datetime.now(UTC).isoformat()
     s.verdict, s.change = verdict, change
     return s
 
@@ -146,3 +147,20 @@ def test_cli_notify_without_webhook_fails_cleanly(tmp_path, monkeypatch, default
     result = CliRunner().invoke(app, ["notify"])
     assert result.exit_code == 1
     assert "SLACK_WEBHOOK_URL is not set" in result.output
+
+
+def test_stale_results_are_never_alerted(default_config_dict):
+    cfg = config(default_config_dict)
+    fresh, old = row("New", id="a"), row("New", id="b")
+    old.updated_at = "2026-10-01T08:00:00Z"
+    now = datetime.now(UTC)
+    assert [s.availability_id for s in select_alerts([fresh, old], cfg, now)] == ["a"]
+    assert len(select_alerts([fresh, old], cfg)) == 2  # no clock, no age rule
+
+
+def test_dynamic_prices_alert_only_when_switched_on(default_config_dict):
+    rows = [row("New", id="a", carriers="SQ"), row("New", id="b", carriers="LH")]
+    off = config(default_config_dict)
+    assert [s.availability_id for s in select_alerts(rows, off)] == ["a"]
+    on = config(default_config_dict, notify={"unverified": True})
+    assert [s.availability_id for s in select_alerts(rows, on)] == ["a", "b"]

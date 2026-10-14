@@ -323,3 +323,48 @@ def test_price_chart_draws_usual_line():
     pts = [{"ts": "2026-10-01T00:00:00Z", "low": 500.0, "median": 700.0, "n": 3}]
     assert 'class="usual"' in price_chart(pts, 900.0)
     assert 'class="usual"' not in price_chart(pts)
+
+
+def _trips_client(tmp_path, default_config_dict, write_config, trip_extra=None, days=(0,)):
+    from datetime import timedelta as td
+
+    from tests.test_trips import LEGS, TRIP, add_run
+    from tests.test_trips import NOW as T_NOW
+
+    trip_cfg = {**TRIP, **(trip_extra or {})}
+    cfg_path = write_config({**default_config_dict, "trips": [trip_cfg]})
+    path = tmp_path / "trips2.db"
+    store = Store(path)
+    cfg = config(default_config_dict, trips=[trip_cfg])
+    for back in days:  # days ago, oldest first
+        add_run(store, cfg, LEGS, at=T_NOW - td(days=back))
+    store.close()
+    c = TestClient(
+        create_app(WebSettings(PASSWORD, "s" * 32, path, cfg_path, secure_cookies=True)),
+        base_url="https://testserver",
+    )
+    login(c)
+    return c
+
+
+def test_trips_page_calendar_trend_and_budget(tmp_path, default_config_dict, write_config):
+    c = _trips_client(
+        tmp_path, default_config_dict, write_config, {"max_total_eur": 9000}, days=(3, 2, 1, 0)
+    )
+    text = c.get("/trips").text
+    assert "Cheapest day to leave" in text and 'class="cal"' in text
+    assert "2027-06-10" in text and "no seats found" in text  # a priced day and an empty one
+    assert '<svg class="spark"' in text and "Best price, last 30 days" in text
+    assert "under the €9,000 budget" in text
+
+
+def test_trips_page_without_history_says_so(tmp_path, default_config_dict, write_config):
+    c = _trips_client(tmp_path, default_config_dict, write_config)
+    text = c.get("/trips").text
+    assert "Not enough history yet" in text and "Unverified" not in text
+
+
+def test_trips_page_marks_dynamic_carriers(tmp_path, default_config_dict, write_config):
+    d = {**default_config_dict, "dynamic_airlines": ["SQ"]}
+    c = _trips_client(tmp_path, d, write_config)
+    assert "Unverified" in c.get("/trips").text
