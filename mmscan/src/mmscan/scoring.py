@@ -6,7 +6,7 @@ import json
 import logging
 import statistics
 from dataclasses import astuple, dataclass, fields
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from mmscan.config import Config
 from mmscan.diff import change_for, previous_totals
@@ -19,6 +19,7 @@ log = logging.getLogger("mmscan.scoring")
 DEAL = "Deal"
 WORTH = "Worth a look"
 SKIP = "Skip"
+USD_RATE_MAX_AGE_DAYS = 30
 UNRANKED = "Unranked"  # dynamic fare with too little observed history to judge
 VERDICT_ORDER = {DEAL: 0, WORTH: 1, SKIP: 2, UNRANKED: 3}
 CHART_RATE_SHARE = 0.95
@@ -216,6 +217,12 @@ def _currency_warnings(currencies: dict[str, int], cfg: Config) -> list[str]:
                 f"{currencies['USD']} objects report fees in USD; converted at usd_to_eur="
                 f"{cfg.usd_to_eur}"
             )
+            age = cfg.usd_rate_age_days(datetime.now(UTC).date())
+            if age is not None and age > USD_RATE_MAX_AGE_DAYS:
+                out.append(
+                    f"usd_to_eur was last checked {age} days ago (over {USD_RATE_MAX_AGE_DAYS}); "
+                    f"update it and usd_to_eur_date in config.yaml"
+                )
         else:
             out.append(
                 f"{currencies['USD']} objects report fees in USD and usd_to_eur is not set; "

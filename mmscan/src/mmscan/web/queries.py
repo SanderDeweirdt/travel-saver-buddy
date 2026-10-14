@@ -6,9 +6,11 @@ import json
 import statistics
 from datetime import datetime, timedelta
 
+from mmscan.baseline import baseline_for, route_baselines, thin_routes
 from mmscan.config import Config
-from mmscan.report import _age_hours, load_results, shortlist
-from mmscan.scoring import _group, _route, history_rows, rank_key
+from mmscan.deals import rank_deals, saving_verdict
+from mmscan.report import _age_hours, eligible, load_results, shortlist
+from mmscan.scoring import rank_key
 from mmscan.store import Store
 
 SORTS = {
@@ -72,15 +74,15 @@ def shortlist_view(
     if verdict:
         rows = [s for s in rows if s.verdict == verdict]
     rows = sorted(rows, key=SORTS.get(sort, rank_key))
-    base = _group(history_rows(store, cfg, run_id, now), _route)
+    baselines = route_baselines(store, cfg, run_id, now)
     out = []
     for s in rows:
-        samples = base.get(_route(s))
+        b = baseline_for(baselines, cfg, s)
         out.append(
             {
                 "s": s,
-                "baseline": statistics.median(samples) if samples else None,
-                "samples": len(samples) if samples else 0,
+                "baseline": b.median if b else None,
+                "samples": b.n if b else 0,
                 "age_h": _age_hours(s.updated_at, now),
                 "pricing": cfg.pricing_model(s.carriers),
             }
@@ -94,7 +96,18 @@ def shortlist_view(
     }
 
 
-def route_history(store: Store, origin: str, destination: str, cabin: str, now: datetime) -> dict:
+def deals_view(store: Store, cfg: Config, run_id: int, now: datetime, **filters) -> dict:
+    results = eligible(load_results(store, run_id), cfg)
+    baselines = route_baselines(store, cfg, run_id, now)
+    out = rank_deals(results, baselines, cfg, now, **filters)
+    out["total"] = len(results)
+    out["thin_routes"] = thin_routes(baselines)
+    return out
+
+
+def route_history(
+    store: Store, cfg: Config, origin: str, destination: str, cabin: str, now: datetime
+) -> dict:
     cutoff = (now - timedelta(days=180)).isoformat()
     rows = store.conn.execute(
         "SELECT r.run_id, u.started_at, r.total_eur FROM results r JOIN runs u ON u.id = r.run_id "
@@ -125,7 +138,85 @@ def route_history(store: Store, origin: str, destination: str, cabin: str, now: 
         if latest
         else []
     )
-    return {"points": points, "latest_run": latest, "current": sorted(current, key=rank_key)}
+    baselines = route_baselines(store, cfg, latest, now) if latest else {}
+    here = [
+        b for k, b in baselines.items() if k[:3] == (origin, destination, cabin)
+    ]  # one per pricing group
+    usual = max((b for b in here if b.ready), key=lambda b: b.n, default=None)
+    rows = []
+    for s in sorted(current, key=rank_key):
+        b = baseline_for(baselines, cfg, s)
+        save = b.median - s.total_eur if b and s.total_eur is not None else None
+        rows.append(
+            {
+                "s": s,
+                "usual": b.median if b else None,
+                "save": save,
+                "pct": save / b.median * 100 if save is not None else None,
+                "verdict": saving_verdict(save / b.median * 100, cfg) if save is not None else None,
+                "pricing": cfg.pricing_model(s.carriers),
+            }
+        )
+    priced = [r for r in rows if r["save"] is not None and r["s"].expired is False]
+    best = max(priced, key=lambda r: r["pct"], default=None)
+    return {
+        "points": points,
+        "latest_run": latest,
+        "rows": rows,
+        "usual": usual,
+        "samples_seen": max((b.n for b in here), default=0),
+        "min_samples": cfg.relative.min_samples,
+        "best": best,
+    }
+
+
+def carrier_trust(checks: list[dict], cfg: Config) -> list[dict]:
+    """Live-to-cached mile ratio per carrier from the manual checks. Dynamic carriers are always
+    listed, even before a first check; fixed-chart carriers only once they have one."""
+    by: dict[str, list[float]] = {}
+    for c in checks:
+        if c["cached_miles"]:
+            by.setdefault(c["carrier"], []).append(c["live_miles"] / c["cached_miles"])
+    dynamic = {c.upper() for c in cfg.dynamic_airlines}
+    out = []
+    for carrier in sorted(dynamic | set(by)):
+        r = by.get(carrier, [])
+        out.append(
+            {
+                "carrier": carrier,
+                "basis": "dynamic" if carrier in dynamic else "fixed",
+                "n": len(r),
+                "median": statistics.median(r) if r else None,
+                "lo": min(r) if r else None,
+                "hi": max(r) if r else None,
+            }
+        )
+    return out
+
+
+def data_view(store: Store, cfg: Config, now: datetime) -> dict:
+    runs = recent_runs(store, 30)
+    week = (now - timedelta(days=7)).isoformat()
+    last_watch = next((r for r in runs if r["kind"] == "watch"), None)
+    last_full = next((r for r in runs if r["kind"] == "run"), None)
+    age = cfg.usd_rate_age_days(now.date())
+    watch_age_h = (
+        (now - datetime.fromisoformat(last_watch["started_at"])).total_seconds() / 3600
+        if last_watch
+        else None
+    )
+    return {
+        "quota": quota_view(store, cfg.api.daily_call_cap, now),
+        "runs": runs[:10],
+        "last_watch": last_watch,
+        "last_full": last_full,
+        "watch_age_h": watch_age_h,
+        "failed_week": sum(
+            1 for r in runs if r["status"] in ("failed", "partial") and r["started_at"] >= week
+        ),
+        "fx": {"rate": cfg.usd_to_eur, "age_days": age, "stale": age is None or age > 30},
+        "trust": carrier_trust(store.price_checks(), cfg),
+    }
 
 
 def quota_view(store: Store, cap: int, now: datetime) -> dict:

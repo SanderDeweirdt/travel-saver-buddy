@@ -137,3 +137,11 @@ def test_translate_upsert_and_placeholders():
     assert "%s,%s,%s" in sql and "?" not in sql
     only_keys = translate("INSERT OR REPLACE INTO trips(id, updated_at) VALUES (?,?)")
     assert only_keys.endswith("DO NOTHING")
+
+
+def test_price_checks_on_both_backends(backend_store):
+    assert backend_store.price_checks() == []
+    backend_store.add_price_check("lh", 6000, 17000, "MUC-SIN", "business")
+    backend_store.add_price_check("LX", 10000, 11000)
+    rows = backend_store.price_checks()
+    assert [r["carrier"] for r in rows] == ["LH", "LX"] and rows[1]["route"] is None

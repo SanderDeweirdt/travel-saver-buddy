@@ -12,10 +12,10 @@ from dotenv import load_dotenv
 
 from mmscan.config import Config
 from mmscan.models import local_time
-from mmscan.report import DISCLAIMER, eligible, load_results
+from mmscan.report import DISCLAIMER, _age_hours, eligible, load_results
 from mmscan.scoring import SKIP, Scored, rank_key
 from mmscan.store import Store
-from mmscan.trips import TripAlert, trip_alerts
+from mmscan.trips import STALE_HOURS, TripAlert, trip_alerts
 
 WEBHOOK_ENV = "SLACK_WEBHOOK_URL"
 log = logging.getLogger("mmscan.notify")
@@ -36,9 +36,11 @@ def webhook_from_env(dotenv_path: Path | None = None) -> str:
     return url
 
 
-def select_alerts(results: list[Scored], cfg: Config) -> list[Scored]:
+def select_alerts(results: list[Scored], cfg: Config, now: datetime | None = None) -> list[Scored]:
     """Shortlist rows whose verdict is in notify.verdicts and whose change is in notify.changes,
-    plus (notify.on_drop) any eligible result that got cheaper, whatever its verdict."""
+    plus (notify.on_drop) any eligible result that got cheaper, whatever its verdict. With `now`,
+    results older than 48 hours are left out. Dynamic-carrier prices are left out too, unless
+    notify.unverified is on."""
     n = cfg.notify
     out = [
         s
@@ -46,7 +48,16 @@ def select_alerts(results: list[Scored], cfg: Config) -> list[Scored]:
         if (s.verdict in n.verdicts and s.change in n.changes)
         or (n.on_drop and s.change == "Cheaper")
     ]
+    if now is not None:
+        out = [s for s in out if not _stale(s, now)]
+    if not n.unverified:
+        out = [s for s in out if cfg.pricing_model(s.carriers) == "fixed"]
     return sorted(out, key=rank_key)
+
+
+def _stale(s: Scored, now: datetime) -> bool:
+    age = _age_hours(s.updated_at, now)
+    return age is not None and age > STALE_HOURS
 
 
 def _esc(text: str) -> str:
@@ -146,7 +157,7 @@ def notify_run(
 ) -> tuple[int, dict | None]:
     """Post the run's alerts. Returns (alert count, payload). Sends nothing when there are no
     alerts, or when `url` is None (dry run)."""
-    alerts = select_alerts(load_results(store, run_id), cfg)
+    alerts = select_alerts(load_results(store, run_id), cfg, now)
     trips = trip_alerts(store, cfg, run_id, now)
     if not alerts and not trips:
         return 0, None

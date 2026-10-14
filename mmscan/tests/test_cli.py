@@ -24,3 +24,21 @@ def test_check_without_key_fails_cleanly(tmp_path, monkeypatch):
     result = CliRunner().invoke(app, ["check"])
     assert result.exit_code == 1
     assert "SEATS_AERO_API_KEY is not set" in result.output
+
+
+def test_verify_add_records_a_check(tmp_path, monkeypatch):
+    from typer.testing import CliRunner
+
+    from mmscan.cli import app
+    from mmscan.store import Store
+
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "data").mkdir()
+    result = CliRunner().invoke(
+        app, ["verify-add", "--carrier", "lh", "--cached", "6000", "--live", "17000"]
+    )
+    assert result.exit_code == 0, result.output
+    assert "2.83x" in result.output
+    store = Store(tmp_path / "data" / "mmscan.db")
+    assert len(store.price_checks()) == 1
+    store.close()

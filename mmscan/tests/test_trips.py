@@ -8,7 +8,14 @@ from mmscan.notify import build_message, notify_run
 from mmscan.scan import trip_requests, watchlist_requests
 from mmscan.scoring import score_run
 from mmscan.store import Store
-from mmscan.trips import build_trip, latest_legs, trip_alerts, trip_views
+from mmscan.trips import (
+    build_trip,
+    calendar_cells,
+    latest_legs,
+    trip_alerts,
+    trip_trend,
+    trip_views,
+)
 from tests.helpers import avail, config
 
 NOW = datetime.now(UTC)
@@ -32,7 +39,15 @@ def add_run(store, cfg, legs, at=None, kind="watch"):
     at = at or NOW
     run = store.start_run(kind, "{}", now=at)
     for id, o, d, day, miles, tax, seats in legs:
-        a = avail(id, origin=o, dest=d, date=day, taxes={"business": tax}, business=miles)
+        a = avail(
+            id,
+            origin=o,
+            dest=d,
+            date=day,
+            taxes={"business": tax},
+            business=miles,
+            updated=at.isoformat(),
+        )
         a["JRemainingSeats"] = seats
         store.save_availability(run, a, "watchlist")
     score_run(store, cfg, run, at)
@@ -193,3 +208,53 @@ def test_message_and_notify_run_include_trips(default_config_dict, store):
     alerts = trip_alerts(store, cfg, run, NOW)
     msg = build_message([], run, cfg, NOW, alerts)
     assert msg["text"] == "mmscan: 1 new or cheaper award"
+
+
+def test_stale_and_dynamic_trip_options_are_not_alerted(default_config_dict, store):
+    cfg = cfg_with(default_config_dict, alert_top=3)
+    t0 = NOW - timedelta(hours=2)
+    first = add_run(store, cfg, LEGS, at=t0)
+    cheaper = [(i, o, d, day, int(m * 0.5), t, s) for i, o, d, day, m, t, s in LEGS]
+    run = add_run(store, cfg, cheaper, at=NOW)
+    assert trip_alerts(store, cfg, run, NOW)
+    # Two days later nothing was refreshed: the data is stale, so no alert.
+    later = NOW + timedelta(hours=60)
+    assert trip_alerts(store, cfg, run, later) == []
+    assert first < run
+
+
+def test_dynamic_carriers_alert_only_when_switched_on(default_config_dict, store):
+    d = {**default_config_dict, "dynamic_airlines": ["SQ"]}
+    cfg = cfg_with(d, alert_top=3)
+    t0 = NOW - timedelta(hours=2)
+    add_run(store, cfg, LEGS, at=t0)
+    cheaper = [(i, o, dd, day, int(m * 0.5), t, s) for i, o, dd, day, m, t, s in LEGS]
+    run = add_run(store, cfg, cheaper, at=NOW)
+    assert trip_alerts(store, cfg, run, NOW) == []
+    on = config({**d, "trips": [{**TRIP, "alert_top": 3}], "notify": {"unverified": True}})
+    assert trip_alerts(store, on, run, NOW)
+
+
+def test_calendar_has_cheapest_price_per_departure_day(default_config_dict, store):
+    cfg = cfg_with(default_config_dict)
+    add_run(store, cfg, LEGS)
+    view = build_trip(latest_legs(store, cfg, NOW), cfg.trips[0], cfg)
+    cal = calendar_cells(view)
+    by = {c["date"].isoformat(): c for c in cal["cells"]}
+    assert len(cal["cells"]) == 20 and cal["lead"] == date(2027, 6, 1).weekday()
+    assert by["2027-06-10"]["total"] == view.by_day["2027-06-10"]
+    assert by["2027-06-10"]["total"] < by["2027-06-12"]["total"]
+    assert by["2027-06-10"]["best"] and by["2027-06-10"]["level"] == 0
+    assert by["2027-06-11"]["total"] is None and by["2027-06-11"]["level"] is None
+
+
+def test_trend_is_one_point_per_day_oldest_first(default_config_dict, store):
+    cfg = cfg_with(default_config_dict)
+    for days_ago, factor in ((3, 1.0), (2, 0.9), (1, 0.8)):
+        at = NOW - timedelta(days=days_ago)
+        legs = [(i, o, d, day, int(m * factor), t, s) for i, o, d, day, m, t, s in LEGS]
+        add_run(store, cfg, legs, at=at)
+        add_run(store, cfg, legs, at=at + timedelta(hours=1))  # a second run the same day
+    points = trip_trend(store, cfg, cfg.trips[0], NOW)
+    assert len(points) == 3
+    assert [p["total"] for p in points] == sorted((p["total"] for p in points), reverse=True)

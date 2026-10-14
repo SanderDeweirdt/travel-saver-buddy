@@ -461,6 +461,23 @@ def quota(
     typer.echo(f"Calls by mmscan today (UTC): {store.calls_today()} of cap {cap}")
 
 
+@app.command("verify-add")
+def verify_add(
+    carrier: Annotated[str, typer.Option(help="IATA code, e.g. LH")],
+    cached: Annotated[int, typer.Option(min=1, help="Miles seats.aero cached")],
+    live: Annotated[int, typer.Option(min=1, help="Miles miles-and-more.com showed")],
+    route: Annotated[str | None, typer.Option(help="e.g. MUC-SIN")] = None,
+    cabin: Annotated[str | None, typer.Option()] = None,
+    note: Annotated[str | None, typer.Option()] = None,
+) -> None:
+    """Record one hand check of a cached price against the live one. No API calls."""
+    store = _store()
+    store.add_price_check(carrier, cached, live, route, cabin, note)
+    typer.echo(
+        f"{carrier.upper()}: live is {live / cached:.2f}x the cached miles ({cached} -> {live})."
+    )
+
+
 @app.command("migrate-sqlite")
 def migrate_sqlite(
     source: Annotated[Path, typer.Option("--from", help="SQLite file to copy from.")] = DB_PATH,

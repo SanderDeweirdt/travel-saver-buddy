@@ -62,3 +62,14 @@ def test_finish_run_records_status(tmp_path):
     assert row["status"] == "partial"
     assert '"calls": 3' in row["stats_json"]
     assert "cap reached" in row["warnings_json"]
+
+
+def test_price_checks_round_trip(tmp_path):
+    from mmscan.store import Store
+
+    s = Store(tmp_path / "p.db")
+    assert s.price_checks() == []
+    s.add_price_check("lh", 6000, 17000, "MUC-SIN", "business", "seen on the site")
+    (row,) = s.price_checks()
+    assert row["carrier"] == "LH" and row["live_miles"] == 17000 and row["route"] == "MUC-SIN"
+    s.close()

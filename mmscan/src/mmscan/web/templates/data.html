@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Data &amp; alerts · mmscan{% endblock %}
+{% block body %}
+<div class="page-head"><h1>Data &amp; alerts</h1><span class="sub">Is the tool healthy, and how far can the numbers be trusted?</span></div>
+<div class="banner" role="note">{{ disclaimer }}</div>
+
+{% set q = d.quota %}
+<div class="tiles">
+  <div class="tile {{ 'bad' if q.pct >= 90 else 'warn' if q.pct >= 70 }}"><div class="k">API calls today</div><div class="v">{{ q.used }}<span class="muted"> / {{ q.cap }}</span></div>
+    <div class="meter {{ 'bad' if q.pct >= 90 else 'warn' if q.pct >= 70 }}" role="img" aria-label="{{ q.pct }} percent of the daily cap used" style="margin-top:6px"><div style="width: {{ q.pct }}%"></div></div>
+    <div class="d">seats.aero left: {{ q.remaining_header if q.remaining_header is not none else "unknown" }}</div></div>
+  {% set w = d.last_watch %}
+  {% set late = d.watch_age_h is none or d.watch_age_h > 3 %}
+  {% set bad = w and w.status not in ("ok", None) %}
+  <div class="tile {{ 'bad' if late or bad else 'good' }}"><div class="k">Scanner</div>
+    <div class="v" style="font-size:20px">{% if not w %}No runs yet{% elif late %}Late{% elif bad %}Last run {{ w.status }}{% else %}Healthy{% endif %}</div>
+    <div class="d">{% if w %}last watch {{ w.started_at|when }} UTC{% endif %}{% if d.last_full %} · full run {{ d.last_full.started_at|when }}{% endif %}</div>
+    <div class="d">partial or failed this week: {{ d.failed_week }}</div></div>
+  <div class="tile {{ 'warn' if d.fx.stale }}"><div class="k">USD → EUR rate</div><div class="v">{{ d.fx.rate if d.fx.rate else "not set" }}</div>
+    <div class="d">{% if d.fx.age_days is none %}No date recorded. Set <code>usd_to_eur_date</code>.{% elif d.fx.stale %}Last checked {{ d.fx.age_days }} days ago: update it.{% else %}Checked {{ d.fx.age_days }} days ago{% endif %}</div></div>
+</div>
+
+<h2>How far to trust cached miles</h2>
+<p class="note" style="margin-top:0">Hand checks of what seats.aero cached against what miles-and-more.com showed. A ratio of 1.0× means they matched; 2.0× means the live price was double. Add one with <code>mmscan verify-add --carrier LH --cached 30000 --live 52000</code>.</p>
+<div class="panel"><div class="scroll"><table class="cards">
+<thead><tr><th>Carrier</th><th>Price basis</th><th class="n">Checks</th><th class="n">Live ÷ cached (median)</th><th class="n">Range</th></tr></thead>
+<tbody>{% for t in d.trust %}<tr>
+  <td data-label="Carrier"><b>{{ t.carrier }}</b></td>
+  <td data-label="Price basis">{% if t.basis == "dynamic" %}<span class="chip warn">⚠ Unverified</span>{% else %}<span class="chip good">Chart</span>{% endif %}</td>
+  <td data-label="Checks" class="n">{{ t.n }}</td>
+  <td data-label="Live ÷ cached (median)" class="n">{% if t.median is not none %}{{ "%.2f"|format(t.median) }}×{% else %}<span class="muted">not checked yet</span>{% endif %}</td>
+  <td data-label="Range" class="n">{% if t.lo is not none %}{{ "%.2f"|format(t.lo) }}× to {{ "%.2f"|format(t.hi) }}×{% else %}–{% endif %}</td></tr>
+{% else %}<tr><td class="empty" colspan="5">No carriers.</td></tr>{% endfor %}</tbody></table></div></div>
+
+<h2>Slack alerts</h2>
+{% set n = cfg.notify %}
+<div class="panel" style="padding:14px 18px">
+  <p style="margin:0 0 8px"><span class="tag {{ 'ok' if n.slack else 'plain' }}">{{ "On" if n.slack else "Off" }}</span>
+    <span class="muted">Switch in <code>config.yaml</code> (<code>notify.slack</code>); the webhook stays in the environment.</span></p>
+  <ul class="note" style="margin:0;padding-left:18px">
+    <li>Posts: {{ n.verdicts|join(", ") }} that are {{ n.changes|join(" or ") }}{% if n.on_drop %}, and any result that got cheaper{% endif %}.</li>
+    <li>Dynamic-carrier prices: <b>{{ "included" if n.unverified else "not sent" }}</b> (<code>notify.unverified</code>).</li>
+    <li>Results older than 48 hours are never sent. A quiet run posts nothing.</li>
+  </ul>
+</div>
+
+<h2>Recent runs</h2>
+<div class="panel"><div class="scroll"><table class="cards">
+<thead><tr><th>#</th><th>Kind</th><th>Started (UTC)</th><th>Status</th><th class="n">Calls</th><th>Warnings</th></tr></thead>
+<tbody>{% for r in d.runs %}<tr class="{{ 'partial' if r.status == 'partial' }}">
+  <td data-label="Run">{{ r.id }}</td><td data-label="Kind">{{ r.kind }}</td><td data-label="Started" class="nowrap">{{ r.started_at|when }}</td>
+  <td data-label="Status"><span class="tag {{ r.status if r.status in ('partial', 'failed') else 'ok' if r.status == 'ok' }}">{{ r.status }}</span></td>
+  <td data-label="Calls" class="n">{{ r.calls }}</td>
+  <td data-label="Warnings" style="white-space:normal">{% if r.warnings %}{{ r.warnings|join("; ") }}{% else %}<span class="muted">–</span>{% endif %}</td></tr>
+{% else %}<tr><td class="empty" colspan="6">No runs yet.</td></tr>{% endfor %}</tbody></table></div></div>
+<p class="note"><a href="/runs">All runs</a> · <a href="/quota">Calls per day</a></p>
+{% endblock %}

@@ -59,6 +59,18 @@ DATABASE_URL='postgresql://…public url…' uv run mmscan migrate-sqlite --from
 
 It prints rows copied per table and is safe to repeat. Skip it to start fresh.
 
+## 4b. Recording price checks
+
+The dashboard's "How far to trust cached miles" table is filled by hand. After comparing a result with
+miles-and-more.com, record it with the Postgres **public** connection string:
+
+```bash
+cd mmscan
+DATABASE_URL='postgresql://…public url…' uv run mmscan verify-add --carrier LH --cached 6000 --live 17000
+```
+
+The new `price_checks` table is created automatically the next time either service starts.
+
 ## 5. Changing `config.yaml`
 
 `config.yaml` is baked into the image. Edit it, commit, push; Railway redeploys both services.
@@ -76,6 +88,7 @@ Secrets never go in it.
 - [ ] The dashboard shows the run under **Runs** and rows on the **Shortlist** (a watch run only
       covers the watchlist; the 05 UTC run fills in the full picture).
 - [ ] **Quota** shows calls today below the cap.
+- [ ] **Data & alerts** shows the scanner as Healthy and the USD rate as checked within 30 days (`usd_to_eur_date`).
 
 ## Risks
 

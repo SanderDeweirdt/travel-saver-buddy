@@ -142,6 +142,18 @@ class ValueBands(_Model):
     poor: float = 1.2
 
 
+class Savings(_Model):
+    # Verdict on the deals page: how far below the route's usual price (median total) a result is.
+    great_pct: float = Field(30, gt=0, lt=100)
+    good_pct: float = Field(10, gt=0, lt=100)
+
+    @model_validator(mode="after")
+    def _ordered(self):
+        if self.good_pct >= self.great_pct:
+            raise ValueError("good_pct must be below great_pct")
+        return self
+
+
 class Api(_Model):
     take: int = Field(1000, ge=10, le=1000)
     min_cabin_pct: int = Field(100, ge=0, le=100)
@@ -171,6 +183,8 @@ class Notify(_Model):
     on_drop: bool = True
     verdicts: list[Literal["Deal", "Worth a look"]] = ["Deal"]
     changes: list[Literal["New", "Cheaper"]] = ["New", "Cheaper"]
+    # Alert on dynamic-carrier prices too. Off: their cached miles can be far below the live price.
+    unverified: bool = False
     max_items: int = Field(10, ge=1, le=40)
 
 
@@ -188,6 +202,7 @@ class Config(_Model):
     min_seats: int = Field(2, ge=1)
     mile_cost_eur_cents: float = Field(gt=0)
     usd_to_eur: float | None = Field(None, gt=0)
+    usd_to_eur_date: date | None = None  # when the rate above was last checked
     date_window: DateWindow = DateWindow()
     region_pairs: list[RegionPair] = []
     watchlist: Watchlist = Watchlist()
@@ -197,6 +212,7 @@ class Config(_Model):
     prescreen: Prescreen = Prescreen()
     enrich: Enrich = Enrich()
     value_per_mile_cents: ValueBands = ValueBands()
+    savings: Savings = Savings()
     api: Api = Api()
     output: Output = Output()
     notify: Notify = Notify()
@@ -254,6 +270,9 @@ class Config(_Model):
         if place == region:
             return True
         return airport in self.subregions.get(place, [])
+
+    def usd_rate_age_days(self, today: date) -> int | None:
+        return None if self.usd_to_eur_date is None else (today - self.usd_to_eur_date).days
 
     def pricing_model(self, carriers: str | None) -> str:
         """ "fixed" when no carrier on the result prices dynamically, "dynamic" when all do, and

@@ -1,14 +1,21 @@
 {% extends "base.html" %}
 {% block title %}{{ origin }}→{{ destination }} · mmscan{% endblock %}
 {% block body %}
-<p class="sub" style="margin:0 0 6px"><a href="/">← Shortlist</a></p>
+<p class="sub" style="margin:0 0 6px"><a href="/">← Best deals</a></p>
 <div class="page-head">
   <h1>{{ origin }} → {{ destination }} <span class="tag plain">{{ cabin }}</span></h1>
 </div>
 <div class="banner" role="note">{{ disclaimer }}</div>
 {% if points %}
 {% set last = points[-1] %}
+{% set u = usual %}
 <div class="tiles">
+  <div class="tile {{ 'good' if best and best.save > 0 }}"><div class="k">Usual price</div>
+    <div class="v">{% if u %}€{{ u.median|money }}{% else %}–{% endif %}</div>
+    <div class="d">{% if u %}median of {{ u.n }} flights{% else %}building history: {{ samples_seen }} of {{ min_samples }}{% endif %}</div></div>
+  {% if best %}<div class="tile {{ 'good' if best.save > 0 else 'bad' }}"><div class="k">Best now vs usual</div>
+    <div class="v">{{ "−" if best.save >= 0 else "+" }}€{{ best.save|abs|money }}</div>
+    <div class="d">{{ "%.0f"|format(best.pct|abs) }}% {{ "below" if best.save >= 0 else "above" }} usual · {{ best.verdict }}</div></div>{% endif %}
   <div class="tile"><div class="k">Cheapest, latest run</div><div class="v">€{{ last.low|money }}</div><div class="d">run #{{ last.run_id }}</div></div>
   <div class="tile"><div class="k">Median, latest run</div><div class="v">€{{ last.median|money }}</div><div class="d">{{ last.n }} results</div></div>
   <div class="tile good"><div class="k">All-time low</div><div class="v">€{{ points|map(attribute="low")|min|money }}</div><div class="d">last 180 days</div></div>
@@ -19,7 +26,7 @@
 <p class="note" style="margin-top:0">Total cost per run: miles at your mile value plus fees.</p>
 <div class="panel">
   <div class="chart-wrap">{{ chart|safe }}</div>
-  <div class="legend"><span><i style="background:var(--series-1)"></i>Cheapest</span><span><i style="background:var(--series-2)"></i>Median</span></div>
+  <div class="legend"><span><i style="background:var(--series-1)"></i>Cheapest</span><span><i style="background:var(--series-2)"></i>Median</span>{% if u %}<span><i style="background:var(--ink-2)"></i>Usual price (dashed)</span>{% endif %}</div>
   <details><summary>Table view</summary>
   <div class="scroll"><table>
   <thead><tr><th>Run</th><th>Started (UTC)</th><th class="n">Cheapest €</th><th class="n">Median €</th><th class="n">Results</th></tr></thead>
@@ -30,15 +37,17 @@
 
 <h2>Latest run (#{{ latest_run }})</h2>
 <div class="panel"><div class="scroll"><table class="cards">
-<thead><tr><th>Verdict</th><th>Date</th><th class="n">Miles</th><th class="n">Fees €</th><th class="n">Total €</th><th class="n">Seats</th></tr></thead>
-<tbody>{% for s in current %}<tr>
-<td data-label="Verdict"><span class="tag {{ 'deal' if s.verdict == 'Deal' else 'worth' if s.verdict == 'Worth a look' }}">{{ s.verdict }}</span></td>
+<thead><tr><th>Verdict</th><th>Date</th><th class="n">Miles</th><th class="n">Fees €</th><th class="n">Total €</th><th class="n">Usual €</th><th class="n">Saving</th><th class="n">Seats</th></tr></thead>
+<tbody>{% for r in rows %}{% set s = r.s %}<tr>
+<td data-label="Verdict"><span class="tag {{ 'deal' if s.verdict == 'Deal' else 'worth' if s.verdict == 'Worth a look' }}">{{ s.verdict }}</span>{% if r.pricing != "fixed" %} <span class="chip warn" data-tip="Dynamic price: cached miles can be far below the live price">⚠ Unverified</span>{% endif %}</td>
 <td data-label="Date">{{ s.date }}</td>
 <td data-label="Miles" class="n">{{ "{:,}".format(s.miles) if s.miles is not none else "–" }}</td>
 <td data-label="Fees €" class="n">{{ s.fees_eur|money }}</td>
 <td data-label="Total €" class="n"><span class="total">{{ s.total_eur|money }}</span></td>
+<td data-label="Usual €" class="n muted">{{ r.usual|money if r.usual else "–" }}</td>
+<td data-label="Saving" class="n {{ 'pos' if r.save is not none and r.save >= 0 else 'neg' if r.save is not none }}">{% if r.save is not none %}<b>{{ "−" if r.save >= 0 else "+" }}€{{ r.save|abs|money }}</b> <span class="muted">{{ "%.0f"|format(r.pct|abs) }}%</span>{% else %}<span class="muted">building</span>{% endif %}</td>
 <td data-label="Seats" class="n">{{ s.seats if s.seats is not none else "?" }}</td></tr>
-{% else %}<tr><td class="empty" colspan="6">No results for this route in the latest run.</td></tr>{% endfor %}</tbody>
+{% else %}<tr><td class="empty" colspan="8">No results for this route in the latest run.</td></tr>{% endfor %}</tbody>
 </table></div></div>
 {% else %}
 <div class="panel"><p style="padding:32px;text-align:center;margin:0" class="sub">No priced results for this route yet.</p></div>

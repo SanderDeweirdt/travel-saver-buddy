@@ -22,7 +22,7 @@ def write_config(tmp_path):
     return _write
 
 
-TABLES = ("results", "trips", "trip_fetches", "availabilities", "api_calls", "runs")
+TABLES = ("results", "trips", "trip_fetches", "availabilities", "api_calls", "runs", "price_checks")
 
 
 @pytest.fixture(params=["sqlite", "postgres"])

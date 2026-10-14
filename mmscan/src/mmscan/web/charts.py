@@ -20,14 +20,14 @@ def _parse(ts: str) -> datetime:
     return datetime.fromisoformat(ts.replace("Z", "+00:00"))
 
 
-def price_chart(points: list[dict]) -> str:
+def price_chart(points: list[dict], usual: float | None = None) -> str:
     """`points`: dicts with `ts` (ISO), `low` and `median` (EUR). Two series: cheapest total per
     run and the median total. Colors come from CSS variables --series-1/--series-2."""
     if not points:
         return ""
     times = [_parse(p["ts"]).timestamp() for p in points]
     t0, t1 = min(times), max(times)
-    values = [p[k] for p in points for k in ("low", "median")]
+    values = [p[k] for p in points for k in ("low", "median")] + ([usual] if usual else [])
     lo, hi = min(values), max(values)
     pad = (hi - lo) * 0.1 or max(hi * 0.05, 1)
     lo, hi = max(0.0, lo - pad), hi + pad
@@ -54,6 +54,12 @@ def price_chart(points: list[dict]) -> str:
         label = datetime.fromtimestamp(t).strftime("%d %b")
         out.append(
             f'<text class="axis" x="{x(t):.1f}" y="{H - 8}" text-anchor="middle">{label}</text>'
+        )
+    if usual:
+        out.append(
+            f'<line class="usual" x1="{PAD_L}" x2="{W - PAD_R}" y1="{y(usual):.1f}" '
+            f'y2="{y(usual):.1f}"/><text class="axis" x="{W - PAD_R + 10}" '
+            f'y="{y(usual) + 4:.1f}">Usual {usual:,.0f}</text>'
         )
     for key, cls, name in (("median", "s2", "Median"), ("low", "s1", "Cheapest")):
         coords = [(x(t), y(p[key])) for t, p in zip(times, points, strict=True)]
@@ -82,3 +88,26 @@ def price_chart(points: list[dict]) -> str:
         )
     out.append("</svg>")
     return "".join(out)
+
+
+def sparkline(values: list[float], label: str, w: int = 360, h: int = 90) -> str:
+    """A small area chart of one series, newest value last. Needs two points to draw a line."""
+    if len(values) < 2:
+        return ""
+    lo, hi, pad = min(values), max(values), 6
+    span = (hi - lo) or 1
+
+    def x(i: int) -> float:
+        return pad + i * (w - 2 * pad) / (len(values) - 1)
+
+    def y(v: float) -> float:
+        return h - pad - (v - lo) / span * (h - 2 * pad)
+
+    pts = " ".join(f"{x(i):.1f},{y(v):.1f}" for i, v in enumerate(values))
+    return (
+        f'<svg class="spark" viewBox="0 0 {w} {h}" role="img" aria-label="{escape(label)}">'
+        f'<polygon class="area" points="{pad},{h - pad} {pts} {w - pad},{h - pad}"/>'
+        f'<polyline class="line s1" points="{pts}"/>'
+        f'<circle class="end s1" cx="{x(len(values) - 1):.1f}" cy="{y(values[-1]):.1f}" r="4"/>'
+        "</svg>"
+    )
