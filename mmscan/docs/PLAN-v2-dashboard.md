@@ -74,7 +74,7 @@ makes no API calls.
   scroll is a manual check at 390 px.
 - *Done when* the page matches the mockup on real data and loads in under a second.
 
-### M4. Route page
+### M4. Route page — done
 
 - Show "below usual by X" on `route.html` from the same baseline; show the optional cash fare when one exists.
 - Show median and 20th percentile lines on the history chart (`web/charts.py`).

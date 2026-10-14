@@ -298,3 +298,28 @@ def test_deals_page_empty_database(tmp_path):
     c = TestClient(create_app(settings), base_url="https://testserver")
     login(c)
     assert "No scored run yet" in c.get("/").text
+
+
+def test_route_page_shows_usual_price_and_saving(deals_client):
+    r = deals_client.get("/route/MUC/SIN/business")
+    assert r.status_code == 200
+    assert "Usual price" in r.text and "Best now vs usual" in r.text
+    assert "Great deal" in r.text
+    assert 'class="usual"' in r.text  # dashed line on the chart
+
+
+def test_route_page_with_thin_history_says_so(db):
+    settings = WebSettings(PASSWORD, "s" * 32, db, ROOT / "config.yaml", secure_cookies=True)
+    c = TestClient(create_app(settings), base_url="https://testserver")
+    login(c)
+    r = c.get("/route/MUC/SIN/business")
+    assert r.status_code == 200 and "building history" in r.text
+    assert 'class="usual"' not in r.text
+
+
+def test_price_chart_draws_usual_line():
+    from mmscan.web.charts import price_chart
+
+    pts = [{"ts": "2026-10-01T00:00:00Z", "low": 500.0, "median": 700.0, "n": 3}]
+    assert 'class="usual"' in price_chart(pts, 900.0)
+    assert 'class="usual"' not in price_chart(pts)

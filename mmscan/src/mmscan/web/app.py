@@ -220,14 +220,14 @@ def create_app(settings: WebSettings) -> FastAPI:
         cabin: str,
         store: Store = Depends(open_store),
     ):
-        data = queries.route_history(store, origin, destination, cabin, datetime.now(UTC))
+        data = queries.route_history(store, cfg, origin, destination, cabin, datetime.now(UTC))
         return render(
             request,
             "route.html",
             origin=origin,
             destination=destination,
             cabin=cabin,
-            chart=price_chart(data["points"]),
+            chart=price_chart(data["points"], data["usual"].median if data["usual"] else None),
             **data,
         )
 

@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 
 from mmscan.baseline import baseline_for, route_baselines, thin_routes
 from mmscan.config import Config
-from mmscan.deals import rank_deals
+from mmscan.deals import rank_deals, saving_verdict
 from mmscan.report import _age_hours, eligible, load_results, shortlist
 from mmscan.scoring import rank_key
 from mmscan.store import Store
@@ -105,7 +105,9 @@ def deals_view(store: Store, cfg: Config, run_id: int, now: datetime, **filters)
     return out
 
 
-def route_history(store: Store, origin: str, destination: str, cabin: str, now: datetime) -> dict:
+def route_history(
+    store: Store, cfg: Config, origin: str, destination: str, cabin: str, now: datetime
+) -> dict:
     cutoff = (now - timedelta(days=180)).isoformat()
     rows = store.conn.execute(
         "SELECT r.run_id, u.started_at, r.total_eur FROM results r JOIN runs u ON u.id = r.run_id "
@@ -136,7 +138,36 @@ def route_history(store: Store, origin: str, destination: str, cabin: str, now: 
         if latest
         else []
     )
-    return {"points": points, "latest_run": latest, "current": sorted(current, key=rank_key)}
+    baselines = route_baselines(store, cfg, latest, now) if latest else {}
+    here = [
+        b for k, b in baselines.items() if k[:3] == (origin, destination, cabin)
+    ]  # one per pricing group
+    usual = max((b for b in here if b.ready), key=lambda b: b.n, default=None)
+    rows = []
+    for s in sorted(current, key=rank_key):
+        b = baseline_for(baselines, cfg, s)
+        save = b.median - s.total_eur if b and s.total_eur is not None else None
+        rows.append(
+            {
+                "s": s,
+                "usual": b.median if b else None,
+                "save": save,
+                "pct": save / b.median * 100 if save is not None else None,
+                "verdict": saving_verdict(save / b.median * 100, cfg) if save is not None else None,
+                "pricing": cfg.pricing_model(s.carriers),
+            }
+        )
+    priced = [r for r in rows if r["save"] is not None and r["s"].expired is False]
+    best = max(priced, key=lambda r: r["pct"], default=None)
+    return {
+        "points": points,
+        "latest_run": latest,
+        "rows": rows,
+        "usual": usual,
+        "samples_seen": max((b.n for b in here), default=0),
+        "min_samples": cfg.relative.min_samples,
+        "best": best,
+    }
 
 
 def quota_view(store: Store, cap: int, now: datetime) -> dict:

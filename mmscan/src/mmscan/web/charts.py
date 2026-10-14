@@ -20,14 +20,14 @@ def _parse(ts: str) -> datetime:
     return datetime.fromisoformat(ts.replace("Z", "+00:00"))
 
 
-def price_chart(points: list[dict]) -> str:
+def price_chart(points: list[dict], usual: float | None = None) -> str:
     """`points`: dicts with `ts` (ISO), `low` and `median` (EUR). Two series: cheapest total per
     run and the median total. Colors come from CSS variables --series-1/--series-2."""
     if not points:
         return ""
     times = [_parse(p["ts"]).timestamp() for p in points]
     t0, t1 = min(times), max(times)
-    values = [p[k] for p in points for k in ("low", "median")]
+    values = [p[k] for p in points for k in ("low", "median")] + ([usual] if usual else [])
     lo, hi = min(values), max(values)
     pad = (hi - lo) * 0.1 or max(hi * 0.05, 1)
     lo, hi = max(0.0, lo - pad), hi + pad
@@ -54,6 +54,12 @@ def price_chart(points: list[dict]) -> str:
         label = datetime.fromtimestamp(t).strftime("%d %b")
         out.append(
             f'<text class="axis" x="{x(t):.1f}" y="{H - 8}" text-anchor="middle">{label}</text>'
+        )
+    if usual:
+        out.append(
+            f'<line class="usual" x1="{PAD_L}" x2="{W - PAD_R}" y1="{y(usual):.1f}" '
+            f'y2="{y(usual):.1f}"/><text class="axis" x="{W - PAD_R + 10}" '
+            f'y="{y(usual) + 4:.1f}">Usual {usual:,.0f}</text>'
         )
     for key, cls, name in (("median", "s2", "Median"), ("low", "s1", "Cheapest")):
         coords = [(x(t), y(p[key])) for t, p in zip(times, points, strict=True)]
