@@ -83,7 +83,9 @@ def test_ceiling_makes_a_deal_on_a_flat_route(default_config_dict):
     rows = flat_route(
         price=700.0, miles=50000, fees=100.0
     )  # business chart saver 100,000 mi / 450 EUR
-    cfg = cfg_with(default_config_dict, relative={"min_discount_pct": 10})
+    cfg = cfg_with(
+        default_config_dict, relative={"min_discount_pct": 10}, deals={"by_ceiling": True}
+    )
     score_rows(rows, [], cfg)
     assert all(r.verdict == DEAL and r.route_good is False for r in rows)
 
@@ -98,7 +100,9 @@ def test_ceiling_deal_can_be_switched_off(default_config_dict):
 
 
 def test_ceiling_deal_needs_seats_and_both_limits(default_config_dict):
-    cfg = cfg_with(default_config_dict, relative={"min_discount_pct": 10})
+    cfg = cfg_with(
+        default_config_dict, relative={"min_discount_pct": 10}, deals={"by_ceiling": True}
+    )
     no_seats = scored(700.0, miles=50000, fees=100.0, seats_ok=False, date="2026-12-01")
     high_fee = scored(700.0, miles=50000, fees=451.0, date="2026-12-02")
     high_miles = scored(700.0, miles=100001, fees=100.0, date="2026-12-03")
