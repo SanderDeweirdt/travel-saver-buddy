@@ -89,7 +89,7 @@ output:
 #   by_ceiling: miles and fees within the matching benchmark's good_miles_max and fees_max_eur
 #   (an absolute price). A route whose fare never moves can still be a Deal this way.
 deals:
-  by_ceiling: true
+  by_ceiling: false
 
 # Change = "Cheaper" when a total fell this % or more since the result was last seen.
 drops:
