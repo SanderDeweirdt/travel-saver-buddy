@@ -1,6 +1,6 @@
 #!/bin/sh
-# Railway cron entry point (schedule "7 * * * *", UTC).
-# Every run: `mmscan watch`. At 05 UTC also `mmscan run` (the full daily scan).
+# Railway cron entry point (schedule "7 5 * * *", UTC: once a day, early morning).
+# Every run: `mmscan watch`, then `mmscan run` (the full daily scan; the 05 UTC guard keeps it a no-op if the schedule moves to other hours).
 # A failing command does not stop the next one; the exit code is non-zero if any failed.
 # Railway cron services must exit, so each command is time-boxed.
 

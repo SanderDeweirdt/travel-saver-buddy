@@ -50,7 +50,7 @@ family travel from Belgium and Germany to Southeast Asia, starting with Philippi
 | Trips | Trip profiles: narrow searches per leg, round-trip pairing, whole-party price, budget marker, alerts |
 | Dashboard | FastAPI: Shortlist, Trips, route history, Runs, Quota, xlsx/csv downloads, shared-password login with rate limiting |
 | Alerts | Slack webhook (built, currently off) |
-| Deploy | Railway: hourly cron `watch`, daily 05 UTC `run`, web service, Postgres |
+| Deploy | Railway: daily 05:07 UTC cron (`watch` + `run`), web service, Postgres |
 
 ## Requirements for the next version
 

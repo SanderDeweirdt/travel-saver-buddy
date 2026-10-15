@@ -203,7 +203,7 @@ was last seen.
 ## Deploy on Railway
 
 State lives in SQLite locally (`data/mmscan.db`) and in Postgres when `DATABASE_URL` is set. A
-Railway deploy is a Postgres database, a cron **scanner** (`sh deploy/cron.sh`, hourly) and a
+Railway deploy is a Postgres database, a cron **scanner** (`sh deploy/cron.sh`, once a day at 05:07 UTC) and a
 private read-only **dashboard** (`mmscan web`), both built from `Dockerfile`. Step-by-step
 instructions and a first-deploy checklist: [docs/railway-deploy.md](docs/railway-deploy.md).
 

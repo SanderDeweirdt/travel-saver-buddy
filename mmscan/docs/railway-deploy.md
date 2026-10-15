@@ -23,14 +23,14 @@ web service. Both services build the same image from `mmscan/Dockerfile`.
    - **Source, Root Directory**: `mmscan`
    - **Build, Builder**: Dockerfile (path `Dockerfile`; auto-detected)
    - **Deploy, Custom Start Command**: `sh deploy/cron.sh`
-   - **Deploy, Cron Schedule**: `7 * * * *` (UTC, hourly at :07; Railway needs at least 5 minutes between runs)
+   - **Deploy, Cron Schedule**: `7 5 * * *` (UTC, daily at 05:07, about 07:07 in Belgium in summer)
    - **Deploy, Restart Policy**: Never (a failed run must not retry and spend API calls)
 3. Variables (Variables tab):
    - `DATABASE_URL` = `${{Postgres.DATABASE_URL}}` (reference variable, pick it from the dropdown)
    - `SEATS_AERO_API_KEY` = your key
    - `SLACK_WEBHOOK_URL` = your webhook (only needed when `notify.slack: true` in `config.yaml`)
 
-Each run does `mmscan watch`; at 05 UTC it also does `mmscan run` (full daily scan).
+Each run does `mmscan watch` and then `mmscan run` (the full daily scan).
 
 ## 3. Dashboard service (web)
 
@@ -92,10 +92,10 @@ Secrets never go in it.
 
 ## Risks
 
-- **Cost:** Railway bills by usage. The cron service runs for a few minutes per hour; the
+- **Cost:** Railway bills by usage. The cron service runs for a few minutes per day; the
   dashboard and Postgres run all day. Check the usage page after a few days.
 - **API cap:** `api.daily_call_cap` (300) is counted from the `api_calls` table, so it holds across
-  runs. Hourly `watch` costs 2 calls (48 a day) plus the daily `run`.
+  runs. The daily `watch` costs 2 calls plus the daily `run`.
 - **seats.aero terms:** personal, non-commercial use; do not redistribute data. The dashboard sits
   behind a login on every route except `/healthz`; keep the password private and do not share the
   downloads.
