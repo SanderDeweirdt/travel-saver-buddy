@@ -164,3 +164,96 @@ def test_dynamic_prices_alert_only_when_switched_on(default_config_dict):
     assert [s.availability_id for s in select_alerts(rows, off)] == ["a"]
     on = config(default_config_dict, notify={"unverified": True})
     assert [s.availability_id for s in select_alerts(rows, on)] == ["a", "b"]
+
+
+def _history_then_current(tmp_path, current):
+    """Fifteen economy MUC-SIN flights per carrier group at 1000 EUR earlier, then `current`."""
+    from dataclasses import astuple
+    from datetime import timedelta
+
+    from mmscan.scoring import SCORED_COLUMNS
+
+    store = Store(tmp_path / "deals.sqlite")
+    ph = ",".join("?" * (len(SCORED_COLUMNS) + 1))
+    sql = f"INSERT INTO results(run_id, {', '.join(SCORED_COLUMNS)}) VALUES ({ph})"
+    old = store.start_run("scan", "{}", now=NOW - timedelta(days=1))
+    past = []
+    for month, carriers in (("01", "SQ"), ("03", "LH")):  # separate usual prices; dates differ
+        for i in range(15):
+            s = scored(
+                1000.0,
+                date=f"2027-{month}-{i + 1:02d}",
+                cabin="economy",
+                id=f"h{carriers}{i}",
+                carriers=carriers,
+            )
+            s.updated_at = (NOW - timedelta(days=1)).isoformat()
+            past.append(s)
+    store.conn.executemany(sql, [(old, *astuple(s)) for s in past])
+    run = store.start_run("watch", "{}", now=NOW)
+    store.conn.executemany(sql, [(run, *astuple(s)) for s in current])
+    store.conn.commit()
+    return store, run
+
+
+def _new(total, id, **kw):
+    s = scored(
+        total, date=kw.pop("date", "2027-02-01"), cabin=kw.pop("cabin", "economy"), id=id, **kw
+    )
+    s.updated_at = NOW.isoformat()
+    s.change = "New"
+    return s
+
+
+def test_new_deal_alert_needs_new_economy_flight_10_percent_below_usual(
+    tmp_path, default_config_dict
+):
+    from mmscan.notify import select_new_deals
+    from mmscan.report import load_results
+
+    current = [
+        _new(800.0, "big"),  # about 20% below usual: alert
+        _new(950.0, "small", date="2027-02-02"),  # 5% below: no
+        _new(700.0, "biz", date="2027-02-03", cabin="business"),  # wrong cabin: no
+        _new(800.0, "seen", date="2027-02-04"),
+        _new(800.0, "dyn", date="2027-02-05", carriers="LH"),  # dynamic: alert, unverified
+    ]
+    current[3].change = ""  # seen before
+    store, run = _history_then_current(tmp_path, current)
+    cfg = config(default_config_dict, notify={"new_deals": {"enabled": True}})
+    deals = select_new_deals(load_results(store, run), store, cfg, run, NOW)
+    assert sorted(d.s.availability_id for d in deals) == ["big", "dyn"]
+    assert next(d for d in deals if d.s.availability_id == "dyn").verified is False
+    off = config(default_config_dict, notify={"new_deals": {"enabled": True, "unverified": False}})
+    only_chart = select_new_deals(load_results(store, run), store, off, run, NOW)
+    assert [d.s.availability_id for d in only_chart] == ["big"]
+
+
+def test_new_deal_message_has_usual_price_and_a_link_to_check(tmp_path, default_config_dict):
+    tpl = "https://mm.test/?o={origin}&d={destination}&t={date}&c={cabin_code}&n={adults}"
+    store, run = _history_then_current(tmp_path, [_new(800.0, "big")])
+    cfg = config(
+        default_config_dict,
+        notify={"new_deals": {"enabled": True}},
+        miles_and_more={"link_template": tpl},
+    )
+    sent = []
+
+    def handler(req):
+        sent.append(json.loads(req.content))
+        return httpx.Response(200, text="ok")
+
+    n, _ = notify_run(store, cfg, run, NOW, URL, httpx.MockTransport(handler))
+    assert n == 1 and len(sent) == 1
+    text = sent[0]["blocks"][1]["text"]["text"]
+    assert "New deal" in text and "MUC→SIN" in text and "2027-02-01" in text
+    assert "vs usual €" in text and "chart price" in text
+    assert "<https://mm.test/?o=MUC&d=SIN&t=2027-02-01&c=E&n=1|Check on Miles & More>" in text
+    assert sent[0]["text"] == "mmscan: 1 new deal"
+    # Run again with the same results: they are no longer New in a later run, so nothing posts.
+
+
+def test_new_deal_alert_off_posts_nothing(tmp_path, default_config_dict):
+    store, run = _history_then_current(tmp_path, [_new(800.0, "big")])
+    n, payload = notify_run(store, config(default_config_dict), run, NOW, URL, None)
+    assert (n, payload) == (0, None)

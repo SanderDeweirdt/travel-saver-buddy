@@ -117,9 +117,18 @@ shortlist:
 # secret: put it in .env as SLACK_WEBHOOK_URL, never here. Only results that
 # match both lists are posted; nothing is posted when none match.
 notify:
-  slack: false
-  on_drop: true   # also alert on Cheaper results of any verdict (inside the shortlist scope)
-  verdicts: [Deal]
+  slack: true
+  # Post each flight (route, date and cabin) the first time it shows up at least min_pct below
+  # its route's usual price. Covers every route, not only the shortlist focus. Dynamic-carrier
+  # prices are included and marked unverified.
+  new_deals:
+    enabled: true
+    min_pct: 10
+    cabins: [economy]
+    unverified: true
+  # The older Shortlist alerts are off; the new_deals alert above is the one in use.
+  on_drop: false   # also alert on Cheaper results of any verdict (inside the shortlist scope)
+  verdicts: []
   changes: [New, Cheaper]
   max_items: 10
 
