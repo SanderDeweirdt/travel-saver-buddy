@@ -93,6 +93,14 @@ deals:
   min_saving_pct: 30       # Best deals page: only flights at least this % below the usual price
   default_cabin: economy   # Best deals page opens on this cabin; "" = all cabins
 
+# Prefilled Miles & More award search, so each row can link straight to the flight for a manual
+# check. Placeholders: {origin} {destination} {date} {date_us} {cabin} {cabin_code} {adults}.
+# Built from a real seats.aero link (without its utm_source tag). A link stored by seats.aero
+# for a flight always wins. Empty = only stored links.
+miles_and_more:
+  link_template: >-
+    https://www.miles-and-more.com/row/en/spend/flights/flight-award.html?adults={adults}&bookingclass={cabin_code}&children=0&dateformat=MM%2Fdd%2Fyyyy&destinationcode={destination}&infants=0&l=GB&origincode={origin}&outbounddate={date_us}&travellertype=M&triptype=OW&youths=0
+
 # Change = "Cheaper" when a total fell this % or more since the result was last seen.
 drops:
   min_pct: 5

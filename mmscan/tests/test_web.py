@@ -430,3 +430,35 @@ def test_hide_chart_deals_toggle(deals_client):
     assert "MUC→SIN" in deals_client.get("/overview?cabin=all&fresh=0&chart=1").text
     both = deals_client.get("/overview?cabin=all&fresh=0&chart=1&nochart=1").text
     assert "Nothing matches" in both  # hide wins over chart-only
+
+
+def test_every_row_links_to_miles_and_more(default_config_dict):
+    from mmscan.config import load_config
+    from mmscan.links import mm_link
+    from tests.helpers import scored
+
+    cfg = config(
+        default_config_dict,
+        miles_and_more=load_config(ROOT / "config.yaml").miles_and_more.model_dump(),
+    )
+    s = scored(400, origin="MUC", dest="FRA", date="2026-10-16", cabin="business")
+    assert mm_link(cfg, s) == (
+        "https://www.miles-and-more.com/row/en/spend/flights/flight-award.html?adults=1"
+        "&bookingclass=B&children=0&dateformat=MM%2Fdd%2Fyyyy&destinationcode=FRA&infants=0"
+        "&l=GB&origincode=MUC&outbounddate=10%2F16%2F2026&travellertype=M&triptype=OW&youths=0"
+    )
+    assert "adults=3" in mm_link(cfg, s, pax=3)
+    assert "bookingclass=E" in mm_link(cfg, scored(400, cabin="economy"))
+    assert mm_link(cfg, scored(400, cabin="premium"), 1) is None  # no known booking class
+    s.booking_link = "https://stored.test/x"
+    assert mm_link(cfg, s) == "https://stored.test/x"  # seats.aero's own link wins
+    off = config(default_config_dict, miles_and_more={"link_template": ""})
+    assert mm_link(off, scored(400)) is None  # no template
+
+
+def test_link_template_rejects_unknown_placeholders(default_config_dict):
+    import pytest
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        config(default_config_dict, miles_and_more={"link_template": "https://x/{nope}"})

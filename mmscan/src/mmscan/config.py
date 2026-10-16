@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from datetime import date, timedelta
 from pathlib import Path
+from string import Formatter
 from typing import Literal
 
 import yaml
@@ -195,6 +196,29 @@ class Output(_Model):
     formats: list[Literal["xlsx", "csv"]] = ["xlsx", "csv"]
 
 
+LINK_PLACEHOLDERS = {"origin", "destination", "date", "date_us", "cabin", "cabin_code", "adults"}
+
+
+def template_fields(template: str) -> set[str]:
+    return {name for _, name, _, _ in Formatter().parse(template) if name}
+
+
+class MilesAndMore(_Model):
+    # URL of a prefilled Miles & More award search. Placeholders: {origin}, {destination},
+    # {date} (YYYY-MM-DD), {date_us} (MM/dd/yyyy), {cabin} (economy, business), {cabin_code}
+    # (E, B, F: Miles & More's bookingclass) and {adults}. Empty = only stored links.
+    link_template: str = ""
+
+    @model_validator(mode="after")
+    def _check_template(self) -> MilesAndMore:
+        bad = template_fields(self.link_template) - LINK_PLACEHOLDERS
+        if bad:
+            raise ValueError(
+                f"link_template: unknown placeholder {sorted(bad)}; use {sorted(LINK_PLACEHOLDERS)}"
+            )
+        return self
+
+
 class Config(_Model):
     source: str = "lufthansa"
     # IATA codes of Miles & More carriers that price awards dynamically (no chart). Everything
@@ -220,6 +244,7 @@ class Config(_Model):
     notify: Notify = Notify()
     shortlist: ShortlistScope = ShortlistScope()
     deals: Deals = Deals()
+    miles_and_more: MilesAndMore = MilesAndMore()
     drops: Drops = Drops()
     watch: Watch = Watch()
     trips: list[TripProfile] = []

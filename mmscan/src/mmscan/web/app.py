@@ -15,6 +15,7 @@ from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
 from mmscan.config import Config, load_config
+from mmscan.links import mm_link
 from mmscan.report import DISCLAIMER, SHORTLIST_COLUMNS, row_values, shortlist, write_report
 from mmscan.store import Store
 from mmscan.trips import age_hours, calendar_cells, trip_trend, trip_views
@@ -63,6 +64,7 @@ def create_app(settings: WebSettings) -> FastAPI:
     templates = Jinja2Templates(directory=str(HERE / "templates"))
     templates.env.filters["money"] = _fmt_money
     templates.env.filters["when"] = _fmt_time
+    templates.env.globals["mm_link"] = lambda s, pax=1: mm_link(cfg, s, pax)
     limiter = LoginLimiter()
     cfg: Config = load_config(settings.config_path)
     Store(settings.database).close()  # create the schema once; request handlers only read
