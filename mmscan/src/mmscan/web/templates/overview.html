@@ -3,12 +3,13 @@
 {% block body %}
 <div class="page-head">
   <h1>All routes</h1>
-  {% if view %}<span class="sub">Run #{{ run_id }}{% if run %} · {{ run.kind }} · {{ run.started_at|when }} UTC{% endif %} · {{ view.rows|length }} route{{ "s" if view.rows|length != 1 }}</span>{% endif %}
+  {% if view %}<span class="sub">Run #{{ run_id }}{% if run %} · {{ run.kind }} · {{ run.started_at|when }} UTC{% endif %} · {{ view.deals|length }} flight{{ "s" if view.deals|length != 1 }}</span>{% endif %}
 </div>
 {% if not view %}
 <div class="panel"><p class="empty" style="padding:32px;text-align:center;margin:0">No scored run yet. The scanner has not stored results.</p></div>
 {% else %}
-<div class="banner" role="note">{{ disclaimer }} Every route in the latest scan between the configured regions, cheapest date per route and cabin, per traveller, one way. Not limited to the shortlist focus.</div>
+{% set pax = view.pax %}
+<div class="banner" role="note">{{ disclaimer }} Every flight in the latest scan between the configured regions, one row per flight, whatever the saving. Prices are for {{ pax }} traveller{{ "s" if pax != 1 }}, one way, against the route's usual price (median of the last {{ cfg_days }} days). Routes without enough history show "Building history".</div>
 
 <form class="filters" method="get" action="/overview">
   <label>Cabin
@@ -19,41 +20,45 @@
       {% for d in view.directions %}<option value="{{ d }}" {{ 'selected' if f.direction == d }}>{{ d }}</option>{% endfor %}</select></label>
   <label>Route
     <input type="text" name="route" value="{{ f.route }}" placeholder="FRA SIN" maxlength="20"></label>
+  <label>Travellers
+    <select name="pax">{% for n in range(1, 10) %}<option value="{{ n }}" {{ 'selected' if f.pax == n }}>{{ n }}</option>{% endfor %}</select></label>
   <label>Sort
     <select name="sort">{% for k, label in sorts.items() %}<option value="{{ k }}" {{ 'selected' if f.sort == k }}>{{ label }}</option>{% endfor %}</select></label>
   <div class="checks">
+    <label><input type="checkbox" name="chart" value="1" {{ 'checked' if f.chart }}> Chart price only</label>
+    <label><input type="checkbox" name="nochart" value="1" {{ 'checked' if f.nochart }}> Hide chart deals</label>
     <input type="hidden" name="fresh" value="0">
     <label><input type="checkbox" name="fresh" value="1" {{ 'checked' if f.fresh }}> Hide stale</label>
   </div>
   <div class="actions"><button class="primary" type="submit">Apply</button><a class="btn" href="/overview">Reset</a></div>
 </form>
 
-<div class="panel" style="margin-top:16px"><div class="scroll"><table class="cards">
+<div class="panel" style="margin-top:16px"><div class="scroll"><table class="cards dealtab">
 <thead><tr>
-  <th>Direction</th><th>Route</th><th>Cabin</th><th>Cheapest date</th><th class="n">Miles</th><th class="n">Fees €</th>
-  <th class="n">With miles €</th><th class="n">Usual €</th><th class="n">vs usual</th><th class="n">Dates</th><th>Flags</th><th>Book</th>
+  <th>Verdict</th><th>Route</th><th>Date</th><th class="n">Miles</th><th class="n">Fees €</th>
+  <th class="n">With miles €</th><th class="n">Usual €</th><th class="n">Saving</th><th>Flags</th><th>Book</th>
 </tr></thead>
 <tbody>
-{% for r in view.rows %}{% set s = r.cheapest %}
+{% for d in view.deals %}{% set s = d.s %}
 <tr>
-  <td data-label="Direction" class="muted">{{ r.direction }}</td>
-  <td data-label="Route" class="route"><a href="/route/{{ r.origin }}/{{ r.destination }}/{{ r.cabin }}">{{ r.origin }}→{{ r.destination }}</a>{% if s.carriers %} <span class="muted">{{ s.carriers }}</span>{% endif %}</td>
-  <td data-label="Cabin">{{ r.cabin }}</td>
-  <td data-label="Cheapest date" class="nowrap">{{ s.date }}</td>
-  <td data-label="Miles" class="n">{{ "{:,}".format(s.miles or 0) }}</td>
-  <td data-label="Fees €" class="n">{{ s.fees_eur|money }}</td>
-  <td data-label="With miles €" class="n"><b>{{ s.total_eur|money }}</b></td>
-  <td data-label="Usual €" class="n muted">{{ r.usual|money if r.usual is not none else "–" }}</td>
-  <td data-label="vs usual" class="n">{% if r.save_pct is not none %}<span class="{{ 'pos' if r.save_pct >= 0 else 'neg' }}"><b>{{ "−" if r.save_pct >= 0 else "+" }}{{ "%.0f"|format(r.save_pct|abs) }}%</b></span> <span class="tag {{ 'deal' if r.verdict in ('Great deal', 'Good deal') else 'worth' if r.verdict == 'Marginal' else 'over' }}">{{ r.verdict }}</span>{% else %}<span class="muted">Building history</span>{% endif %}</td>
-  <td data-label="Dates" class="n">{{ r.dates }}</td>
+  <td data-label="Verdict" class="verdict">{% if d.verdict %}<span class="tag {{ 'deal' if d.verdict in ('Great deal', 'Good deal') else 'worth' if d.verdict == 'Marginal' else 'over' }}">{{ d.verdict }}</span>{% else %}<span class="muted">Building history</span>{% endif %}</td>
+  <td data-label="Route" class="route"><a href="/route/{{ s.origin }}/{{ s.destination }}/{{ s.cabin }}">{{ s.origin }}→{{ s.destination }}</a> <span class="muted">{{ s.cabin }}{% if s.carriers %} · {{ s.carriers }}{% endif %}</span></td>
+  <td data-label="Date" class="nowrap">{{ s.date }}</td>
+  <td data-label="Miles" class="n">{{ "{:,}".format(d.party_miles) }}</td>
+  <td data-label="Fees €" class="n">{{ d.party_fees|money }}</td>
+  <td data-label="With miles €" class="n"><b>{{ d.party_total|money }}</b></td>
+  <td data-label="Usual €" class="n muted">{{ d.party_usual|money if d.party_usual is not none else "–" }}</td>
+  <td data-label="Saving" class="n">{% if d.save is not none %}<span class="{{ 'pos' if d.save >= 0 else 'neg' }}"><b>{{ "−" if d.save >= 0 else "+" }}€{{ d.party_save|abs|money }}</b> <span class="muted">{{ "%.0f"|format(d.save_pct|abs) }}%</span></span>{% else %}<span class="muted">–</span>{% endif %}</td>
   <td data-label="Flags"><span class="flags">
-    {% if r.verified %}<span class="chip good" data-tip="Fixed partner chart: the cached miles can be trusted">Chart</span>
+    {% if d.verified %}<span class="chip good" data-tip="Fixed partner chart: the cached miles can be trusted">Chart</span>
     {% else %}<span class="chip warn" data-tip="Dynamic Miles &amp; More price: the cached miles can be far below the live price. Check before you rely on it.">⚠ Unverified</span>{% endif %}
-    {% if r.age_h is not none and r.age_h > 48 %}<span class="chip bad" data-tip="Data older than 48 hours">Stale</span>{% endif %}
+    {% if s.change == "New" %}<span class="chip">New</span>{% elif s.change == "Cheaper" %}<span class="chip good">▼ Cheaper</span>{% endif %}
+    {% if d.age_h is not none and d.age_h > 48 %}<span class="chip bad" data-tip="Data older than 48 hours">Stale</span>{% endif %}
+    {% if not s.seats %}<span class="chip" data-tip="seats.aero reports no seat count">Seats ?</span>{% endif %}
   </span></td>
   <td data-label="Book">{% if s.booking_link %}<a class="btn sm" href="{{ s.booking_link }}" rel="noopener noreferrer" target="_blank">Book</a>{% else %}<span class="muted">–</span>{% endif %}</td>
 </tr>
-{% else %}<tr><td class="empty" colspan="12">Nothing matches these filters.</td></tr>{% endfor %}
+{% else %}<tr><td class="empty" colspan="10">Nothing matches these filters.</td></tr>{% endfor %}
 </tbody></table></div></div>
 {% endif %}
 {% endblock %}

@@ -271,17 +271,17 @@ def deals_client(tmp_path, default_config_dict, write_config):
 
 
 def test_deals_page_ranks_against_the_usual_price(deals_client):
-    r = deals_client.get("/?cabin=all")
+    r = deals_client.get("/?cabin=all&min_pct=0")
     assert r.status_code == 200
     assert "Best deals right now" in r.text
     assert "Great deal" in r.text and "Chart" in r.text
     assert "https://example.test/book" in r.text
-    assert r.text.index("2026-12-17") < r.text.index("2026-12-10")  # biggest saving first
+    assert r.text.index("2026-12-17") < r.text.index("2026-12-16")  # biggest saving first
 
 
 def test_deals_page_filters_and_traveller_scaling(deals_client):
-    one = deals_client.get("/?cabin=all&pax=1&fresh=0").text
-    two = deals_client.get("/?cabin=all&pax=2&fresh=0").text
+    one = deals_client.get("/?cabin=all&pax=1&fresh=0&min_pct=0").text
+    two = deals_client.get("/?cabin=all&pax=2&fresh=0&min_pct=0").text
     assert "36,000" in one and "72,000" in two
     assert "Nothing matches" in deals_client.get("/?cabin=economy").text
     assert "Nothing matches" in deals_client.get("/").text  # default cabin is economy
@@ -407,13 +407,26 @@ def test_usd_rate_warning_when_old(default_config_dict):
     assert old.usd_rate_age_days(date(2020, 2, 1)) == 31
 
 
-def test_overview_lists_every_route_not_just_the_focus(deals_client):
-    r = deals_client.get("/overview?cabin=all&fresh=0")
+def test_all_routes_lists_every_flight_not_one_per_route(deals_client):
+    r = deals_client.get("/overview?cabin=all&fresh=0&pax=1")
     assert r.status_code == 200
-    assert "MUC→SIN" in r.text and "Europe → Asia" in r.text
-    assert "36,000" in r.text  # cheapest date of the route
+    assert r.text.count("MUC→SIN") == 8  # eight dates, one row each
     assert "Nothing matches" in deals_client.get("/overview?fresh=0").text  # default cabin economy
     assert (
         "Nothing matches"
         in deals_client.get("/overview?cabin=all&direction=Asia+%E2%86%92+Europe").text
     )
+
+
+def test_best_deals_shows_only_big_savings_and_defaults_to_one_traveller(deals_client):
+    big = deals_client.get("/?cabin=all&fresh=0").text
+    assert "36,000" in big  # one traveller by default, not min_seats
+    assert "60,000" not in big  # saves a few percent: under the 30% cut
+    assert "60,000" in deals_client.get("/?cabin=all&fresh=0&min_pct=0").text
+
+
+def test_hide_chart_deals_toggle(deals_client):
+    assert "Nothing matches" in deals_client.get("/overview?cabin=all&fresh=0&nochart=1").text
+    assert "MUC→SIN" in deals_client.get("/overview?cabin=all&fresh=0&chart=1").text
+    both = deals_client.get("/overview?cabin=all&fresh=0&chart=1&nochart=1").text
+    assert "Nothing matches" in both  # hide wins over chart-only

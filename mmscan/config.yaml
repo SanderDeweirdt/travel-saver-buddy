@@ -90,6 +90,7 @@ output:
 #   (an absolute price). A route whose fare never moves can still be a Deal this way.
 deals:
   by_ceiling: false
+  min_saving_pct: 30       # Best deals page: only flights at least this % below the usual price
   default_cabin: economy   # Best deals page opens on this cabin; "" = all cabins
 
 # Change = "Cheaper" when a total fell this % or more since the result was last seen.
