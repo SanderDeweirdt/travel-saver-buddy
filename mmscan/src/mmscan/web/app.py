@@ -31,6 +31,7 @@ SORT_LABELS = {
     "total": "Lowest price",
     "date": "Earliest date",
 }
+ROW_LIMIT = 300
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
@@ -133,6 +134,7 @@ def create_app(settings: WebSettings) -> FastAPI:
             "nochart": int(hide_chart),
             "fresh": q["fresh"],
             "min_pct": min_pct,
+            "limit": max(50, min(q["limit"], 20000)),
         }
         run_id = store.latest_scored_run()
         view = None
@@ -153,6 +155,8 @@ def create_app(settings: WebSettings) -> FastAPI:
                 inline_building=inline,
                 hide_stale=bool(q["fresh"]),
             )
+            view["rows_total"] = len(view["deals"])
+            view["deals"] = view["deals"][: f["limit"]]  # a month of flights is megabytes of HTML
         return {
             "view": view,
             "run_id": run_id,
@@ -175,11 +179,12 @@ def create_app(settings: WebSettings) -> FastAPI:
         nochart: int = 0,
         fresh: int = 1,
         min_pct: float | None = None,
+        limit: int = ROW_LIMIT,
     ):
         big = cfg.deals.min_saving_pct if min_pct is None else max(min_pct, 0.0)
         q = dict(
             cabin=cabin, direction=direction, route=route, pax=pax, sort=sort,
-            chart=chart, nochart=nochart, fresh=fresh,
+            chart=chart, nochart=nochart, fresh=fresh, limit=limit,
         )  # fmt: skip
         ctx = deals_context(store, q, min_pct=big, inline=False)
         return render(
@@ -205,10 +210,11 @@ def create_app(settings: WebSettings) -> FastAPI:
         chart: int = 0,
         nochart: int = 0,
         fresh: int = 1,
+        limit: int = ROW_LIMIT,
     ):
         q = dict(
             cabin=cabin, direction=direction, route=route, pax=pax, sort=sort,
-            chart=chart, nochart=nochart, fresh=fresh,
+            chart=chart, nochart=nochart, fresh=fresh, limit=limit,
         )  # fmt: skip
         ctx = deals_context(store, q, min_pct=None, inline=True)
         return render(request, "overview.html", **ctx, cfg_days=cfg.relative.history_days)

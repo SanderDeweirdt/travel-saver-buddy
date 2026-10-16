@@ -148,6 +148,7 @@ class Store:
     def __init__(self, target: Path | str, readonly: bool = False):
         """`target` is a SQLite file path or a postgres:// URL. A read-only store never writes,
         schema creation included."""
+        self.ident = str(target)  # which database this is; used as a cache key
         self.postgres = is_postgres_url(target)
         self.readonly = readonly
         if self.postgres:

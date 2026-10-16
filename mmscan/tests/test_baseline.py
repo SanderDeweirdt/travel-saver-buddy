@@ -80,3 +80,12 @@ def test_route_baselines_from_the_store(tmp_path, default_config_dict):
     b = route_baselines(store, c, latest, now)[("MUC", "SIN", "business", "fixed")]
     assert b.ready and b.n == 3  # three flight dates
     store.close()
+
+
+def test_route_baselines_are_cached_per_run(tmp_path, default_config_dict):
+    c = cfg(default_config_dict)
+    store = Store(tmp_path / "c.db")
+    run = store.start_run("watch", "{}")
+    now = datetime.now(UTC)
+    first = route_baselines(store, c, run, now)
+    assert route_baselines(store, c, run, now) is first
