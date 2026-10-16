@@ -196,7 +196,7 @@ class Output(_Model):
     formats: list[Literal["xlsx", "csv"]] = ["xlsx", "csv"]
 
 
-LINK_PLACEHOLDERS = {"origin", "destination", "date", "cabin", "adults"}
+LINK_PLACEHOLDERS = {"origin", "destination", "date", "date_us", "cabin", "cabin_code", "adults"}
 
 
 def template_fields(template: str) -> set[str]:
@@ -204,8 +204,9 @@ def template_fields(template: str) -> set[str]:
 
 
 class MilesAndMore(_Model):
-    # URL of a prefilled Miles & More award search, with {origin}, {destination}, {date}
-    # (YYYY-MM-DD), {cabin} (economy, business) and {adults}. Empty = only stored links.
+    # URL of a prefilled Miles & More award search. Placeholders: {origin}, {destination},
+    # {date} (YYYY-MM-DD), {date_us} (MM/dd/yyyy), {cabin} (economy, business), {cabin_code}
+    # (E, B, F: Miles & More's bookingclass) and {adults}. Empty = only stored links.
     link_template: str = ""
 
     @model_validator(mode="after")
