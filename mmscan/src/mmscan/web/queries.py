@@ -9,8 +9,8 @@ from datetime import datetime, timedelta
 from mmscan.baseline import baseline_for, route_baselines, thin_routes
 from mmscan.config import Config
 from mmscan.deals import rank_deals, saving_verdict
-from mmscan.overview import route_overview
-from mmscan.report import _age_hours, eligible, load_results, shortlist
+from mmscan.overview import directions, in_regions
+from mmscan.report import _age_hours, load_results, shortlist
 from mmscan.scoring import rank_key
 from mmscan.store import Store
 
@@ -97,23 +97,17 @@ def shortlist_view(
     }
 
 
-def deals_view(store: Store, cfg: Config, run_id: int, now: datetime, **filters) -> dict:
-    results = eligible(load_results(store, run_id), cfg)
+def deals_view(
+    store: Store, cfg: Config, run_id: int, now: datetime, direction: str = "", **filters
+) -> dict:
+    """Every route in the run, one row per flight; `filters` go to rank_deals."""
+    results = in_regions(load_results(store, run_id), cfg, direction)
     baselines = route_baselines(store, cfg, run_id, now)
     out = rank_deals(results, baselines, cfg, now, **filters)
     out["total"] = len(results)
     out["thin_routes"] = thin_routes(baselines)
+    out["directions"] = directions(cfg)
     return out
-
-
-def overview_view(store: Store, cfg: Config, run_id: int, now: datetime, **filters) -> dict:
-    """Every Europe/Asia route in the run, not only the focus set."""
-    results = load_results(store, run_id)
-    baselines = route_baselines(store, cfg, run_id, now)
-    return {
-        "rows": route_overview(results, baselines, cfg, now, **filters),
-        "directions": [f"{p.origin} → {p.destination}" for p in cfg.region_pairs],
-    }
 
 
 def route_history(

@@ -29,10 +29,10 @@ class Deal:
     pax: int
     pricing: str  # "fixed", "dynamic" or "mixed" (see Config.pricing_model)
     age_h: float | None
-    usual: float  # per person
-    save: float  # per person; negative when above the usual price
-    save_pct: float
-    verdict: str
+    usual: float | None  # per person; None while the route has too little history
+    save: float | None  # per person; negative when above the usual price
+    save_pct: float | None
+    verdict: str | None
 
     @property
     def verified(self) -> bool:
@@ -52,16 +52,18 @@ class Deal:
         return (self.s.total_eur or 0) * self.pax
 
     @property
-    def party_usual(self) -> float:
-        return self.usual * self.pax
+    def party_usual(self) -> float | None:
+        return None if self.usual is None else self.usual * self.pax
 
     @property
-    def party_save(self) -> float:
-        return self.save * self.pax
+    def party_save(self) -> float | None:
+        return None if self.save is None else self.save * self.pax
 
     @property
     def save_ct_per_mile(self) -> float | None:
-        return self.save / self.s.miles * 100 if self.s.miles else None
+        if self.save is None or not self.s.miles:
+            return None
+        return self.save / self.s.miles * 100
 
 
 def _matches_route(s: Scored, text: str) -> bool:
@@ -78,12 +80,17 @@ def rank_deals(
     cabin: str = "",
     route: str = "",
     chart_only: bool = False,
+    hide_chart: bool = False,
+    min_pct: float | None = None,
+    inline_building: bool = False,
     hide_stale: bool = True,
     pax: int = 1,
     sort: str = "pct",
 ) -> dict:
     """Split priced results into `deals` (have a usual price) and `building` (too little
-    history), after the filters. Seats below `pax` hide a result; unknown seats (None or 0) stay."""
+    history), after the filters. Seats below `pax` hide a result; unknown seats (None or 0) stay.
+    `min_pct` keeps only deals at least that far below the usual price. `inline_building` puts
+    results without a usual price in `deals` too, with no saving, instead of in `building`."""
     deals: list[Deal] = []
     building: list[tuple[Scored, int]] = []
     for s in results:
@@ -94,7 +101,9 @@ def rank_deals(
         if route and not _matches_route(s, route):
             continue
         pricing = cfg.pricing_model(s.carriers)
-        if chart_only and pricing != "fixed":
+        if chart_only and not hide_chart and pricing != "fixed":
+            continue
+        if hide_chart and pricing == "fixed":
             continue
         age = _age_hours(s.updated_at, now)
         if hide_stale and age is not None and age > STALE_HOURS:
@@ -103,29 +112,38 @@ def rank_deals(
             continue
         b = baseline_for(baselines, cfg, s)
         if b is None:
+            if inline_building and min_pct is None:
+                deals.append(Deal(s, pax, pricing, age, None, None, None, None))
+                continue
             known = baselines.get(baseline_key(cfg, s))
             building.append((s, known.n if known else 0))
             continue
         save = b.median - s.total_eur
         pct = save / b.median * 100
+        if min_pct is not None and pct < min_pct:
+            continue
         deals.append(Deal(s, pax, pricing, age, b.median, save, pct, saving_verdict(pct, cfg)))
 
     keys = {
-        "pct": lambda d: -d.save_pct,
-        "save": lambda d: -d.save,
+        "pct": lambda d: (d.save is None, -(d.save_pct or 0)),
+        "save": lambda d: (d.save is None, -(d.save or 0)),
         "total": lambda d: d.s.total_eur,
         "date": lambda d: d.s.date or "",
     }
     deals.sort(key=keys.get(sort, keys["pct"]))
     building.sort(key=lambda t: t[0].total_eur)
     best = max(
-        (d for d in deals if d.verified and d.save > 0), key=lambda d: d.save_pct, default=None
+        (d for d in deals if d.verified and d.save is not None and d.save > 0),
+        key=lambda d: d.save_pct,
+        default=None,
     )
     return {
         "deals": deals,
         "building": building,
         "best": best,
-        "good_count": sum(1 for d in deals if d.save_pct >= cfg.savings.good_pct),
+        "good_count": sum(
+            1 for d in deals if d.save_pct is not None and d.save_pct >= cfg.savings.good_pct
+        ),
         "new_count": sum(1 for d in deals if d.s.change == "New"),
         "pax": pax,
     }

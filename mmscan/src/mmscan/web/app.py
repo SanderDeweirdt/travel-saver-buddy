@@ -30,13 +30,6 @@ SORT_LABELS = {
     "total": "Lowest price",
     "date": "Earliest date",
 }
-OVERVIEW_SORTS = {
-    "route": "Route",
-    "total": "Lowest price",
-    "pct": "Biggest % below usual",
-    "date": "Earliest date",
-    "count": "Most dates",
-}
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
@@ -122,59 +115,80 @@ def create_app(settings: WebSettings) -> FastAPI:
         request.session.clear()
         return RedirectResponse("/login", status_code=303)
 
-    @app.get("/", response_class=HTMLResponse, dependencies=[Depends(require_login)])
-    def deals_page(
-        request: Request,
-        store: Store = Depends(open_store),
-        cabin: str | None = None,
-        route: str = "",
-        pax: int | None = None,
-        sort: str = "pct",
-        chart: int = 0,
-        fresh: int = 1,
-    ):
-        now = datetime.now(UTC)
-        if cabin is None:
-            cabin = cfg.deals.default_cabin
-        elif cabin == "all":
-            cabin = ""
+    def deals_context(store: Store, q: dict, *, min_pct: float | None, inline: bool) -> dict:
+        """Shared by Best deals and All routes: one row per flight, every route."""
+        cabin = q["cabin"]
+        cabin = cfg.deals.default_cabin if cabin is None else ("" if cabin == "all" else cabin)
+        pax = max(1, min(q["pax"] or 1, 9))
+        hide_chart = bool(q["nochart"])
+        f = {
+            "cabin": cabin,
+            "direction": q["direction"],
+            "route": q["route"],
+            "pax": pax,
+            "sort": q["sort"],
+            "chart": int(bool(q["chart"]) and not hide_chart),
+            "nochart": int(hide_chart),
+            "fresh": q["fresh"],
+            "min_pct": min_pct,
+        }
         run_id = store.latest_scored_run()
-        pax = max(1, min(pax or cfg.min_seats, 9))
         view = None
         if run_id is not None:
             view = queries.deals_view(
                 store,
                 cfg,
                 run_id,
-                now,
+                datetime.now(UTC),
+                direction=q["direction"],
                 cabin=cabin,
-                route=route,
+                route=q["route"],
                 pax=pax,
-                sort=sort,
-                chart_only=bool(chart),
-                hide_stale=bool(fresh),
+                sort=q["sort"],
+                chart_only=bool(f["chart"]),
+                hide_chart=hide_chart,
+                min_pct=min_pct,
+                inline_building=inline,
+                hide_stale=bool(q["fresh"]),
             )
+        return {
+            "view": view,
+            "run_id": run_id,
+            "run": store.run_info(run_id) if run_id else None,
+            "cabins": cfg.cabins,
+            "sorts": SORT_LABELS,
+            "f": f,
+        }
+
+    @app.get("/", response_class=HTMLResponse, dependencies=[Depends(require_login)])
+    def deals_page(
+        request: Request,
+        store: Store = Depends(open_store),
+        cabin: str | None = None,
+        direction: str = "",
+        route: str = "",
+        pax: int | None = None,
+        sort: str = "pct",
+        chart: int = 0,
+        nochart: int = 0,
+        fresh: int = 1,
+        min_pct: float | None = None,
+    ):
+        big = cfg.deals.min_saving_pct if min_pct is None else max(min_pct, 0.0)
+        q = dict(
+            cabin=cabin, direction=direction, route=route, pax=pax, sort=sort,
+            chart=chart, nochart=nochart, fresh=fresh,
+        )  # fmt: skip
+        ctx = deals_context(store, q, min_pct=big, inline=False)
         return render(
             request,
             "deals.html",
-            view=view,
-            run_id=run_id,
-            run=store.run_info(run_id) if run_id else None,
-            cabins=cfg.cabins,
-            sorts=SORT_LABELS,
+            **ctx,
             cfg_days=cfg.relative.history_days,
             cfg_min=cfg.relative.min_samples,
             cfg_good=f"{cfg.savings.good_pct:g}",
             cfg_great=f"{cfg.savings.great_pct:g}",
             mile_ct=cfg.mile_cost_eur_cents,
-            f={
-                "cabin": cabin,
-                "route": route,
-                "pax": pax,
-                "sort": sort,
-                "chart": chart,
-                "fresh": fresh,
-            },
         )
 
     @app.get("/overview", response_class=HTMLResponse, dependencies=[Depends(require_login)])
@@ -184,43 +198,18 @@ def create_app(settings: WebSettings) -> FastAPI:
         cabin: str | None = None,
         direction: str = "",
         route: str = "",
-        sort: str = "route",
+        pax: int | None = None,
+        sort: str = "pct",
+        chart: int = 0,
+        nochart: int = 0,
         fresh: int = 1,
     ):
-        if cabin is None:
-            cabin = cfg.deals.default_cabin
-        elif cabin == "all":
-            cabin = ""
-        run_id = store.latest_scored_run()
-        view = None
-        if run_id is not None:
-            view = queries.overview_view(
-                store,
-                cfg,
-                run_id,
-                datetime.now(UTC),
-                cabin=cabin,
-                direction=direction,
-                route=route,
-                sort=sort,
-                hide_stale=bool(fresh),
-            )
-        return render(
-            request,
-            "overview.html",
-            view=view,
-            run_id=run_id,
-            run=store.run_info(run_id) if run_id else None,
-            cabins=cfg.cabins,
-            sorts=OVERVIEW_SORTS,
-            f={
-                "cabin": cabin,
-                "direction": direction,
-                "route": route,
-                "sort": sort,
-                "fresh": fresh,
-            },
-        )
+        q = dict(
+            cabin=cabin, direction=direction, route=route, pax=pax, sort=sort,
+            chart=chart, nochart=nochart, fresh=fresh,
+        )  # fmt: skip
+        ctx = deals_context(store, q, min_pct=None, inline=True)
+        return render(request, "overview.html", **ctx, cfg_days=cfg.relative.history_days)
 
     @app.get("/shortlist", response_class=HTMLResponse, dependencies=[Depends(require_login)])
     def shortlist_page(

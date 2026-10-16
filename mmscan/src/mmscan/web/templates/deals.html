@@ -9,7 +9,7 @@
 <div class="panel"><p class="empty" style="padding:32px;text-align:center;margin:0">No scored run yet. The scanner has not stored results.</p></div>
 {% else %}
 {% set pax = view.pax %}
-<div class="banner" role="note">{{ disclaimer }} Prices are for {{ pax }} traveller{{ "s" if pax != 1 }}, one way: miles at your mile value plus fees, against what that route usually costs (the median of the last {{ cfg_days }} days of scans).</div>
+<div class="banner" role="note">{{ disclaimer }} Prices are for {{ pax }} traveller{{ "s" if pax != 1 }}, one way: miles at your mile value plus fees, against what that route usually costs (the median of the last {{ cfg_days }} days of scans). Only flights at least {{ '%g'|format(f.min_pct) }}% below usual are listed; every route is covered. <a href="/overview">All routes</a> shows every flight.</div>
 
 {% set best = view.best %}
 {% if best %}
@@ -30,6 +30,11 @@
   <label>Cabin
     <select name="cabin"><option value="all">All cabins</option>
       {% for c in cabins %}<option value="{{ c }}" {{ 'selected' if f.cabin == c }}>{{ c|capitalize }}</option>{% endfor %}</select></label>
+  <label>Direction
+    <select name="direction"><option value="">Both</option>
+      {% for d in view.directions %}<option value="{{ d }}" {{ 'selected' if f.direction == d }}>{{ d }}</option>{% endfor %}</select></label>
+  <label>Min saving %
+    <input type="number" name="min_pct" value="{{ '%g'|format(f.min_pct) }}" min="0" max="100" step="1" style="width:80px"></label>
   <label>Route
     <input type="text" name="route" value="{{ f.route }}" placeholder="FRA SIN" maxlength="20"></label>
   <label>Travellers
@@ -38,6 +43,7 @@
     <select name="sort">{% for k, label in sorts.items() %}<option value="{{ k }}" {{ 'selected' if f.sort == k }}>{{ label }}</option>{% endfor %}</select></label>
   <div class="checks">
     <label><input type="checkbox" name="chart" value="1" {{ 'checked' if f.chart }}> Chart price only</label>
+    <label><input type="checkbox" name="nochart" value="1" {{ 'checked' if f.nochart }}> Hide chart deals</label>
     <input type="hidden" name="fresh" value="0">
     <label><input type="checkbox" name="fresh" value="1" {{ 'checked' if f.fresh }}> Hide stale</label>
   </div>
