@@ -405,3 +405,15 @@ def test_usd_rate_warning_when_old(default_config_dict):
     fresh = config(default_config_dict, usd_to_eur=0.92, usd_to_eur_date=date.today())
     assert not any("last checked" in w for w in _currency_warnings({"USD": 3}, fresh))
     assert old.usd_rate_age_days(date(2020, 2, 1)) == 31
+
+
+def test_overview_lists_every_route_not_just_the_focus(deals_client):
+    r = deals_client.get("/overview?cabin=all&fresh=0")
+    assert r.status_code == 200
+    assert "MUC→SIN" in r.text and "Europe → Asia" in r.text
+    assert "36,000" in r.text  # cheapest date of the route
+    assert "Nothing matches" in deals_client.get("/overview?fresh=0").text  # default cabin economy
+    assert (
+        "Nothing matches"
+        in deals_client.get("/overview?cabin=all&direction=Asia+%E2%86%92+Europe").text
+    )

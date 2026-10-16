@@ -30,6 +30,13 @@ SORT_LABELS = {
     "total": "Lowest price",
     "date": "Earliest date",
 }
+OVERVIEW_SORTS = {
+    "route": "Route",
+    "total": "Lowest price",
+    "pct": "Biggest % below usual",
+    "date": "Earliest date",
+    "count": "Most dates",
+}
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
@@ -166,6 +173,51 @@ def create_app(settings: WebSettings) -> FastAPI:
                 "pax": pax,
                 "sort": sort,
                 "chart": chart,
+                "fresh": fresh,
+            },
+        )
+
+    @app.get("/overview", response_class=HTMLResponse, dependencies=[Depends(require_login)])
+    def overview_page(
+        request: Request,
+        store: Store = Depends(open_store),
+        cabin: str | None = None,
+        direction: str = "",
+        route: str = "",
+        sort: str = "route",
+        fresh: int = 1,
+    ):
+        if cabin is None:
+            cabin = cfg.deals.default_cabin
+        elif cabin == "all":
+            cabin = ""
+        run_id = store.latest_scored_run()
+        view = None
+        if run_id is not None:
+            view = queries.overview_view(
+                store,
+                cfg,
+                run_id,
+                datetime.now(UTC),
+                cabin=cabin,
+                direction=direction,
+                route=route,
+                sort=sort,
+                hide_stale=bool(fresh),
+            )
+        return render(
+            request,
+            "overview.html",
+            view=view,
+            run_id=run_id,
+            run=store.run_info(run_id) if run_id else None,
+            cabins=cfg.cabins,
+            sorts=OVERVIEW_SORTS,
+            f={
+                "cabin": cabin,
+                "direction": direction,
+                "route": route,
+                "sort": sort,
                 "fresh": fresh,
             },
         )
