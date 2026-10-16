@@ -10,8 +10,12 @@ from pathlib import Path
 import httpx
 from dotenv import load_dotenv
 
+from mmscan.baseline import route_baselines
 from mmscan.config import Config
+from mmscan.deals import Deal, rank_deals
+from mmscan.links import mm_link
 from mmscan.models import local_time
+from mmscan.overview import in_regions
 from mmscan.report import DISCLAIMER, _age_hours, eligible, load_results
 from mmscan.scoring import SKIP, Scored, rank_key
 from mmscan.store import Store
@@ -55,6 +59,26 @@ def select_alerts(results: list[Scored], cfg: Config, now: datetime | None = Non
     return sorted(out, key=rank_key)
 
 
+def select_new_deals(
+    results: list[Scored], store: Store, cfg: Config, run_id: int, now: datetime
+) -> list[Deal]:
+    """Flights first seen in this run that are `new_deals.min_pct` or more below the route's usual
+    price, best saving first. Only routes with a usual price qualify; stale data is left out."""
+    nd = cfg.notify.new_deals
+    if not nd.enabled:
+        return []
+    fresh = [s for s in in_regions(results, cfg) if s.change == "New"]
+    if not fresh:
+        return []
+    baselines = route_baselines(store, cfg, run_id, now)
+    deals: list[Deal] = []
+    for cabin in nd.cabins:
+        deals += rank_deals(fresh, baselines, cfg, now, cabin=cabin, min_pct=nd.min_pct)["deals"]
+    if not nd.unverified:
+        deals = [d for d in deals if d.verified]
+    return sorted(deals, key=lambda d: -(d.save_pct or 0))
+
+
 def _stale(s: Scored, now: datetime) -> bool:
     age = _age_hours(s.updated_at, now)
     return age is not None and age > STALE_HOURS
@@ -86,6 +110,23 @@ def _line(s: Scored) -> str:
     return line
 
 
+def _deal_line(d: Deal, cfg: Config) -> str:
+    s = d.s
+    stops = "direct" if s.stops == 0 else f"{s.stops} stop{'s' if s.stops != 1 else ''}"
+    seats = s.seats if s.seats is not None else "unknown"
+    tag = "chart price" if d.verified else "⚠ unverified (dynamic price, cached miles can be low)"
+    route = f"{s.origin}→{s.destination}"
+    head = f"*New deal · {d.save_pct:.0f}% below usual* · {route} · {s.date} · {s.cabin}"
+    money = (
+        f"{s.miles:,} mi + €{s.fees_eur:.0f} fees = *€{s.total_eur:.0f}* "
+        f"vs usual €{d.usual:.0f} (saves €{d.save:.0f})"
+    )
+    detail = f"{_esc(s.carriers or '?')}, {stops}, seats {seats} · {tag}"
+    line = f"{head}\n{money}\n{detail}"
+    link = mm_link(cfg, s)
+    return line + (f"\n<{link}|Check on Miles & More>" if link else "")
+
+
 def _trip_line(a: TripAlert) -> str:
     p = a.pair
     label = a.change + (f" (was €{a.was:,.0f})" if a.was is not None else "")
@@ -115,19 +156,27 @@ def build_message(
     cfg: Config,
     now: datetime,
     trips: list[TripAlert] | None = None,
+    deals: list[Deal] | None = None,
 ) -> dict:
     trips = trips or []
-    total = len(alerts) + len(trips)
-    title = f"mmscan: {total} new or cheaper award{'s' if total != 1 else ''}"
+    deals = deals or []
+    total = len(alerts) + len(trips) + len(deals)
+    if deals and not alerts and not trips:
+        title = f"mmscan: {total} new deal{'s' if total != 1 else ''}"
+    else:
+        title = f"mmscan: {total} new or cheaper award{'s' if total != 1 else ''}"
     blocks: list[dict] = [{"type": "header", "text": {"type": "plain_text", "text": title}}]
     room = cfg.notify.max_items
     shown_trips = trips[:room]
     for a in shown_trips:
         blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": _trip_line(a)}})
-    shown = alerts[: max(room - len(shown_trips), 0)]
+    shown_deals = deals[: max(room - len(shown_trips), 0)]
+    for d in shown_deals:
+        blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": _deal_line(d, cfg)}})
+    shown = alerts[: max(room - len(shown_trips) - len(shown_deals), 0)]
     for s in shown:
         blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": _line(s)}})
-    more = total - len(shown) - len(shown_trips)
+    more = total - len(shown) - len(shown_trips) - len(shown_deals)
     footer = f"Run {run_id}, {now.strftime('%Y-%m-%d %H:%M')} UTC. "
     if more:
         footer += f"{more} more in the report. "
@@ -157,12 +206,15 @@ def notify_run(
 ) -> tuple[int, dict | None]:
     """Post the run's alerts. Returns (alert count, payload). Sends nothing when there are no
     alerts, or when `url` is None (dry run)."""
-    alerts = select_alerts(load_results(store, run_id), cfg, now)
+    results = load_results(store, run_id)
+    deals = select_new_deals(results, store, cfg, run_id, now)
+    seen = {d.s.key for d in deals}  # a flight is posted once, as a deal
+    alerts = [s for s in select_alerts(results, cfg, now) if s.key not in seen]
     trips = trip_alerts(store, cfg, run_id, now)
-    if not alerts and not trips:
+    if not alerts and not trips and not deals:
         return 0, None
-    payload = build_message(alerts, run_id, cfg, now, trips)
-    n = len(alerts) + len(trips)
+    payload = build_message(alerts, run_id, cfg, now, trips, deals)
+    n = len(alerts) + len(trips) + len(deals)
     if url is not None:
         send_slack(url, payload, transport)
         log.info("posted %d alerts to Slack", n)

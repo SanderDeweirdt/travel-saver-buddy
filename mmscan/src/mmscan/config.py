@@ -180,8 +180,19 @@ class Drops(_Model):
     min_pct: float = Field(5, gt=0, lt=100)
 
 
+class NewDeals(_Model):
+    """Alert on each flight (route, date and cabin) seen for the first time that is already at
+    least `min_pct` below its route's usual price, on every route (not the shortlist focus)."""
+
+    enabled: bool = True
+    min_pct: float = Field(10, ge=0, le=100)
+    cabins: list[str] = ["economy"]
+    unverified: bool = True  # include dynamic-carrier prices, marked as such in the message
+
+
 class Notify(_Model):
     slack: bool = False
+    new_deals: NewDeals = NewDeals()
     # Also alert on Cheaper results of any verdict (inside the shortlist scope).
     on_drop: bool = True
     verdicts: list[Literal["Deal", "Worth a look"]] = ["Deal"]

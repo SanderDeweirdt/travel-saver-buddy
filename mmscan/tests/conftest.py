@@ -12,6 +12,7 @@ def default_config_dict() -> dict:
     data = yaml.safe_load((ROOT / "config.yaml").read_text())
     # The scan tests count requests for the two long-haul pairs; Asia to Asia has its own test.
     data["region_pairs"] = [p for p in data["region_pairs"] if p["origin"] != p["destination"]]
+    data["notify"] = {"new_deals": {"enabled": False}}  # notify tests start from the code defaults
     return data
 
 
