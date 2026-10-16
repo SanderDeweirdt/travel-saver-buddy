@@ -60,5 +60,6 @@
 </tr>
 {% else %}<tr><td class="empty" colspan="10">Nothing matches these filters.</td></tr>{% endfor %}
 </tbody></table></div></div>
+{% if view.rows_total > view.deals|length %}<p class="note" style="padding:0 14px">Showing the first {{ view.deals|length }} of {{ view.rows_total }} flights. <a href="{{ request.url.include_query_params(limit=f.limit * 4) }}">Show more</a>, or narrow the filters.</p>{% endif %}
 {% endif %}
 {% endblock %}

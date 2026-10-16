@@ -462,3 +462,10 @@ def test_link_template_rejects_unknown_placeholders(default_config_dict):
 
     with pytest.raises(ValidationError):
         config(default_config_dict, miles_and_more={"link_template": "https://x/{nope}"})
+
+
+def test_row_limit_and_show_more(deals_client):
+    page = deals_client.get("/overview?cabin=all&fresh=0&pax=1&limit=50").text
+    assert "Showing the first" not in page  # only 8 flights, under the limit
+    r = deals_client.get("/overview?cabin=all&fresh=0&pax=1&limit=-5")
+    assert r.status_code == 200  # a bad limit is clamped, not an error
