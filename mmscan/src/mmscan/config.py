@@ -170,6 +170,7 @@ class Deals(_Model):
     # with fees inside fees_max_eur, is a Deal (seats permitting). Dynamic carriers have no chart
     # and are only ever judged against the prices this tool has observed.
     by_ceiling: bool = True
+    default_cabin: str = "economy"  # Best deals page filter when none is chosen; "" = all cabins
 
 
 class Drops(_Model):

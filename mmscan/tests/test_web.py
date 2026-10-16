@@ -271,7 +271,7 @@ def deals_client(tmp_path, default_config_dict, write_config):
 
 
 def test_deals_page_ranks_against_the_usual_price(deals_client):
-    r = deals_client.get("/")
+    r = deals_client.get("/?cabin=all")
     assert r.status_code == 200
     assert "Best deals right now" in r.text
     assert "Great deal" in r.text and "Chart" in r.text
@@ -280,12 +280,14 @@ def test_deals_page_ranks_against_the_usual_price(deals_client):
 
 
 def test_deals_page_filters_and_traveller_scaling(deals_client):
-    one = deals_client.get("/?pax=1&fresh=0").text
-    two = deals_client.get("/?pax=2&fresh=0").text
+    one = deals_client.get("/?cabin=all&pax=1&fresh=0").text
+    two = deals_client.get("/?cabin=all&pax=2&fresh=0").text
     assert "36,000" in one and "72,000" in two
     assert "Nothing matches" in deals_client.get("/?cabin=economy").text
-    assert "Nothing matches" in deals_client.get("/?route=FRA").text
-    assert "Nothing matches" in deals_client.get("/?pax=9").text  # only 4 seats each
+    assert "Nothing matches" in deals_client.get("/").text  # default cabin is economy
+    assert "36,000" in deals_client.get("/?cabin=business&fresh=0").text
+    assert "Nothing matches" in deals_client.get("/?cabin=all&route=FRA").text
+    assert "Nothing matches" in deals_client.get("/?cabin=all&pax=9").text  # only 4 seats each
 
 
 def test_deals_page_survives_bad_params(deals_client):
@@ -403,3 +405,15 @@ def test_usd_rate_warning_when_old(default_config_dict):
     fresh = config(default_config_dict, usd_to_eur=0.92, usd_to_eur_date=date.today())
     assert not any("last checked" in w for w in _currency_warnings({"USD": 3}, fresh))
     assert old.usd_rate_age_days(date(2020, 2, 1)) == 31
+
+
+def test_overview_lists_every_route_not_just_the_focus(deals_client):
+    r = deals_client.get("/overview?cabin=all&fresh=0")
+    assert r.status_code == 200
+    assert "MUC→SIN" in r.text and "Europe → Asia" in r.text
+    assert "36,000" in r.text  # cheapest date of the route
+    assert "Nothing matches" in deals_client.get("/overview?fresh=0").text  # default cabin economy
+    assert (
+        "Nothing matches"
+        in deals_client.get("/overview?cabin=all&direction=Asia+%E2%86%92+Europe").text
+    )

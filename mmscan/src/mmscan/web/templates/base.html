@@ -232,6 +232,7 @@ td small { color: var(--ink-2); }
   </a>
   <nav aria-label="Main">
     <a href="/" class="{{ 'on' if page in ('deals', 'route') }}">Best deals</a>
+    <a href="/overview" class="{{ 'on' if page == 'overview' }}">All routes</a>
     <a href="/trips" class="{{ 'on' if page == 'trips' }}">My trips</a>
     <a href="/shortlist" class="{{ 'on' if page == 'shortlist' }}">Shortlist</a>
     <a href="/data" class="{{ 'on' if page in ('data', 'runs', 'quota') }}">Data &amp; alerts</a>

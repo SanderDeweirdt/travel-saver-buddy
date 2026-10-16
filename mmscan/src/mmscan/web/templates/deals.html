@@ -28,7 +28,7 @@
 
 <form class="filters" method="get" action="/">
   <label>Cabin
-    <select name="cabin"><option value="">All cabins</option>
+    <select name="cabin"><option value="all">All cabins</option>
       {% for c in cabins %}<option value="{{ c }}" {{ 'selected' if f.cabin == c }}>{{ c|capitalize }}</option>{% endfor %}</select></label>
   <label>Route
     <input type="text" name="route" value="{{ f.route }}" placeholder="FRA SIN" maxlength="20"></label>

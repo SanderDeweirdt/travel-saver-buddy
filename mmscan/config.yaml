@@ -26,8 +26,8 @@ region_pairs:
   - {origin: Asia, destination: Europe}
 
 watchlist:
-  origins: [MUC, FRA, ZRH, VIE, BRU]
-  destinations: [SIN, KUL, BKK, MNL]
+  origins: [MUC, FRA, ZRH, VIE, BRU, DUS, HAM, BER, GVA, AMS, CDG]
+  destinations: [SIN, KUL, BKK, MNL, CEB, CGK, DPS, HKT, SGN, HAN]
   both_directions: true
 
 # The API's regions are continents. Subregions refine them by airport list.
@@ -90,6 +90,7 @@ output:
 #   (an absolute price). A route whose fare never moves can still be a Deal this way.
 deals:
   by_ceiling: false
+  default_cabin: economy   # Best deals page opens on this cabin; "" = all cabins
 
 # Change = "Cheaper" when a total fell this % or more since the result was last seen.
 drops:
