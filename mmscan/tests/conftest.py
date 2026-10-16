@@ -9,7 +9,10 @@ ROOT = Path(__file__).resolve().parents[1]
 
 @pytest.fixture
 def default_config_dict() -> dict:
-    return yaml.safe_load((ROOT / "config.yaml").read_text())
+    data = yaml.safe_load((ROOT / "config.yaml").read_text())
+    # The scan tests count requests for the two long-haul pairs; Asia to Asia has its own test.
+    data["region_pairs"] = [p for p in data["region_pairs"] if p["origin"] != p["destination"]]
+    return data
 
 
 @pytest.fixture

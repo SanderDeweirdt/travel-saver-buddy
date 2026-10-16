@@ -156,3 +156,14 @@ def test_quota_reads_last_header(tmp_path, monkeypatch):
     assert result.exit_code == 0, result.output
     assert "812" in result.output
     assert "1 of cap 300" in result.output
+
+
+def test_repo_config_also_scans_flights_within_asia():
+    from pathlib import Path
+
+    from mmscan.config import load_config
+    from mmscan.scan import region_requests
+
+    cfg = load_config(Path(__file__).resolve().parents[1] / "config.yaml")
+    pairs = {(p["origin_region"], p["destination_region"]) for _, p in region_requests(cfg, TODAY)}
+    assert pairs == {("Europe", "Asia"), ("Asia", "Europe"), ("Asia", "Asia")}
