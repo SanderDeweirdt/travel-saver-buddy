@@ -56,7 +56,7 @@
     {% if d.age_h is not none and d.age_h > 48 %}<span class="chip bad" data-tip="Data older than 48 hours">Stale</span>{% endif %}
     {% if not s.seats %}<span class="chip" data-tip="seats.aero reports no seat count">Seats ?</span>{% endif %}
   </span></td>
-  <td data-label="Book">{% if s.booking_link %}<a class="btn sm" href="{{ s.booking_link }}" rel="noopener noreferrer" target="_blank">Book</a>{% else %}<span class="muted">–</span>{% endif %}</td>
+  <td data-label="Book">{% set link = mm_link(s, pax) %}{% if link %}<a class="btn sm" href="{{ link }}" rel="noopener noreferrer" target="_blank" title="Open on miles-and-more.com to check this price">M&amp;M ↗</a>{% else %}<span class="muted">–</span>{% endif %}</td>
 </tr>
 {% else %}<tr><td class="empty" colspan="10">Nothing matches these filters.</td></tr>{% endfor %}
 </tbody></table></div></div>

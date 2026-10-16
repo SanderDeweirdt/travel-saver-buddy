@@ -84,7 +84,7 @@
     {% if s.ceiling_good %}<span class="chip good">ceiling_good</span>{% endif %}
     {% if r.age_h is not none %}<span class="chip {{ 'bad' if r.age_h > 48 }}">{{ "%.0f"|format(r.age_h) }}h old{{ " (stale)" if r.age_h > 48 }}</span>{% endif %}
   </span></td>
-  <td data-label="">{% if s.booking_link %}<a class="btn sm primary" href="{{ s.booking_link }}" rel="noopener noreferrer" target="_blank">Book</a>{% endif %}</td>
+  <td data-label="">{% set link = mm_link(s) %}{% if link %}<a class="btn sm primary" href="{{ link }}" rel="noopener noreferrer" target="_blank" title="Open on miles-and-more.com to check this price">M&amp;M ↗</a>{% endif %}</td>
 </tr>
 {% else %}<tr><td class="empty" colspan="11">Nothing matches.</td></tr>{% endfor %}
 </tbody></table></div></div>

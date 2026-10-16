@@ -430,3 +430,31 @@ def test_hide_chart_deals_toggle(deals_client):
     assert "MUC→SIN" in deals_client.get("/overview?cabin=all&fresh=0&chart=1").text
     both = deals_client.get("/overview?cabin=all&fresh=0&chart=1&nochart=1").text
     assert "Nothing matches" in both  # hide wins over chart-only
+
+
+def test_every_row_links_to_miles_and_more_when_a_template_is_set(
+    tmp_path, default_config_dict, write_config
+):
+    from mmscan.links import mm_link
+    from tests.helpers import scored
+
+    cfg = config(
+        default_config_dict,
+        miles_and_more={
+            "link_template": "https://mm.test/s?o={origin}&d={destination}&t={date}&c={cabin}&n={adults}"
+        },
+    )
+    s = scored(400, date="2026-12-01")
+    url = mm_link(cfg, s, pax=2)
+    assert url == f"https://mm.test/s?o={s.origin}&d={s.destination}&t=2026-12-01&c={s.cabin}&n=2"
+    s.booking_link = "https://stored.test/x"
+    assert mm_link(cfg, s) == "https://stored.test/x"  # seats.aero's own link wins
+    assert mm_link(config(default_config_dict), scored(400, date="2026-12-01")) is None
+
+
+def test_link_template_rejects_unknown_placeholders(default_config_dict):
+    import pytest
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        config(default_config_dict, miles_and_more={"link_template": "https://x/{nope}"})
