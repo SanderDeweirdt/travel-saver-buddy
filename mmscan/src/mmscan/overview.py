@@ -52,7 +52,7 @@ def route_overview(
     hide_stale: bool = True,
     sort: str = "route",
 ) -> list[RouteRow]:
-    """Cheapest result per origin, destination and cabin over all region pairs, not just the focus."""
+    """Cheapest result per origin, destination and cabin over all region pairs."""
     q = "".join(ch for ch in route.upper() if ch.isalnum())
     groups: dict[tuple, list[Scored]] = {}
     for s in results:
