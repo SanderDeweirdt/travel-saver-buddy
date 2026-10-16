@@ -28,9 +28,12 @@ web service. Both services build the same image from `mmscan/Dockerfile`.
 3. Variables (Variables tab):
    - `DATABASE_URL` = `${{Postgres.DATABASE_URL}}` (reference variable, pick it from the dropdown)
    - `SEATS_AERO_API_KEY` = your key
-   - `SLACK_WEBHOOK_URL` = your webhook (only needed when `notify.slack: true` in `config.yaml`)
+   - `SLACK_WEBHOOK_URL` = your webhook. `notify.slack` is `true` in the shipped `config.yaml`, so
+     without it every scan logs a "notify failed" warning and posts nothing (the scan itself still
+     succeeds)
 
-Each run does `mmscan watch`; at 05 UTC it also does `mmscan run` (full daily scan).
+Each run does `mmscan watch`; at 05 UTC it also does `mmscan run` (full daily scan: all `region_pairs`,
+including Asia to Asia, which the hourly watch does not read).
 
 ## 3. Dashboard service (web)
 
@@ -85,6 +88,8 @@ Secrets never go in it.
       (`railway run --service scanner mmscan check`). This makes 4 API calls.
 - [ ] Trigger one scan: redeploy or wait for the `:07` run; the deploy logs end with
       `Watch ok: …`.
+- [ ] Preview the Slack message: `railway run --service scanner mmscan notify --dry-run` (prints it,
+      sends nothing). Without `--dry-run` it posts for real.
 - [ ] The dashboard shows the run under **Runs** and rows on the **Shortlist** (a watch run only
       covers the watchlist; the 05 UTC run fills in the full picture).
 - [ ] **Quota** shows calls today below the cap.

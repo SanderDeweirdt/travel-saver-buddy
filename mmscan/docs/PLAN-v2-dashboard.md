@@ -139,3 +139,27 @@ M1 to M6 are built and tested on SQLite and Postgres. Left for Sander, not code:
 - Record hand checks with `mmscan verify-add` until each dynamic carrier has a measured live-to-cached ratio (R1).
 - Update `usd_to_eur` and `usd_to_eur_date` in `config.yaml` with today's rate.
 - Not built (later): editing trip profiles from the dashboard (R6), per-user logins.
+
+## Changes since (Oct 16)
+
+The Best deals page was reworked after the first use. Where the milestones above say otherwise, this wins.
+
+- **Every route, one row per flight.** Best deals no longer limits itself to the shortlist focus
+  (`shortlist.scope`); it covers every route between the configured `region_pairs`. A new **All routes**
+  page (`/overview`) lists the same rows with no saving cut, routes without a usual price included.
+- **Big savings only.** Best deals lists flights at least `deals.min_saving_pct` (30) below the usual
+  price. The usual price itself is unchanged (median total over `relative.history_days`, fixed-chart and
+  dynamic carriers separate, needs `relative.min_samples`).
+- **Defaults.** Economy (`deals.default_cabin`), one traveller instead of `min_seats`.
+- **Hide chart deals** toggle on both pages, next to "Chart price only"; hide wins if both are ticked.
+- **Region pairs.** Asia to Asia added; the daily `run` reads it, the hourly `watch` does not.
+- **More watchlist airports.** Origins DUS, HAM, BER, GVA, AMS, CDG and destinations CEB, CGK, DPS, HKT,
+  SGN, HAN added. No extra calls: each direction is one search.
+- **Miles & More link** on every row (`miles_and_more.link_template`, built from a real seats.aero link);
+  a link stored by seats.aero for the flight wins.
+- **Speed.** The usual price read a month of full result rows on every page view. It now reads six
+  columns and is cached for ten minutes per scan, and the tables show the first 300 flights with a
+  "Show more" link.
+- **Slack.** `notify.slack` is on. `notify.new_deals` posts each new flight (route, date, cabin) at least
+  10% below its usual price, economy only, dynamic prices marked unverified. The older Shortlist alerts
+  are off.
