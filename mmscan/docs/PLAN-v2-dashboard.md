@@ -130,12 +130,23 @@ makes no API calls.
 1. Should economy and business use the same thresholds? Kept the same for now.
 2. Is a 30-day window right, given hourly watch scans and a daily full run? Configurable via `relative.history_days`.
 
-## Status (Oct 14)
+## Status (Oct 16)
 
-M1 to M6 are built and tested on SQLite and Postgres. Left for Sander, not code:
+M1 to M6 are built, merged (PR 13) and deployed; the v2 build answers at
+https://travel-saver-buddy-production.up.railway.app (checked from outside: `/healthz` 200, the v2 routes redirect to
+login; pages behind the login were not checked). Later changes on `main` went beyond this plan:
 
-- Turn `notify.slack` on once the Best deals page has run a few days; chart-price Deals and trip alerts only,
-  because `notify.unverified` defaults to off.
+- Best deals and All routes (`/overview`) cover every region pair, one row per flight; Best deals shows only flights at
+  least `deals.min_saving_pct` (30%) below usual, opens on economy for 1 traveller, with a hide-chart toggle.
+- A Miles & More link template puts a prefilled award-search link on every row.
+- Asia to Asia region pair (daily run only) and a wider watchlist.
+- Baseline query slimmed and cached for 10 minutes; row limit of 300.
+- Slack is on, with a `new_deals` alert (new flights at least 10% below usual, all routes, economy).
+
+Left for Sander, not code:
+
 - Record hand checks with `mmscan verify-add` until each dynamic carrier has a measured live-to-cached ratio (R1).
 - Update `usd_to_eur` and `usd_to_eur_date` in `config.yaml` with today's rate.
-- Not built (later): editing trip profiles from the dashboard (R6), per-user logins.
+- Decide whether the `new_deals` alert should keep including unverified dynamic prices.
+
+Not built: editing trip profiles from the dashboard (R6), automatic USD rate, per-user logins.

@@ -28,9 +28,9 @@ web service. Both services build the same image from `mmscan/Dockerfile`.
 3. Variables (Variables tab):
    - `DATABASE_URL` = `${{Postgres.DATABASE_URL}}` (reference variable, pick it from the dropdown)
    - `SEATS_AERO_API_KEY` = your key
-   - `SLACK_WEBHOOK_URL` = your webhook (only needed when `notify.slack: true` in `config.yaml`)
+   - `SLACK_WEBHOOK_URL` = your webhook (`notify.slack` is `true` in `config.yaml`, so set it or the Slack step logs a warning)
 
-Each run does `mmscan watch`; at 05 UTC it also does `mmscan run` (full daily scan).
+Each run does `mmscan watch`; at 05 UTC it also does `mmscan run` (full daily scan, including the Asia to Asia region pair, which the hourly watch skips). New deals are posted to Slack after each run (`notify.new_deals`).
 
 ## 3. Dashboard service (web)
 
@@ -46,6 +46,24 @@ Each run does `mmscan watch`; at 05 UTC it also does `mmscan run` (full daily sc
    - `SESSION_SECRET` = random string, for example `openssl rand -hex 32`
 
 The dashboard has no seats.aero key: it cannot call the API.
+
+### Where it lives
+
+The dashboard is at **https://travel-saver-buddy-production.up.railway.app** (the `dashboard` service's
+Railway domain). Everything except `/healthz` asks for `DASHBOARD_PASSWORD`.
+
+| Path | Page |
+| --- | --- |
+| `/` | Best deals: flights at least `deals.min_saving_pct` below the route's usual price |
+| `/overview` | All routes: every flight, no saving cut |
+| `/trips` | My trips |
+| `/shortlist` | The v1 Shortlist (old bookmarks with `?run=…&verdict=…&sort=verdict` belong here, not on `/`) |
+| `/data` | Data & alerts: quota, scanner health, USD rate age, price checks, Slack status, runs |
+| `/route/<from>/<to>/<cabin>` | One route's history |
+| `/healthz` | `ok`, no login |
+
+Last checked 16 Oct 2026 from outside, without the password: `/healthz` returned 200 and `/shortlist` and
+`/data` redirected to the login page, so the v2 build was running. Pages behind the login were not checked.
 
 ## 4. Move existing local data (optional)
 
@@ -85,9 +103,11 @@ Secrets never go in it.
       (`railway run --service scanner mmscan check`). This makes 4 API calls.
 - [ ] Trigger one scan: redeploy or wait for the `:07` run; the deploy logs end with
       `Watch ok: …`.
-- [ ] The dashboard shows the run under **Runs** and rows on the **Shortlist** (a watch run only
-      covers the watchlist; the 05 UTC run fills in the full picture).
-- [ ] **Quota** shows calls today below the cap.
+- [ ] The dashboard shows the run under **Data & alerts** and rows on **Best deals** (a watch run only
+      covers the watchlist; the 05 UTC run fills in the full picture). Routes need
+      `relative.min_samples` observations before they get a usual price; until then they sit under
+      "Building history" on **All routes**.
+- [ ] **Data & alerts** shows calls today below the cap.
 - [ ] **Data & alerts** shows the scanner as Healthy and the USD rate as checked within 30 days (`usd_to_eur_date`).
 
 ## Risks

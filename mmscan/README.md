@@ -77,6 +77,10 @@ scan.
 | `relative` | `percentile_good` (deal threshold), `min_samples` (below this a baseline is unknown), `history_days` (stored runs that count), `min_discount_pct` (a route or destination only counts as good when the total is also this % below its median; 0 = plain percentile cut). Lufthansa-group fares barely move by date, so a high value leaves few Deals. |
 | `deals` | `by_ceiling: true` makes a result within its benchmark's `good_miles_max` and `fees_max_eur` a Deal even when the relative baselines say no. The right way to find deals on routes whose fare never moves. Check the ceilings against real fees: the PRD's 200 EUR economy limit is below almost every real fee. |
 | `drops` | `min_pct`: Change shows Cheaper when a total fell this much since it was last seen. |
+| `savings` | Verdict thresholds on the deals pages: `great_pct` (30) and `good_pct` (10) below the route's usual price. |
+| `deals.min_saving_pct`, `deals.default_cabin` | Best deals only lists flights at least this % below the usual price (30), and opens on this cabin (`economy`; `""` = all cabins). All routes ignores the cut. |
+| `miles_and_more.link_template` | Prefilled Miles & More award-search URL (placeholders `{origin} {destination} {date} {date_us} {cabin} {cabin_code} {adults}`), so every row links to the flight for a manual check. A link stored by seats.aero wins. Empty = stored links only. |
+| `usd_to_eur_date` | When you last checked `usd_to_eur`. Past 30 days the Data page and the run log warn. |
 | `shortlist` | `scope: focus` limits the Shortlist, the CSV and Slack to results matching a benchmark or (`focus_watchlist`) a watchlist pair; `all` keeps everything scored Deal or Worth a look. "All results" always has every result. |
 | `prescreen.percentile` | Share of region results, cheapest first, that get their fees fetched. |
 | `enrich.max_calls` | Get Trips calls per run: for `run` it caps trip details for Shortlist results; for `enrich` it caps the pre-screened candidates. Set to 0 to skip. |
@@ -84,7 +88,7 @@ scan.
 | `api` | Page size, mixed-cabin filter, `include_filtered`, and the daily call cap. |
 | `output` | Report folder and formats. |
 | `watch.max_pages` | Pages per direction for `mmscan watch`. Results come cheapest first, so 1 page usually holds every deal. |
-| `notify` | Slack alerts: `slack: true` turns them on after `mmscan run`; `verdicts` and `changes` pick what is posted; `max_items` caps the message; `on_drop: true` also alerts on Cheaper results of any verdict. |
+| `notify` | Slack alerts: `slack: true` turns them on; `new_deals` posts each new flight at least `min_pct` below its route's usual price (all routes, chosen `cabins`, `unverified` includes dynamic prices, marked as such); `verdicts`, `changes` and `on_drop` drive the older Shortlist alerts (currently off); `max_items` caps a message. |
 
 Optional `cash_fares.csv`, next to `config.yaml`, with columns
 `origin,destination,cabin,month,fare_eur` (`month` as `YYYY-MM`). Matching
@@ -93,17 +97,22 @@ with a warning naming the line.
 
 ## Dashboard pages
 
+Live at the dashboard service's Railway domain (see [`docs/railway-deploy.md`](docs/railway-deploy.md)); everything but `/healthz` needs the shared password.
+
 | Page | What it shows |
 | --- | --- |
-| **Best deals** (`/`) | One row per result, ranked by how far below the route's usual price it is: miles at `mile_cost_eur_cents` plus fees, against the median of the last `relative.history_days` days for that origin, destination and cabin (fixed-chart and dynamic carriers kept apart). Verdicts: Great deal at `savings.great_pct` (30%) below usual, Good deal at `savings.good_pct` (10%), Marginal, Above usual. Filters for cabin, route, travellers, chart price only, hide stale (over 48 h). Routes with fewer than `relative.min_samples` observations are listed under "Building history" instead. |
+| **Best deals** (`/`) | One row per flight (route, date, cabin) that is at least `deals.min_saving_pct` (30%) below the route's usual price, ranked by saving. Every configured region pair is included, not only the watchlist. With miles: miles at `mile_cost_eur_cents` plus fees; usual price: the median of that total over `relative.history_days` days for the origin, destination and cabin (fixed-chart and dynamic carriers kept apart). Opens on `deals.default_cabin` for 1 traveller; filters for cabin, direction, route, travellers, chart price only, hide chart prices, hide stale (over 48 h), minimum saving and row limit (300 by default). Each row links to Miles & More for a manual check. |
+| **All routes** (`/overview`) | The same rows without the saving cut: every flight on every route, plus the routes still building history. |
 | **My trips** (`/trips`) | Per trip: best whole-party price, budget bar, 30-day trend of the best price, a calendar of the cheapest price per departure day, and the ranked round trips. |
 | **Shortlist** (`/shortlist`) | The v1 view: Deal and Worth a look by verdict. |
 | **Route** (`/route/...`) | Price history with the usual price as a dashed line, and today's results against it. |
 | **Data & alerts** (`/data`) | Quota, scanner health, the USD rate age, a table of live-to-cached mile ratios per carrier (from `mmscan verify-add`), Slack status and recent runs. |
 
+Verdicts: Great deal at `savings.great_pct` (30%) below usual, Good deal at `savings.good_pct` (10%), Marginal, Above usual.
+Routes with fewer than `relative.min_samples` observations have no usual price yet and show as "Building history".
 "Usual price" is what the route normally costs with miles, from this tool's own history. It is not a cash ticket price.
 **Unverified** marks Lufthansa-group (dynamic) prices: the cached miles can be far below the live price.
-Those, and results older than 48 hours, are never posted to Slack unless `notify.unverified: true`.
+The usual prices are cached for 10 minutes, so a fresh scan can take that long to show.
 `usd_to_eur_date` records when you last checked the USD rate; past 30 days the dashboard and the run log warn.
 
 ## Trips
@@ -151,11 +160,20 @@ keep it current).
 4. Check the message with `uv run mmscan notify --dry-run`, then send it
    with `uv run mmscan notify`.
 
-`mmscan run` then posts after each run, but only results that are on the
-Shortlist, have a verdict in `notify.verdicts` (default Deal) and are New or
-Cheaper than the previous run. A quiet run posts nothing, and so does the
-very first run, which has no previous run to compare with. A Slack failure
-is logged in the run log and does not fail the run.
+After each `watch` or `run`, Slack gets two kinds of message:
+
+- **New deals** (`notify.new_deals`, on by default in `config.yaml`): each flight (route, date and cabin) seen for
+  the first time that is at least `min_pct` (10%) below its route's usual price, on every route, for the listed
+  `cabins` (economy). Each shows the saving, the carrier and a Miles & More link. Dynamic-carrier prices are
+  included and marked unverified (`new_deals.unverified`). Only routes with a usual price qualify, and results
+  older than 48 hours are left out.
+- **Shortlist and trip alerts**: Shortlist rows with a verdict in `notify.verdicts` that are New or Cheaper, and
+  trip options that are new or at least `drops.min_pct` cheaper. The shipped config has `verdicts: []` and
+  `on_drop: false`, so only trip alerts remain. Dynamic prices and stale results are not sent here unless
+  `notify.unverified: true`.
+
+A flight is posted once, as a deal. A quiet run posts nothing, and so does the very first run, which has nothing
+to compare with. A Slack failure is logged in the run log and does not fail the run.
 
 If the tool runs in a cloud environment with a network allowlist, add
 `hooks.slack.com` next to `seats.aero`.

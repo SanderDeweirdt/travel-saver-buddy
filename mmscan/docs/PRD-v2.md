@@ -1,6 +1,6 @@
 # PRD: mmscan v2, the always-on award watcher
 
-Oct 13, 2026 · @Sander · Status: draft for review
+Oct 13, 2026 · @Sander · Status: built and deployed (16 Oct); R6 and the P2 items are open. Updated 16 Oct to match the shipped product.
 
 Supersedes the scope and "not now" list of [`PRD.md`](PRD.md) (v1, 11 Oct). v1's API reference, scoring rules and
 report layout still apply unless this document says otherwise. Live API behaviour that differs from v1 is in
@@ -43,14 +43,23 @@ family travel from Belgium and Germany to Southeast Asia, starting with Philippi
 
 | Area | What exists |
 | --- | --- |
-| Scan | `scan`, `run`, `watch`: regions via Bulk Availability, watchlist via Cached Search with trips |
-| Pricing | Fees come from the summary object in USD, converted at a fixed `usd_to_eur`; Get Trips only for Shortlist results |
-| Scoring | Route and destination percentiles, benchmark ceilings, chart-rate flag, value per mile; separate logic for fixed-chart and dynamic carriers |
-| History | SQLite locally, Postgres on Railway; 180-day retention; New/Cheaper compared with the last time each result was seen |
-| Trips | Trip profiles: narrow searches per leg, round-trip pairing, whole-party price, budget marker, alerts |
-| Dashboard | FastAPI: Shortlist, Trips, route history, Runs, Quota, xlsx/csv downloads, shared-password login with rate limiting |
-| Alerts | Slack webhook (built, currently off) |
+| Scan | `scan`, `run`, `watch`: regions via Bulk Availability (Europe to Asia, Asia to Europe, and Asia to Asia in the daily run), a wider watchlist via Cached Search with trips |
+| Pricing | Fees come from the summary object in USD, converted at a fixed `usd_to_eur` (dated by `usd_to_eur_date`); Get Trips only for Shortlist results |
+| Baseline | `baseline.py`: usual price = median total cost per origin, destination, cabin and pricing group over `relative.history_days`; needs `relative.min_samples` observations; cached 10 minutes |
+| Scoring | Route and destination percentiles, benchmark ceilings (`deals.by_ceiling` now off), chart-rate flag; fixed-chart and dynamic carriers judged separately |
+| Dashboard | Best deals (`/`), All routes (`/overview`), My trips, Shortlist (`/shortlist`), Route, Data & alerts (`/data`); shared-password login; Miles & More link on every row |
+| Deals ranking | Saving against the usual price; verdicts at 30% (Great) and 10% (Good); Best deals shows flights at least `deals.min_saving_pct` (30%) below usual, on `deals.default_cabin`, for 1 traveller by default |
+| Trips | Trip profiles: round-trip pairing, whole-party price, budget bar, 30-day trend, cheapest-day calendar |
+| Alerts | Slack is on: `notify.new_deals` posts each new flight at least 10% below usual (all routes, economy, dynamic prices marked unverified); trip alerts; stale (over 48 h) results never sent |
+| Trust | `price_checks` table and `mmscan verify-add` for hand checks of cached against live miles, shown per carrier on the Data page |
 | Deploy | Railway: hourly cron `watch`, daily 05 UTC `run`, web service, Postgres |
+
+## Decisions since drafting
+
+- **Baseline:** the usual price is the route's own median total cost (miles at 1.16 ct plus fees), not a cash fare. seats.aero has no cash prices and no fare source was added; `cash_fares.csv` stays an optional extra.
+- **Thresholds:** Great deal at 30% below usual, Good deal at 10%, the same for both cabins.
+- **Slack:** switched on with the `new_deals` alert instead of the Shortlist alerts, which are off. It includes dynamic-carrier prices, marked unverified, so R2's "chart prices first" is relaxed for that one alert; the older alerts still exclude them unless `notify.unverified` is on.
+- **Scope of the pages:** Best deals and All routes cover every configured region pair, not only the shortlist focus.
 
 ## Requirements for the next version
 
@@ -62,29 +71,37 @@ Priority: P0 must have for v2 to be trusted, P1 should have, P2 later.
   flight. Until this is understood, dynamic-carrier results must carry an "unverified" mark everywhere they appear.
   Measure the gap on a sample of at least 20 results and record the ratio per carrier in `api-findings.md`.
   *Done when* the documented gap per carrier exists and the dashboard says which prices are chart-based and which are not.
+  **Status: tooling built (Data page, `mmscan verify-add`); the measurements are still to be recorded.**
 - **R2. Re-enable Slack.** Alerts were switched off until cached mileage is trusted. Turn them on for fixed-chart
   Deals and trip alerts first, dynamic carriers only after R1.
   *Done when* a quiet hour posts nothing, a new fixed-chart Deal posts once, and the same Deal is not posted again
   unless its total drops by `drops.min_pct`.
+  **Status: built and on, as the `new_deals` alert (see Decisions).**
 - **R3. Realistic ceilings.** The PRD v1 economy ceiling of 200 EUR in fees sits below almost every real fee
   (30 to 700 EUR). `config.yaml` already uses 280 EUR; replace the placeholders with ceilings derived from at least
   30 days of stored route statistics.
   *Done when* each benchmark's ceiling cites the statistic it came from.
+  **Status: open. `deals.by_ceiling` was switched off instead, so ceilings no longer produce Deals.**
 - **R4. Currency.** Fees arrive in USD and are converted at a hand-edited rate. Either fetch the rate daily from a
   documented source or fail the run's Shortlist loudly when the rate is older than 30 days.
+  **Status: partly built. `usd_to_eur_date` plus a dashboard and run-log warning after 30 days; no automatic rate fetch.**
 
 ### P1: planning trips
 
 - **R5. Trip-first dashboard.** The Trips page is the default landing page when at least one trip profile exists.
   Each trip shows its best five round trips, the budget marker, the price trend of the best option over the last
   30 days, and one-click booking links.
+  **Status: built, except that Best deals (not Trips) is the landing page.**
 - **R6. Trip profiles outside the repo.** Profiles live in `config.yaml`, so every change is a commit and a redeploy.
   Allow editing them from the dashboard (stored in Postgres, validated by the same code as the file).
   *Done when* adding a trip needs no git commit and a bad profile is rejected with the key named.
+  **Status: open.**
 - **R7. Best-day view.** For a trip with flexible dates, show the cheapest total per departure day as a calendar,
   so the cheap weeks are visible at a glance.
+  **Status: built (calendar on My trips).**
 - **R8. Stale-data guard.** Any result whose `UpdatedAt` is over 48 hours old is marked stale on the dashboard and
   excluded from Slack.
+  **Status: built (dashboard marker, hidden by default; excluded from Slack).**
 
 ### P2: later
 

@@ -2,6 +2,8 @@
 
 Oct 11, 2026 · @Sander
 
+> Partly superseded by [`PRD-v2.md`](PRD-v2.md): scheduling, notifications and a web UI are now built, and the dashboard ranks against the route's usual price. The API reference and scoring rules below still apply.
+
 A command-line tool that pulls Miles & More award availability from the seats.aero API in bulk, scores every result against configurable benchmarks, and writes a ranked shortlist to a spreadsheet. This document is the build brief for Claude Code; start at "Build order".
 
 ## Scope
