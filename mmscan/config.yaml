@@ -24,6 +24,7 @@ date_window:
 region_pairs:
   - {origin: Europe, destination: Asia}
   - {origin: Asia, destination: Europe}
+  - {origin: Asia, destination: Asia}   # flights within Asia; daily full run only, the hourly watch skips it
 
 watchlist:
   origins: [MUC, FRA, ZRH, VIE, BRU, DUS, HAM, BER, GVA, AMS, CDG]
