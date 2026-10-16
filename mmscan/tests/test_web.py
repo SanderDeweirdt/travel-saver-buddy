@@ -271,7 +271,7 @@ def deals_client(tmp_path, default_config_dict, write_config):
 
 
 def test_deals_page_ranks_against_the_usual_price(deals_client):
-    r = deals_client.get("/")
+    r = deals_client.get("/?cabin=all")
     assert r.status_code == 200
     assert "Best deals right now" in r.text
     assert "Great deal" in r.text and "Chart" in r.text
@@ -280,12 +280,14 @@ def test_deals_page_ranks_against_the_usual_price(deals_client):
 
 
 def test_deals_page_filters_and_traveller_scaling(deals_client):
-    one = deals_client.get("/?pax=1&fresh=0").text
-    two = deals_client.get("/?pax=2&fresh=0").text
+    one = deals_client.get("/?cabin=all&pax=1&fresh=0").text
+    two = deals_client.get("/?cabin=all&pax=2&fresh=0").text
     assert "36,000" in one and "72,000" in two
     assert "Nothing matches" in deals_client.get("/?cabin=economy").text
-    assert "Nothing matches" in deals_client.get("/?route=FRA").text
-    assert "Nothing matches" in deals_client.get("/?pax=9").text  # only 4 seats each
+    assert "Nothing matches" in deals_client.get("/").text  # default cabin is economy
+    assert "36,000" in deals_client.get("/?cabin=business&fresh=0").text
+    assert "Nothing matches" in deals_client.get("/?cabin=all&route=FRA").text
+    assert "Nothing matches" in deals_client.get("/?cabin=all&pax=9").text  # only 4 seats each
 
 
 def test_deals_page_survives_bad_params(deals_client):

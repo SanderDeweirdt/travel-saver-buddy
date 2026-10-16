@@ -119,7 +119,7 @@ def create_app(settings: WebSettings) -> FastAPI:
     def deals_page(
         request: Request,
         store: Store = Depends(open_store),
-        cabin: str = "",
+        cabin: str | None = None,
         route: str = "",
         pax: int | None = None,
         sort: str = "pct",
@@ -127,6 +127,10 @@ def create_app(settings: WebSettings) -> FastAPI:
         fresh: int = 1,
     ):
         now = datetime.now(UTC)
+        if cabin is None:
+            cabin = cfg.deals.default_cabin
+        elif cabin == "all":
+            cabin = ""
         run_id = store.latest_scored_run()
         pax = max(1, min(pax or cfg.min_seats, 9))
         view = None

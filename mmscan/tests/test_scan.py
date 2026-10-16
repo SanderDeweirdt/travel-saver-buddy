@@ -97,10 +97,11 @@ def test_watchlist_stores_trips_with_fees(tmp_path, default_config_dict):
 
     client, store = make(tmp_path, handler)
     run = store.start_run("scan", "{}")
-    stats = scan_watchlist(client, store, cfg_from(default_config_dict), run, TODAY)
+    cfg = cfg_from(default_config_dict)
+    stats = scan_watchlist(client, store, cfg, run, TODAY)
     assert len(sent) == 2  # both directions
-    assert sent[0]["origin_airport"] == "MUC,FRA,ZRH,VIE,BRU"
-    assert sent[1]["origin_airport"] == "SIN,KUL,BKK,MNL"
+    assert sent[0]["origin_airport"] == ",".join(cfg.watchlist.origins)
+    assert sent[1]["origin_airport"] == ",".join(cfg.watchlist.destinations)
     assert sent[0]["order_by"] == "lowest_mileage" and sent[0]["include_trips"] == "true"
     assert stats["watchlist_results"] == 2  # same ID per call, deduped within each call
     rows = store.conn.execute(
