@@ -472,10 +472,12 @@ def test_row_limit_and_show_more(deals_client):
     assert r.status_code == 200  # a bad limit is clamped, not an error
 
 
-def test_deals_pages_ignore_newer_watch_runs(db):
+def test_deals_pages_ignore_newer_watch_runs(db, default_config_dict):
     store = Store(db)
     run = store.start_run("watch", "{}", now=NOW + timedelta(hours=1))
     store.save_availability(run, avail("w1", business=50000), "watchlist")
+    cfg = config(default_config_dict, relative={"percentile_good": 20, "min_samples": 2})
+    score_run(store, cfg, run, NOW + timedelta(hours=1))
     store.finish_run(run, "ok", {}, [], now=NOW + timedelta(hours=1))
     store.close()
     c = TestClient(
