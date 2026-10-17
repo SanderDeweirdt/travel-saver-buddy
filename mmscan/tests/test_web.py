@@ -20,13 +20,13 @@ NOW = datetime.now(UTC)
 
 @pytest.fixture
 def db(tmp_path, default_config_dict):
-    """A SQLite store with three scored watch runs on MUC-SIN business."""
+    """A SQLite store with three scored scan runs on MUC-SIN business."""
     cfg = config(default_config_dict, relative={"percentile_good": 20, "min_samples": 2})
     path = tmp_path / "web.db"
     store = Store(path)
     for days, miles in ((2, 70000), (1, 64000), (0, 58000)):
         at = NOW - timedelta(days=days)
-        run = store.start_run("watch", "{}", now=at)
+        run = store.start_run("scan", "{}", now=at)
         store.save_availability(run, avail(f"a{days}", business=miles), "watchlist")
         store.save_trips(
             f"a{days}",
@@ -202,7 +202,7 @@ def test_shortlist_labels_dynamic_prices(tmp_path, default_config_dict):
     cfg = config(default_config_dict, relative={"percentile_good": 20, "min_samples": 2})
     path = tmp_path / "mix.db"
     store = Store(path)
-    run = store.start_run("watch", "{}", now=NOW)
+    run = store.start_run("scan", "{}", now=NOW)
     for aid, airlines in (("fx", "SQ"), ("dyn", "LH")):
         store.save_availability(run, avail(aid, airlines=airlines, business=60000), "watchlist")
         store.save_trips(
@@ -242,7 +242,7 @@ def deals_client(tmp_path, default_config_dict, write_config):
     path = tmp_path / "deals.db"
     store = Store(path)
     at = NOW - timedelta(hours=1)
-    run = store.start_run("watch", "{}", now=at)
+    run = store.start_run("scan", "{}", now=at)
     prices = [70000, 68000, 66000, 64000, 62000, 60000, 58000, 36000]
     for i, miles in enumerate(prices):
         aid = f"d{i}"
@@ -260,6 +260,7 @@ def deals_client(tmp_path, default_config_dict, write_config):
         )
     score_run(store, cfg, run, at)
     store.finish_run(run, "ok", {}, [], now=at)
+    store.finish_run(store.start_run("watch", "{}", now=at), "ok", {}, [], now=at)
     store.close()
     cfg_path = write_config(
         {**default_config_dict, "relative": {"percentile_good": 20, "min_samples": 3}}
@@ -469,3 +470,19 @@ def test_row_limit_and_show_more(deals_client):
     assert "Showing the first" not in page  # only 8 flights, under the limit
     r = deals_client.get("/overview?cabin=all&fresh=0&pax=1&limit=-5")
     assert r.status_code == 200  # a bad limit is clamped, not an error
+
+
+def test_deals_pages_ignore_newer_watch_runs(db):
+    store = Store(db)
+    run = store.start_run("watch", "{}", now=NOW + timedelta(hours=1))
+    store.save_availability(run, avail("w1", business=50000), "watchlist")
+    store.finish_run(run, "ok", {}, [], now=NOW + timedelta(hours=1))
+    store.close()
+    c = TestClient(
+        create_app(WebSettings(PASSWORD, "s" * 32, db, ROOT / "config.yaml", secure_cookies=True)),
+        base_url="https://testserver",
+    )
+    login(c)
+    text = c.get("/overview?cabin=all&fresh=0&pax=1").text
+    assert f"Run #{run}" not in text
+    assert "MUC→SIN" in text
