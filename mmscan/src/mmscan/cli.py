@@ -12,10 +12,9 @@ import typer
 
 from mmscan.client import ApiError, Client
 from mmscan.config import Config, ConfigError, load_config
-from mmscan.store import Store
+from mmscan.store import FULL_RUNS, Store
 
 DB_PATH = Path("data/mmscan.db")
-FULL_RUNS = ("scan", "run")  # watch runs hold only the watchlist
 LIVE_FIXTURES = Path("tests/fixtures/live")
 
 app = typer.Typer(help="Miles & More award scanner (seats.aero).", no_args_is_help=True)

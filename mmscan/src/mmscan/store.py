@@ -14,6 +14,8 @@ from pathlib import Path
 from mmscan.db import SCHEMA_LOCK, PgConnection, is_postgres_url
 from mmscan.models import Trip
 
+FULL_RUNS = ("scan", "run")  # watch runs hold only the watchlist
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS runs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
