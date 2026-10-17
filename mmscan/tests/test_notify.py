@@ -80,16 +80,14 @@ def test_send_slack_non_200_raises():
 
 
 def _store_with_results(tmp_path, rows):
-    from dataclasses import astuple
-
-    from mmscan.scoring import SCORED_COLUMNS
+    from mmscan.scoring import SCORED_COLUMNS, column_values
 
     store = Store(tmp_path / "db.sqlite")
     run = store.start_run("scan", "{}", now=NOW)
     ph = ",".join("?" * (len(SCORED_COLUMNS) + 1))
     store.conn.executemany(
         f"INSERT INTO results(run_id, {', '.join(SCORED_COLUMNS)}) VALUES ({ph})",
-        [(run, *astuple(s)) for s in rows],
+        [(run, *column_values(s, SCORED_COLUMNS)) for s in rows],
     )
     store.conn.commit()
     return store, run
@@ -168,10 +166,9 @@ def test_dynamic_prices_alert_only_when_switched_on(default_config_dict):
 
 def _history_then_current(tmp_path, current):
     """Fifteen economy MUC-SIN flights per carrier group at 1000 EUR earlier, then `current`."""
-    from dataclasses import astuple
     from datetime import timedelta
 
-    from mmscan.scoring import SCORED_COLUMNS
+    from mmscan.scoring import SCORED_COLUMNS, column_values
 
     store = Store(tmp_path / "deals.sqlite")
     ph = ",".join("?" * (len(SCORED_COLUMNS) + 1))
@@ -189,9 +186,9 @@ def _history_then_current(tmp_path, current):
             )
             s.updated_at = (NOW - timedelta(days=1)).isoformat()
             past.append(s)
-    store.conn.executemany(sql, [(old, *astuple(s)) for s in past])
+    store.conn.executemany(sql, [(old, *column_values(s, SCORED_COLUMNS)) for s in past])
     run = store.start_run("watch", "{}", now=NOW)
-    store.conn.executemany(sql, [(run, *astuple(s)) for s in current])
+    store.conn.executemany(sql, [(run, *column_values(s, SCORED_COLUMNS)) for s in current])
     store.conn.commit()
     return store, run
 

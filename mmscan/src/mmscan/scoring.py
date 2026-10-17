@@ -5,7 +5,8 @@ from __future__ import annotations
 import json
 import logging
 import statistics
-from dataclasses import astuple, dataclass, fields
+from bisect import bisect_left, bisect_right
+from dataclasses import dataclass, fields
 from datetime import UTC, datetime, timedelta
 
 from mmscan.config import Config
@@ -43,6 +44,15 @@ def percentile_rank(values: list[float], x: float) -> float | None:
     below = sum(1 for v in values if v < x)
     equal = sum(1 for v in values if v == x)
     return (below + 0.5 * equal) / len(values) * 100
+
+
+def percentile_rank_sorted(xs: list[float], x: float) -> float | None:
+    """`percentile_rank` over an already sorted list, in O(log n)."""
+    if not xs:
+        return None
+    below = bisect_left(xs, x)
+    equal = bisect_right(xs, x) - below
+    return (below + 0.5 * equal) / len(xs) * 100
 
 
 def total_cost_eur(miles: int, fees: float, cents: float) -> float:
@@ -119,13 +129,25 @@ class Scored:
     value_band: str | None = None
     change: str = ""
     expired: bool = False
+    # Not in `results`: the raw fee as the API gave it (observations keep it), and when we first and
+    # last saw this price (current_offers keeps them).
+    fees_minor: int | None = None
+    currency: str | None = None
+    first_seen: str | None = None
+    last_seen: str | None = None
 
     @property
     def key(self) -> tuple:
         return (self.origin, self.destination, self.date, self.cabin)
 
 
-SCORED_COLUMNS = [f.name for f in fields(Scored)]
+TRANSIENT = ("fees_minor", "currency", "first_seen", "last_seen")
+SCORED_COLUMNS = [f.name for f in fields(Scored) if f.name not in TRANSIENT]
+CURRENT_COLUMNS = SCORED_COLUMNS + ["first_seen", "last_seen"]
+
+
+def column_values(s: Scored, columns: list[str]) -> tuple:
+    return tuple(getattr(s, c) for c in columns)
 
 
 def rank_key(s: Scored) -> tuple:
@@ -164,12 +186,16 @@ def _offer_row(avail: dict, row, cabin: str, offer, trips, link, cfg: Config) ->
             arrives_at=trip.arrives_at,
             seats_ok=seats_ok,
             direct=trip.stops == 0,
+            fees_minor=trip.taxes_minor,
+            currency=trip.currency,
         )
     # No trip details: the summary carries the cheapest trip's taxes per cabin (live finding).
     taxes = avail.get(f"{CABIN_PREFIX[cabin]}TotalTaxes")
     fees = None
+    minor, currency = None, None
     if isinstance(taxes, int) and not isinstance(taxes, bool) and taxes > 0:
-        fees = fees_eur(taxes, avail.get("TaxesCurrency") or "", cfg.usd_to_eur)
+        minor, currency = taxes, avail.get("TaxesCurrency") or ""
+        fees = fees_eur(taxes, currency, cfg.usd_to_eur)
     priced = fees is not None
     return Scored(
         **base,
@@ -185,6 +211,8 @@ def _offer_row(avail: dict, row, cabin: str, offer, trips, link, cfg: Config) ->
         arrives_at=None,
         seats_ok=offer.seats is None or offer.seats >= cfg.min_seats,
         direct=offer.direct,
+        fees_minor=minor,
+        currency=currency,
     )
 
 
@@ -331,8 +359,9 @@ def score_rows(
                 s.total_eur = total_cost_eur(s.miles, s.fees_eur, cents)
 
     samples = list(latest.values())
-    by_route = _group(samples, _route)
-    by_dest = _group(samples, _dest)
+    by_route = {k: sorted(v) for k, v in _group(samples, _route).items()}
+    by_dest = {k: sorted(v) for k, v in _group(samples, _dest).items()}
+    cuts: dict[tuple, float] = {}  # one threshold per group, not one per row
     pg = cfg.relative.percentile_good
     n_min = cfg.relative.min_samples
     disc = cfg.relative.min_discount_pct / 100
@@ -354,10 +383,15 @@ def score_rows(
         capped = False
         thin = 0
         layers = []
-        for values in (by_route.get(_route(s), []), by_dest.get(_dest(s), [])):
+        for layer, gkey, values in (
+            ("route", _route(s), by_route.get(_route(s), [])),
+            ("dest", _dest(s), by_dest.get(_dest(s), [])),
+        ):
             if len(values) >= n_min:
-                cut = min(percentile(values, pg), percentile(values, 50) * (1 - disc))
-                layers.append(s.total_eur <= cut)
+                ck = (layer, gkey)
+                if ck not in cuts:
+                    cuts[ck] = min(percentile(values, pg), percentile(values, 50) * (1 - disc))
+                layers.append(s.total_eur <= cuts[ck])
             else:
                 thin += 1
                 if fixed and bm:
@@ -366,8 +400,8 @@ def score_rows(
                     layers.append(False)
                     capped = True
         s.route_good, s.destination_good = layers
-        s.route_pct = percentile_rank(by_route.get(_route(s), []), s.total_eur)
-        s.destination_pct = percentile_rank(by_dest.get(_dest(s), []), s.total_eur)
+        s.route_pct = percentile_rank_sorted(by_route.get(_route(s), []), s.total_eur)
+        s.destination_pct = percentile_rank_sorted(by_dest.get(_dest(s), []), s.total_eur)
         s.verdict = verdict(s.route_good, s.destination_good, bool(s.seats_ok), capped)
         if fixed and cfg.deals.by_ceiling and s.ceiling_good and s.seats_ok:
             s.verdict = DEAL
@@ -393,7 +427,11 @@ def score_run(
     fares: FareSource | None = None,
 ) -> tuple[list[Scored], list[str]]:
     """Score every result of the run and write the `results` table. Returns (rows, warnings)."""
+    from mmscan.offers import rebuild_current, record_observations
+
     current, warnings = current_rows(store, cfg, run_id)
+    record_observations(store, run_id, current, now)
+    rebuild_current(store, cfg, run_id, now, fares)
     history = history_rows(store, cfg, run_id, now)
     prev = previous_totals(store, run_id)
     scored = score_rows(current, history, cfg, fares, prev)
@@ -403,6 +441,6 @@ def score_run(
         store.conn.execute("DELETE FROM results WHERE run_id=?", (run_id,))
         store.conn.executemany(
             f"INSERT INTO results(run_id, {', '.join(SCORED_COLUMNS)}) VALUES ({placeholders})",
-            [(run_id, *astuple(s)) for s in scored],
+            [(run_id, *column_values(s, SCORED_COLUMNS)) for s in scored],
         )
     return scored, warnings
