@@ -111,11 +111,15 @@ def shortlist_candidates(store: Store, cfg: Config, run_id: int) -> list[str]:
     """Availabilities on the run's Shortlist whose trip details are not stored yet, best first.
     Their fees are already known from the summary; the trips add flight numbers, times and the
     booking link, so only results worth acting on cost a Get Trips call."""
-    from mmscan.report import load_results, shortlist
+    from mmscan.offers import load_current
+    from mmscan.report import shortlist
 
+    in_run = {r["id"] for r in _region_rows(store, run_id)}  # only this run's calls can fetch them
     out: list[str] = []
-    for s in shortlist(load_results(store, run_id), cfg):
-        if s.availability_id in out or store.has_fetch(s.availability_id, s.updated_at or ""):
+    for s in shortlist(load_current(store), cfg):
+        if s.availability_id not in in_run or s.availability_id in out:
+            continue
+        if store.has_fetch(s.availability_id, s.updated_at or ""):
             continue
         out.append(s.availability_id)
     return out

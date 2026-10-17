@@ -147,7 +147,7 @@ def test_verdict_table():
     assert verdict(False, False, True) == SKIP
 
 
-def test_history_window_and_dedupe(tmp_path, cfg):
+def test_a_flight_seen_in_several_runs_counts_once(tmp_path, cfg):
     store = Store(tmp_path / "db.sqlite")
     old = store.start_run("scan", "{}", now=NOW - timedelta(days=40))
     recent = store.start_run("scan", "{}", now=NOW - timedelta(days=2))
@@ -161,12 +161,9 @@ def test_history_window_and_dedupe(tmp_path, cfg):
         )
     for run in (old, recent):
         score_run(store, cfg, run, NOW)
-    from mmscan.scoring import history_rows
-
-    hist = history_rows(store, cfg, current, NOW)
-    assert {h.availability_id for h in hist} == {"r1"}  # o1 is outside history_days
     rows, _ = score_run(store, cfg, current, NOW)
-    # r1 and c1 share route, date and cabin, so only c1 counts: 1 sample, thin.
+    # o1, r1 and c1 share route, date and cabin: one flight, shown once at its latest availability.
+    assert [r.availability_id for r in rows if r.cabin == "business"] == ["c1"]
     assert rows[0].route_pct == 50.0
 
 
@@ -209,7 +206,7 @@ def test_score_run_prices_from_stored_trips(tmp_path, cfg):
     assert by_cabin["economy"].fees_eur == 129.0
     assert by_cabin["business"].booking_link == "https://example.test/book"
     assert any("empty TaxesCurrency" in w for w in warnings)
-    stored = store.conn.execute("SELECT count(*) FROM results WHERE run_id=?", (run,)).fetchone()[0]
+    stored = store.conn.execute("SELECT count(*) FROM current_offers").fetchone()[0]
     assert stored == 2
 
 

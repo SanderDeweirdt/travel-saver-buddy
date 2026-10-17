@@ -16,7 +16,8 @@ from openpyxl.utils import get_column_letter
 
 from mmscan.config import Config
 from mmscan.models import local_time
-from mmscan.scoring import DEAL, SCORED_COLUMNS, WORTH, Scored, percentile, rank_key
+from mmscan.offers import load_current
+from mmscan.scoring import DEAL, WORTH, Scored, percentile
 from mmscan.store import Store
 
 DISCLAIMER = "Cached data. Confirm price and seats on miles-and-more.com before acting."
@@ -52,30 +53,6 @@ SHORTLIST_COLUMNS = [
     "Booking link",
 ]
 ALL_COLUMNS = SHORTLIST_COLUMNS + ["Fee source", "Seats OK", "Direct", "Expired"]
-
-
-_BOOL_COLUMNS = (
-    "fee_estimated",
-    "expired",
-    "route_good",
-    "destination_good",
-    "ceiling_good",
-    "seats_ok",
-    "direct",
-    "chart_rate",
-)
-
-
-def scored_from_row(r) -> Scored:
-    values = {c: r[c] for c in SCORED_COLUMNS}
-    for c in _BOOL_COLUMNS:
-        values[c] = None if values[c] is None else bool(values[c])
-    return Scored(**values)
-
-
-def load_results(store: Store, run_id: int) -> list[Scored]:
-    rows = store.conn.execute("SELECT * FROM results WHERE run_id=?", (run_id,)).fetchall()
-    return sorted((scored_from_row(r) for r in rows), key=rank_key)
 
 
 def eligible(results: list[Scored], cfg: Config | None = None) -> list[Scored]:
@@ -249,7 +226,8 @@ def run_log(
 
 
 def write_report(store: Store, cfg: Config, run_id: int, now: datetime) -> list[Path]:
-    results = load_results(store, run_id)
+    """The current offers as a spreadsheet and CSV. `run_id` only fills the Run log sheet."""
+    results = load_current(store)
     sl = shortlist(results, cfg)
     out_dir = Path(cfg.output.dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -307,7 +285,7 @@ def write_report(store: Store, cfg: Config, run_id: int, now: datetime) -> list[
 def print_summary(
     store: Store, run_id: int, cfg: Config, now: datetime, file: TextIO = sys.stdout
 ) -> None:
-    results = load_results(store, run_id)
+    results = load_current(store)
     sl = shortlist(results, cfg)
     calls = store.conn.execute(
         "SELECT count(*) FROM api_calls WHERE run_id=?", (run_id,)

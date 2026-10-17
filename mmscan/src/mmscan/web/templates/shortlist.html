@@ -3,10 +3,10 @@
 {% block body %}
 <div class="page-head">
   <h1>Shortlist</h1>
-  {% if view %}<span class="sub">Run #{{ run_id }}{% if run %} · {{ run.kind }} · {{ run.started_at|when }} UTC{% endif %}</span>{% endif %}
+  {% if view %}<span class="sub">Prices as of {{ updated|when }} UTC</span>{% endif %}
 </div>
 {% if not view %}
-<div class="panel"><p class="empty" style="padding:32px;text-align:center;margin:0">No scored run yet. The scanner has not stored results.</p></div>
+<div class="panel"><p class="empty" style="padding:32px;text-align:center;margin:0">No prices yet. The scanner has not stored results.</p></div>
 {% else %}
 {% set rows = view.rows %}
 {% set deals = rows|selectattr("s.verdict", "equalto", "Deal")|list|length %}
@@ -23,10 +23,6 @@
 </div>
 
 <form class="filters" method="get" action="/shortlist">
-  <label>Run
-    <select name="run">
-      {% for r in runs %}<option value="{{ r.id }}" {{ 'selected' if r.id == run_id }}>#{{ r.id }} {{ r.kind }} {{ r.started_at|when }}</option>{% endfor %}
-    </select></label>
   <label>Route
     <select name="route"><option value="">All</option>
       {% for r in view.routes %}<option {{ 'selected' if r == f.route }}>{{ r }}</option>{% endfor %}

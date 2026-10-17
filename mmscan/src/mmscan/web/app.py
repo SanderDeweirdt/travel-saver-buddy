@@ -136,13 +136,12 @@ def create_app(settings: WebSettings) -> FastAPI:
             "min_pct": min_pct,
             "limit": max(50, min(q["limit"], 20000)),
         }
-        run_id = store.latest_scored_run()
+        updated = queries.last_update(store)
         view = None
-        if run_id is not None:
+        if updated is not None:
             view = queries.deals_view(
                 store,
                 cfg,
-                run_id,
                 datetime.now(UTC),
                 direction=q["direction"],
                 cabin=cabin,
@@ -159,8 +158,7 @@ def create_app(settings: WebSettings) -> FastAPI:
             view["deals"] = view["deals"][: f["limit"]]  # a month of flights is megabytes of HTML
         return {
             "view": view,
-            "run_id": run_id,
-            "run": store.run_info(run_id) if run_id else None,
+            "updated": updated,
             "cabins": cfg.cabins,
             "sorts": SORT_LABELS,
             "f": f,
@@ -191,7 +189,6 @@ def create_app(settings: WebSettings) -> FastAPI:
             request,
             "deals.html",
             **ctx,
-            cfg_days=cfg.relative.history_days,
             cfg_min=cfg.relative.min_samples,
             cfg_good=f"{cfg.savings.good_pct:g}",
             cfg_great=f"{cfg.savings.great_pct:g}",
@@ -217,13 +214,12 @@ def create_app(settings: WebSettings) -> FastAPI:
             chart=chart, nochart=nochart, fresh=fresh, limit=limit,
         )  # fmt: skip
         ctx = deals_context(store, q, min_pct=None, inline=True)
-        return render(request, "overview.html", **ctx, cfg_days=cfg.relative.history_days)
+        return render(request, "overview.html", **ctx)
 
     @app.get("/shortlist", response_class=HTMLResponse, dependencies=[Depends(require_login)])
     def shortlist_page(
         request: Request,
         store: Store = Depends(open_store),
-        run: int | None = None,
         route: str = "",
         cabin: str = "",
         verdict: str = "",
@@ -231,19 +227,15 @@ def create_app(settings: WebSettings) -> FastAPI:
         all: int = 0,
     ):
         now = datetime.now(UTC)
-        run_id = run or store.latest_scored_run()
+        updated = queries.last_update(store)
         view = None
-        if run_id is not None:
-            view = queries.shortlist_view(
-                store, cfg, run_id, now, route, cabin, verdict, sort, bool(all)
-            )
+        if updated is not None:
+            view = queries.shortlist_view(store, cfg, now, route, cabin, verdict, sort, bool(all))
         return render(
             request,
             "shortlist.html",
             view=view,
-            run_id=run_id,
-            run=store.run_info(run_id) if run_id else None,
-            runs=queries.scored_runs(store),
+            updated=updated,
             f={"route": route, "cabin": cabin, "verdict": verdict, "sort": sort, "all": all},
             sorts=list(queries.SORTS),
         )
@@ -319,9 +311,9 @@ def create_app(settings: WebSettings) -> FastAPI:
         return render(request, "quota.html", q=q)
 
     def _latest(store: Store) -> int:
-        run_id = store.latest_scored_run()
-        if run_id is None:
-            raise HTTPException(404, "No scored run yet.")
+        run_id = store.latest_scanned_run()
+        if run_id is None or queries.last_update(store) is None:
+            raise HTTPException(404, "No prices yet.")
         return run_id
 
     @app.get("/reports/latest.xlsx", dependencies=[Depends(require_login)])
@@ -341,13 +333,14 @@ def create_app(settings: WebSettings) -> FastAPI:
 
     @app.get("/reports/latest-shortlist.csv", dependencies=[Depends(require_login)])
     def report_csv(store: Store = Depends(open_store)):
-        from mmscan.report import load_results
+        from mmscan.offers import load_current
 
-        run_id, now = _latest(store), datetime.now(UTC)
+        _latest(store)
+        now = datetime.now(UTC)
         buf = io.StringIO()
         w = csv.writer(buf)
         w.writerow(SHORTLIST_COLUMNS)
-        for s in shortlist(load_results(store, run_id), cfg):
+        for s in shortlist(load_current(store), cfg):
             w.writerow(["" if v is None else v for v in row_values(s, cfg, now)])
         return Response(
             buf.getvalue(),

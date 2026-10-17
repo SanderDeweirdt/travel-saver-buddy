@@ -157,7 +157,7 @@ def test_run_prices_from_summary_then_enriches_only_the_shortlist(
     assert seen.count("/availability") == 2 and seen.count("/search") == 2
     assert [p for p in seen if p.startswith("/trips/")] == ["/trips/good"]
     store = Store(tmp_path / "data" / "mmscan.db")
-    rows = {r["availability_id"]: r for r in store.conn.execute("SELECT * FROM results")}
+    rows = {r["availability_id"]: r for r in store.conn.execute("SELECT * FROM current_offers")}
     assert rows["good"]["verdict"] == "Deal" and rows["good"]["fees_eur"] == 184.0
     assert rows["good"]["flight_numbers"] == "LH778"
     assert rows["good"]["booking_link"] == "https://book.test/x"

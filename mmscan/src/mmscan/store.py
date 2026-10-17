@@ -11,7 +11,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from mmscan.db import PgConnection, is_postgres_url
+from mmscan.db import SCHEMA_LOCK, PgConnection, is_postgres_url
 from mmscan.models import Trip
 
 SCHEMA = """
@@ -289,6 +289,11 @@ class Store:
                 f"VALUES ({int(version)});"
             )
             if callable(script):
+                if self.postgres:  # one process migrates; the others find it done
+                    self.conn.execute(f"SELECT pg_advisory_xact_lock({SCHEMA_LOCK})")
+                    if self.schema_version() >= version:
+                        self.conn.rollback()
+                        continue
                 script(self)  # a data migration; its work commits before the version moves
                 self.conn.executescript(f"{VERSION_TABLE};\n{stamp}")
             else:
@@ -361,9 +366,6 @@ class Store:
 
     def latest_scanned_run(self, kinds: tuple[str, ...] | None = None) -> int | None:
         return self._latest("availabilities", kinds)
-
-    def latest_scored_run(self, kinds: tuple[str, ...] | None = None) -> int | None:
-        return self._latest("results", kinds)
 
     # API calls
 
@@ -454,6 +456,7 @@ class Store:
             self.conn.execute(f"DELETE FROM {table} WHERE run_id IN ({old_runs})", (cutoff,))
         self.conn.execute("DELETE FROM runs WHERE started_at < ?", (cutoff,))
         self.conn.execute("DELETE FROM api_calls WHERE ts < ?", (cutoff,))
+        self.conn.execute("DELETE FROM observations WHERE last_seen < ?", (cutoff,))
         self.conn.execute(
             "DELETE FROM trips WHERE (availability_id, updated_at) IN "
             "(SELECT availability_id, updated_at FROM trip_fetches WHERE fetched_at < ?)",

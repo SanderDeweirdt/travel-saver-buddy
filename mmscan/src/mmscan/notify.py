@@ -10,13 +10,14 @@ from pathlib import Path
 import httpx
 from dotenv import load_dotenv
 
-from mmscan.baseline import route_baselines
+from mmscan.baseline import build_baselines
 from mmscan.config import Config
 from mmscan.deals import Deal, rank_deals
 from mmscan.links import mm_link
 from mmscan.models import local_time
+from mmscan.offers import load_current
 from mmscan.overview import in_regions
-from mmscan.report import DISCLAIMER, _age_hours, eligible, load_results
+from mmscan.report import DISCLAIMER, _age_hours, eligible
 from mmscan.scoring import SKIP, Scored, rank_key
 from mmscan.store import Store
 from mmscan.trips import STALE_HOURS, TripAlert, trip_alerts
@@ -59,18 +60,17 @@ def select_alerts(results: list[Scored], cfg: Config, now: datetime | None = Non
     return sorted(out, key=rank_key)
 
 
-def select_new_deals(
-    results: list[Scored], store: Store, cfg: Config, run_id: int, now: datetime
-) -> list[Deal]:
+def select_new_deals(results: list[Scored], cfg: Config, now: datetime) -> list[Deal]:
     """Flights first seen in this run that are `new_deals.min_pct` or more below the route's usual
-    price, best saving first. Only routes with a usual price qualify; stale data is left out."""
+    price, best saving first. Only routes with a usual price qualify; stale data is left out.
+    `results` are the current offers; `change` marks what the run created."""
     nd = cfg.notify.new_deals
     if not nd.enabled:
         return []
     fresh = [s for s in in_regions(results, cfg) if s.change == "New"]
     if not fresh:
         return []
-    baselines = route_baselines(store, cfg, run_id, now)
+    baselines = build_baselines(results, cfg)
     deals: list[Deal] = []
     for cabin in nd.cabins:
         deals += rank_deals(fresh, baselines, cfg, now, cabin=cabin, min_pct=nd.min_pct)["deals"]
@@ -206,8 +206,8 @@ def notify_run(
 ) -> tuple[int, dict | None]:
     """Post the run's alerts. Returns (alert count, payload). Sends nothing when there are no
     alerts, or when `url` is None (dry run)."""
-    results = load_results(store, run_id)
-    deals = select_new_deals(results, store, cfg, run_id, now)
+    results = load_current(store)
+    deals = select_new_deals(results, cfg, now)
     seen = {d.s.key for d in deals}  # a flight is posted once, as a deal
     alerts = [s for s in select_alerts(results, cfg, now) if s.key not in seen]
     trips = trip_alerts(store, cfg, run_id, now)

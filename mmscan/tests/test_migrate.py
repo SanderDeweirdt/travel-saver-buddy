@@ -33,6 +33,8 @@ def test_migrate_sqlite_to_postgres_is_idempotent(tmp_path, backend_store, defau
     assert [t for t, _, _ in again] == list(ORDER)
 
     dest = backend_store
-    assert dest.conn.execute("SELECT count(*) FROM results").fetchone()[0] == 2
+    # Two runs saw the same price: one observation, last seen by the second run.
+    assert dest.conn.execute("SELECT count(*) FROM observations").fetchone()[0] == 1
+    assert dest.conn.execute("SELECT count(*) FROM current_offers").fetchone()[0] == 1
     # The identity sequence continues after the copied ids
     assert dest.start_run("watch", "{}", now=NOW) == 3

@@ -60,7 +60,7 @@ def test_cabins_and_routes_are_separate(default_config_dict):
 def test_route_baselines_from_the_store(tmp_path, default_config_dict):
     c = cfg(default_config_dict, n=2)
     store = Store(tmp_path / "b.db")
-    now = datetime.now(UTC)
+    now = datetime(2026, 10, 11, 12, 0, tzinfo=UTC)
     for days, miles in ((2, 70000), (1, 64000), (0, 58000)):
         at = now - timedelta(days=days)
         run = store.start_run("watch", "{}", now=at)
@@ -76,16 +76,6 @@ def test_route_baselines_from_the_store(tmp_path, default_config_dict):
         )
         score_run(store, c, run, at)
         store.finish_run(run, "ok", {}, [], now=at)
-    latest = store.latest_scored_run()
-    b = route_baselines(store, c, latest, now)[("MUC", "SIN", "business", "fixed")]
+    b = route_baselines(store, c)[("MUC", "SIN", "business", "fixed")]
     assert b.ready and b.n == 3  # three flight dates
     store.close()
-
-
-def test_route_baselines_are_cached_per_run(tmp_path, default_config_dict):
-    c = cfg(default_config_dict)
-    store = Store(tmp_path / "c.db")
-    run = store.start_run("watch", "{}")
-    now = datetime.now(UTC)
-    first = route_baselines(store, c, run, now)
-    assert route_baselines(store, c, run, now) is first

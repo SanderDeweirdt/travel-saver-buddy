@@ -190,7 +190,7 @@ def _do_score(store: Store, cfg: Config, run_id: int, config: Path) -> None:
     store.merge_run(run_id, stats={"scored": len(scored)}, warnings=warnings)
     for w in warnings:
         typer.echo(f"warning: {w}", err=True)
-    typer.echo(f"Scored {len(scored)} results in run {run_id}.")
+    typer.echo(f"Scored {len(scored)} current offers after run {run_id}.")
 
 
 def _do_report(store: Store, cfg: Config, run_id: int) -> None:
@@ -284,7 +284,7 @@ def report(
         typer.echo(f"Would write the report for the latest scored run to {cfg.output.dir}.")
         return
     store = _store()
-    run_id = store.latest_scored_run(FULL_RUNS)
+    run_id = store.latest_scanned_run(FULL_RUNS)
     if run_id is None:
         typer.echo("No scored run yet. Run `mmscan score` first.", err=True)
         raise typer.Exit(1)
@@ -305,7 +305,7 @@ def notify(
         typer.echo("No scored run yet. Run `mmscan score` first.", err=True)
         raise typer.Exit(1)
     store = _store()
-    run_id = store.latest_scored_run()
+    run_id = store.latest_scanned_run()
     if run_id is None:
         typer.echo("No scored run yet. Run `mmscan score` first.", err=True)
         raise typer.Exit(1)
@@ -407,9 +407,9 @@ def watch(
         _do_notify(store, cfg, run_id)
     else:
         from mmscan.notify import select_alerts
-        from mmscan.report import load_results
+        from mmscan.offers import load_current
 
-        n = len(select_alerts(load_results(store, run_id), cfg))
+        n = len(select_alerts(load_current(store), cfg))
         typer.echo(f"{n} new or cheaper results (Slack is off: notify.slack is false).")
     if status != "ok":
         raise typer.Exit(1)

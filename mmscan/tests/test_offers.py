@@ -156,3 +156,11 @@ def test_backfill_collapses_result_history_into_price_states(tmp_path):
     assert rows[1]["last_seen"] == (NOW + timedelta(hours=3)).isoformat()
     assert store.conn.execute("SELECT count(*) FROM observations").fetchone()[0] == 3
     assert rows[0]["fees_minor"] is None and rows[0]["fees_eur"] == 50.0
+
+
+def test_purge_drops_observations_not_seen_for_180_days(tmp_path, cfg):
+    store = Store(tmp_path / "db.sqlite")
+    _scan(store, cfg, NOW - timedelta(days=200), [("old", "2026-12-10", 35000, 12900)])
+    _scan(store, cfg, NOW, [("new", "2026-12-11", 35000, 12900)])
+    store.purge_older_than(180, now=NOW)
+    assert [r["date"] for r in _obs(store)] == ["2026-12-11"]

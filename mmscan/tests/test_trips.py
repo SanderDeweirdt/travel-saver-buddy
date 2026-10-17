@@ -5,13 +5,13 @@ from pydantic import ValidationError
 
 from mmscan.config import ConfigError, load_config
 from mmscan.notify import build_message, notify_run
+from mmscan.offers import legs_as_of
 from mmscan.scan import trip_requests, watchlist_requests
 from mmscan.scoring import score_run
 from mmscan.store import Store
 from mmscan.trips import (
     build_trip,
     calendar_cells,
-    latest_legs,
     trip_alerts,
     trip_trend,
     trip_views,
@@ -53,6 +53,10 @@ def add_run(store, cfg, legs, at=None, kind="watch"):
     score_run(store, cfg, run, at)
     store.finish_run(run, "ok", {}, [], now=at)
     return run
+
+
+def latest_legs(store, cfg, now):
+    return legs_as_of(store, cfg, now, cfg.trip_freshness_hours)
 
 
 LEGS = [
@@ -248,7 +252,7 @@ def test_calendar_has_cheapest_price_per_departure_day(default_config_dict, stor
     assert by["2027-06-11"]["total"] is None and by["2027-06-11"]["level"] is None
 
 
-def test_trend_is_one_point_per_day_oldest_first(default_config_dict, store):
+def test_trend_is_the_price_at_the_end_of_each_day_oldest_first(default_config_dict, store):
     cfg = cfg_with(default_config_dict)
     for days_ago, factor in ((3, 1.0), (2, 0.9), (1, 0.8)):
         at = NOW - timedelta(days=days_ago)
@@ -256,5 +260,7 @@ def test_trend_is_one_point_per_day_oldest_first(default_config_dict, store):
         add_run(store, cfg, legs, at=at)
         add_run(store, cfg, legs, at=at + timedelta(hours=1))  # a second run the same day
     points = trip_trend(store, cfg, cfg.trips[0], NOW)
-    assert len(points) == 3
+    days = [p["day"] for p in points]
+    assert days == sorted(set(days)) and len(days) >= 3  # one point per day, today included
     assert [p["total"] for p in points] == sorted((p["total"] for p in points), reverse=True)
+    assert points[0]["total"] > points[-1]["total"]  # prices fell over the three days

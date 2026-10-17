@@ -57,7 +57,10 @@ def _observation(first, last) -> tuple:
 def backfill_observations(store: Store) -> int:
     """Fill `observations` from `results`. Does nothing if observations already has rows. Returns
     the number of observations written."""
+    if not store.postgres:
+        store.conn.execute("BEGIN IMMEDIATE")  # take the write lock before looking, not after
     if store.conn.execute("SELECT 1 FROM observations LIMIT 1").fetchone():
+        store.conn.rollback()
         return 0
     rows = store.conn.execute(
         "SELECT r.run_id, u.started_at, r.availability_id, r.origin, r.destination, "

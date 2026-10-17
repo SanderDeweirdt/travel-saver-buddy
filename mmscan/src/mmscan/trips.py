@@ -7,7 +7,8 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 
 from mmscan.config import Config, TripProfile
-from mmscan.report import _age_hours, scored_from_row
+from mmscan.offers import legs_as_of, legs_history
+from mmscan.report import _age_hours
 from mmscan.scoring import Scored
 from mmscan.store import Store
 
@@ -77,31 +78,6 @@ class TripView:
     @property
     def best(self) -> TripPair | None:
         return self.pairs[0] if self.pairs else None
-
-
-def latest_legs(
-    store: Store,
-    cfg: Config,
-    now: datetime,
-    max_run_id: int | None = None,
-) -> list[Scored]:
-    """Newest observation of every priced, live result seen within trip_freshness_hours of
-    `now`. `max_run_id` rebuilds the picture as it was before a given run."""
-    cutoff = (now - timedelta(hours=cfg.trip_freshness_hours)).isoformat()
-    sql = (
-        "SELECT r.* FROM results r JOIN runs u ON u.id = r.run_id "
-        "WHERE u.started_at >= ? AND r.total_eur IS NOT NULL AND r.expired = 0 "
-        "AND r.fee_estimated = 0"
-    )
-    args: list = [cutoff]
-    if max_run_id is not None:
-        sql += " AND r.run_id <= ?"
-        args.append(max_run_id)
-    latest: dict[tuple, Scored] = {}
-    for r in store.conn.execute(sql + " ORDER BY r.run_id", args).fetchall():
-        s = scored_from_row(r)
-        latest[s.key] = s
-    return list(latest.values())
 
 
 def _in(window, d: str | None) -> bool:
@@ -208,26 +184,25 @@ def calendar_cells(view: TripView) -> dict:
 
 
 def trip_trend(store: Store, cfg: Config, trip: TripProfile, now: datetime, days: int = 30):
-    """Best whole-party price of a trip as it stood at the end of each day, from the stored runs.
-    One point per day (the day's last run), oldest first; days with no option are left out."""
-    cutoff = (now - timedelta(days=days)).isoformat()
-    rows = store.conn.execute(
-        "SELECT id, started_at FROM runs WHERE started_at >= ? ORDER BY id", (cutoff,)
-    ).fetchall()
-    last_of_day: dict[str, tuple[int, str]] = {}
-    for r in rows:
-        last_of_day[r["started_at"][:10]] = (r["id"], r["started_at"])
+    """Best whole-party price of a trip as it stood at the end of each day, from the stored
+    observations. One point per day, oldest first; days with no option are left out."""
+    day = (now - timedelta(days=days)).date()
+    ends = []
+    while day <= now.date():
+        ends.append(min(datetime.combine(day, datetime.max.time(), tzinfo=now.tzinfo), now))
+        day += timedelta(days=1)
     out = []
-    for day, (run_id, started) in sorted(last_of_day.items()):
-        legs = latest_legs(store, cfg, datetime.fromisoformat(started), max_run_id=run_id)
+    for end, legs in zip(
+        ends, legs_history(store, cfg, ends, cfg.trip_freshness_hours), strict=True
+    ):
         best = build_trip(legs, trip, cfg).best
         if best:
-            out.append({"day": day, "total": best.party_total})
+            out.append({"day": end.date().isoformat(), "total": best.party_total})
     return out
 
 
 def trip_views(store: Store, cfg: Config, now: datetime) -> list[TripView]:
-    legs = latest_legs(store, cfg, now)
+    legs = legs_as_of(store, cfg, now, cfg.trip_freshness_hours)
     return [build_trip(legs, t, cfg) for t in cfg.trips]
 
 
@@ -266,10 +241,10 @@ def trip_alerts(store: Store, cfg: Config, run_id: int, now: datetime) -> list[T
     if run is None:
         return []
     started = datetime.fromisoformat(run["started_at"])
-    before = latest_legs(store, cfg, started, max_run_id=run_id - 1)
+    before = legs_as_of(store, cfg, started, cfg.trip_freshness_hours, before_run=run_id)
     if not before:
         return []
-    now_legs = latest_legs(store, cfg, now, max_run_id=run_id)
+    now_legs = legs_as_of(store, cfg, now, cfg.trip_freshness_hours)
     out = []
     for trip in cfg.trips:
         prev = {p.key: p.party_total for p in build_trip(before, trip, cfg).pairs}

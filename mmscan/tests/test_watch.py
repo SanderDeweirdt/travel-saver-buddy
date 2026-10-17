@@ -69,7 +69,8 @@ def _scored_run(store, cfg, kind, ids_taxes):
             avail_id, "2026-10-10T08:00:00Z", [trip(f"t{avail_id}{run}", taxes=taxes)], None, {}
         )
     rows, _ = score_run(store, cfg, run, NOW)
-    return run, {s.availability_id: s.change for s in rows}
+    # The flights this run saw; the others stay on offer at their last price, unchanged.
+    return run, {s.availability_id: s.change for s in rows if s.availability_id in ids_taxes}
 
 
 def test_change_uses_last_seen_across_run_kinds(tmp_path, default_config_dict):

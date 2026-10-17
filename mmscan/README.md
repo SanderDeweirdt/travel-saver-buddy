@@ -50,16 +50,19 @@ Every command takes `--config PATH` (default `config.yaml`), `--dry-run`
 | `mmscan verify-add` | Records one hand check of a cached price against the live one (carrier, cached miles, live miles); feeds the dashboard's trust table | 0 |
 | `mmscan quota` | Calls left today (last `X-RateLimit-Remaining`) and calls made by mmscan today | 0 |
 
-`enrich` and `score` work on the latest `scan` or `run`, and `report` on
-the latest scored one; `watch` runs are left out because they hold only the
-watchlist. Get Trips results are cached per availability `ID` and
+`enrich` and `score` work on the latest `scan` or `run`; `watch` runs are left
+out of `enrich` because they hold only the watchlist. Every scoring run folds
+what it saw into the stored price history and rebuilds the **current offers**:
+the latest price we fetched for each route, date and cabin, whichever run saw
+it last. `report`, the dashboard, trips and Slack all read those, so they
+always agree. Get Trips results are cached per availability `ID` and
 `UpdatedAt`, so a rerun does not pay for unchanged availabilities. If the
 daily cap (`api.daily_call_cap`, default 300) is reached, the run stops,
 keeps what it stored, is marked `partial`, and exits non-zero.
 
 Reports go to `reports/mmscan_YYYY-MM-DD_HHMM.xlsx` (sheets Shortlist, All
 results, Route stats, Run log) and `..._shortlist.csv`. The database is
-`data/mmscan.db`; rows older than 180 days are deleted at the start of each
+`data/mmscan.db`; runs, calls and prices not seen for 180 days are deleted at the start of each
 scan.
 
 ## Tuning `config.yaml`
@@ -74,7 +77,7 @@ scan.
 | `watchlist` | Airports searched with trips included, so their fees are free (11 European origins, 10 Southeast Asian destinations by default). `both_directions` adds the return direction. More airports do not add calls: each direction is one search. |
 | `subregions` | Airport lists that refine a continent, used by `benchmarks`. |
 | `benchmarks` | Fallback ceilings per cabin and place pair, used when a baseline is thin. `chart_rate_miles` sets the chart-rate flag at 95%. |
-| `relative` | `percentile_good` (deal threshold), `min_samples` (below this a baseline is unknown), `history_days` (stored runs that count), `min_discount_pct` (a route or destination only counts as good when the total is also this % below its median; 0 = plain percentile cut). Lufthansa-group fares barely move by date, so a high value leaves few Deals. |
+| `relative` | `percentile_good` (deal threshold), `min_samples` (below this a baseline is unknown), `history_days` (a flight not seen for this long stops counting as on offer), `min_discount_pct` (a route or destination only counts as good when the total is also this % below its median; 0 = plain percentile cut). Lufthansa-group fares barely move by date, so a high value leaves few Deals. |
 | `deals` | `min_saving_pct` (30): Best deals lists only flights at least this % below the usual price. `default_cabin` (`economy`): the cabin the Best deals and All routes pages open on; `""` means all cabins. `by_ceiling: true` makes a result within its benchmark's `good_miles_max` and `fees_max_eur` a Deal even when the relative baselines say no. The right way to find deals on routes whose fare never moves. Check the ceilings against real fees: the PRD's 200 EUR economy limit is below almost every real fee. |
 | `drops` | `min_pct`: Change shows Cheaper when a total fell this much since it was last seen. |
 | `shortlist` | `scope: focus` limits the Shortlist, the CSV and Slack to results matching a benchmark or (`focus_watchlist`) a watchlist pair; `all` keeps everything scored Deal or Worth a look. "All results" always has every result. |
@@ -96,7 +99,7 @@ with a warning naming the line.
 
 | Page | What it shows |
 | --- | --- |
-| **Best deals** (`/`) | One row per flight, on every route between the configured regions, ranked by how far below the route's usual price it is: miles at `mile_cost_eur_cents` plus fees, against the median of the last `relative.history_days` days for that origin, destination and cabin (fixed-chart and dynamic carriers kept apart). Only flights at least `deals.min_saving_pct` (30%) below usual are listed (the "Min saving %" box changes it). Verdicts: Great deal at `savings.great_pct` (30%) below usual, Good deal at `savings.good_pct` (10%), Marginal, Above usual. Opens on economy for one traveller. Filters: cabin, direction, route, travellers, chart price only, **hide chart deals** (leaves the dynamic-carrier prices), hide stale (over 48 h). Routes with fewer than `relative.min_samples` observations are listed under "Building history" instead. Shows the first 300 flights with a "Show more" link. |
+| **Best deals** (`/`) | One row per flight, on every route between the configured regions, ranked by how far below the route's usual price it is: miles at `mile_cost_eur_cents` plus fees, against the median price of the dates currently on offer for that origin, destination and cabin (fixed-chart and dynamic carriers kept apart). Only flights at least `deals.min_saving_pct` (30%) below usual are listed (the "Min saving %" box changes it). Verdicts: Great deal at `savings.great_pct` (30%) below usual, Good deal at `savings.good_pct` (10%), Marginal, Above usual. Opens on economy for one traveller. Filters: cabin, direction, route, travellers, chart price only, **hide chart deals** (leaves the dynamic-carrier prices), hide stale (over 48 h). Routes with fewer than `relative.min_samples` flights on offer are listed under "Building history" instead. Shows the first 300 flights with a "Show more" link. |
 | **All routes** (`/overview`) | The same rows with no saving cut: every flight on every route, one row per flight, whatever its saving. Routes without a usual price yet sit in the same table, marked "Building history". Same filters and the same 300-row limit. |
 | **My trips** (`/trips`) | Per trip: best whole-party price, budget bar, 30-day trend of the best price, a calendar of the cheapest price per departure day, and the ranked round trips. |
 | **Shortlist** (`/shortlist`) | The v1 view: Deal and Worth a look by verdict. |
@@ -197,11 +200,24 @@ so polling more often than hourly finds little new. Two schedules cover it:
 That is roughly 48 + 160 calls a day, inside the 300 `api.daily_call_cap`
 and the 1,000-call Pro allowance.
 
-New and Cheaper compare each route, date and cabin with the last time any
-earlier run saw it, not with one previous run. So hourly watch runs and the
-daily run do not mark each other's results as New, and each deal is posted
-once: New when first seen, Cheaper when its total drops 5% or more since it
-was last seen.
+New and Cheaper compare each route, date and cabin with the price it had
+before the run that changed it, not with one previous run. So hourly watch
+runs and the daily run do not mark each other's results as New, and each deal
+is posted once: New when first seen, Cheaper when its total drops 5% or more
+from its previous price.
+
+## Price history
+
+`observations` keeps one row per distinct price of a flight (route, date, cabin):
+miles, fees as the API gave them, seats and when it was `first_seen` and
+`last_seen`. A rescan at the same price only moves `last_seen`, so the table
+grows with price changes, not with scans. Totals are never stored: they are
+worked out from miles and fees with the current `mile_cost_eur_cents` and
+`usd_to_eur`. `current_offers` is the scored copy of the newest price of every
+flight and is rebuilt after each scoring run. The schema is versioned
+(`schema_version`); a start applies any missing migrations, and the first one
+that adds `observations` fills it from the old per-run `results`. The `results`
+table is no longer written or read; it can be dropped once you are happy.
 
 ## Findings
 

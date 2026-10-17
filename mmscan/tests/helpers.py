@@ -127,3 +127,23 @@ def scored(
 def config(default_config_dict: dict, **overrides) -> Config:
     data = {**default_config_dict, **overrides}
     return Config.model_validate(data)
+
+
+def seed_current(store, rows: list[Scored], kind: str = "watch", now=None) -> int:
+    """Store scored rows as the current offers, under a new run that counts as scanned. For tests
+    of what pages and alerts do with already scored offers."""
+    from mmscan.offers import flight_key
+    from mmscan.scoring import CURRENT_COLUMNS, column_values
+
+    run = store.start_run(kind, "{}", now=now)
+    store.conn.execute(
+        "INSERT INTO availabilities(run_id, id, origin_kind, raw_json) VALUES (?,?,?,?)",
+        (run, "seed", "watchlist", "{}"),
+    )
+    marks = ",".join("?" * (len(CURRENT_COLUMNS) + 1))
+    store.conn.executemany(
+        f"INSERT INTO current_offers(key, {', '.join(CURRENT_COLUMNS)}) VALUES ({marks})",
+        [(flight_key(s), *column_values(s, CURRENT_COLUMNS)) for s in rows],
+    )
+    store.conn.commit()
+    return run

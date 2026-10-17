@@ -158,7 +158,7 @@ def test_empty_database_renders(tmp_path):
     settings = WebSettings(PASSWORD, "s" * 32, tmp_path / "e.db", ROOT / "config.yaml")
     c = TestClient(create_app(settings), base_url="https://testserver")
     login(c)
-    assert "No scored run yet" in c.get("/").text
+    assert "No prices yet" in c.get("/").text
     assert c.get("/reports/latest.xlsx").status_code == 404
 
 
@@ -199,12 +199,14 @@ def test_trips_page_lists_pairs(tmp_path, default_config_dict, write_config):
 
 
 def test_shortlist_labels_dynamic_prices(tmp_path, default_config_dict):
-    cfg = config(default_config_dict, relative={"percentile_good": 20, "min_samples": 2})
+    cfg = config(default_config_dict, relative={"percentile_good": 20, "min_samples": 3})
     path = tmp_path / "mix.db"
     store = Store(path)
     run = store.start_run("watch", "{}", now=NOW)
-    for aid, airlines in (("fx", "SQ"), ("dyn", "LH")):
-        store.save_availability(run, avail(aid, airlines=airlines, business=60000), "watchlist")
+    for aid, airlines, day in (("fx", "SQ", "2026-12-10"), ("dyn", "LH", "2026-12-11")):
+        store.save_availability(
+            run, avail(aid, date=day, airlines=airlines, business=60000), "watchlist"
+        )
         store.save_trips(
             aid,
             "2026-10-10T08:00:00Z",
@@ -228,7 +230,7 @@ def test_deals_view_reads_the_store(db, default_config_dict):
 
     cfg = config(default_config_dict, relative={"percentile_good": 20, "min_samples": 2})
     store = Store(db)
-    view = queries.deals_view(store, cfg, store.latest_scored_run(), NOW, pax=2, hide_stale=False)
+    view = queries.deals_view(store, cfg, NOW, pax=2, hide_stale=False)
     store.close()
     # one flight date seen three times is one observation: too little history for a baseline
     assert view["deals"] == [] and len(view["building"]) == 1
@@ -299,7 +301,7 @@ def test_deals_page_empty_database(tmp_path):
     settings = WebSettings(PASSWORD, "s" * 32, tmp_path / "e.db", ROOT / "config.yaml")
     c = TestClient(create_app(settings), base_url="https://testserver")
     login(c)
-    assert "No scored run yet" in c.get("/").text
+    assert "No prices yet" in c.get("/").text
 
 
 def test_route_page_shows_usual_price_and_saving(deals_client):

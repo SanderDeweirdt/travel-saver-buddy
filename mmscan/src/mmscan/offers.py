@@ -7,6 +7,8 @@ fresh flight together and writes `current_offers`, the one table every page read
 
 from __future__ import annotations
 
+import statistics
+from bisect import bisect_right
 from datetime import datetime, timedelta
 
 from mmscan.config import Config
@@ -33,6 +35,7 @@ _CURRENT_BOOLS = (
     "chart_rate",
 )
 
+ALIVE_HOURS = 72  # a flight not seen for this long no longer counts as on offer in the history
 LATEST = "SELECT * FROM observations WHERE id IN (SELECT max(id) FROM observations GROUP BY key)"
 # The state before the latest one, for keys that have two or more.
 PREVIOUS = (
@@ -262,3 +265,102 @@ def load_current(store: Store) -> list[Scored]:
     """The scored current offers, best first. Pages read this; it takes no run id."""
     rows = store.conn.execute("SELECT * FROM current_offers").fetchall()
     return sorted((_from_current_row(r) for r in rows), key=rank_key)
+
+
+def _priced_live(s: Scored) -> bool:
+    return s.total_eur is not None and not s.expired and not s.fee_estimated
+
+
+def legs_as_of(
+    store: Store,
+    cfg: Config,
+    at: datetime,
+    freshness_hours: int,
+    before_run: int | None = None,
+) -> list[Scored]:
+    """Every priced, live flight as it stood at `at`: its newest state first seen by then, kept when
+    it was seen within `freshness_hours` before. With `before_run`, states that run or a later one
+    created are ignored, which gives the picture as it was before that run. Unscored; for trips,
+    which only need prices."""
+    return legs_history(store, cfg, [at], freshness_hours, before_run)[0]
+
+
+def legs_history(
+    store: Store,
+    cfg: Config,
+    moments: list[datetime],
+    freshness_hours: int,
+    before_run: int | None = None,
+) -> list[list[Scored]]:
+    """`legs_as_of` for several moments with one read of the table."""
+    if not moments:
+        return []
+    window = timedelta(hours=freshness_hours)
+    earliest = (min(moments) - window).isoformat()
+    by_key: dict[str, list] = {}
+    sql, args = "SELECT * FROM observations WHERE last_seen >= ?", [earliest]
+    if before_run is not None:
+        sql, args = sql + " AND run_id < ?", [*args, before_run]
+    for r in store.conn.execute(sql + " ORDER BY key, id", args):
+        by_key.setdefault(r["key"], []).append(r)
+    out: list[list[Scored]] = []
+    for at in moments:
+        stamp, oldest = at.isoformat(), (at - window).isoformat()
+        legs = []
+        for rows in by_key.values():
+            i = bisect_right([r["first_seen"] for r in rows], stamp) - 1
+            if i < 0 or rows[i]["last_seen"] < oldest:
+                continue
+            s = _to_scored(rows[i], cfg)
+            if _priced_live(s):
+                legs.append(s)
+        out.append(legs)
+    return out
+
+
+def route_points(
+    store: Store,
+    cfg: Config,
+    origin: str,
+    destination: str,
+    cabin: str,
+    now: datetime,
+    days: int = 180,
+) -> list[dict]:
+    """The route's price over time, one point per day: the cheapest and median total across the
+    dates that were on offer at the end of that day (the latest state of each by then)."""
+    cutoff = (now - timedelta(days=days)).isoformat()
+    by_key: dict[str, list] = {}
+    for r in store.conn.execute(
+        "SELECT * FROM observations WHERE origin=? AND destination=? AND cabin=? "
+        "AND last_seen >= ? ORDER BY key, id",
+        (origin, destination, cabin, cutoff),
+    ):
+        by_key.setdefault(r["key"], []).append((r, _total(r, cfg)))
+    if not by_key:
+        return []
+    day = datetime.fromisoformat(min(rows[0][0]["first_seen"] for rows in by_key.values())).date()
+    points = []
+    while day <= now.date():
+        end = min(datetime.combine(day, datetime.max.time(), tzinfo=now.tzinfo), now).isoformat()
+        totals = []
+        for rows in by_key.values():
+            gone_after = (
+                datetime.fromisoformat(rows[-1][0]["last_seen"]) + timedelta(hours=ALIVE_HOURS)
+            ).isoformat()
+            if not (rows[0][0]["first_seen"] <= end <= gone_after):
+                continue  # not seen yet, or not seen for a while by then
+            r, total = rows[bisect_right([x["first_seen"] for x, _ in rows], end) - 1]
+            if total is not None and not r["expired"]:
+                totals.append(total)
+        if totals:
+            points.append(
+                {
+                    "ts": end,
+                    "low": min(totals),
+                    "median": statistics.median(totals),
+                    "n": len(totals),
+                }
+            )
+        day += timedelta(days=1)
+    return points

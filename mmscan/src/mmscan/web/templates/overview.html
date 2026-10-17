@@ -3,13 +3,13 @@
 {% block body %}
 <div class="page-head">
   <h1>All routes</h1>
-  {% if view %}<span class="sub">Run #{{ run_id }}{% if run %} · {{ run.kind }} · {{ run.started_at|when }} UTC{% endif %} · {{ view.deals|length }} flight{{ "s" if view.deals|length != 1 }}</span>{% endif %}
+  {% if view %}<span class="sub">Prices as of {{ updated|when }} UTC · {{ view.deals|length }} flight{{ "s" if view.deals|length != 1 }}</span>{% endif %}
 </div>
 {% if not view %}
-<div class="panel"><p class="empty" style="padding:32px;text-align:center;margin:0">No scored run yet. The scanner has not stored results.</p></div>
+<div class="panel"><p class="empty" style="padding:32px;text-align:center;margin:0">No prices yet. The scanner has not stored results.</p></div>
 {% else %}
 {% set pax = view.pax %}
-<div class="banner" role="note">{{ disclaimer }} Every flight in the latest scan between the configured regions, one row per flight, whatever the saving. Prices are for {{ pax }} traveller{{ "s" if pax != 1 }}, one way, against the route's usual price (median of the last {{ cfg_days }} days). Routes without enough history show "Building history".</div>
+<div class="banner" role="note">{{ disclaimer }} Every flight currently on offer between the configured regions, one row per flight at the latest price we fetched, whatever the saving. Prices are for {{ pax }} traveller{{ "s" if pax != 1 }}, one way, against the route's usual price (median across the dates on offer). Routes without enough history show "Building history".</div>
 
 <form class="filters" method="get" action="/overview">
   <label>Cabin

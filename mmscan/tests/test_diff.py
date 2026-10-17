@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from typer.testing import CliRunner
 
 from mmscan.cli import app
-from mmscan.diff import change, previous_run_id
+from mmscan.diff import change
 from mmscan.scoring import score_run
 from mmscan.store import Store
 from tests.helpers import avail, config, trip
@@ -42,7 +42,6 @@ def test_two_scored_runs_fill_change(tmp_path, default_config_dict):
 
     r2 = store.start_run("scan", "{}", now=NOW)
     _scan(store, r2, {"a": 40000, "b": 1000, "c": 40000})
-    assert previous_run_id(store, r2) == r1
     second, _ = score_run(store, cfg, r2, NOW)
     by_id = {s.availability_id: s.change for s in second}
     # b: 696 + 400 = 1096 before, 696 + 10 = 706 now.

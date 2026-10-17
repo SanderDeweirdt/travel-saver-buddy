@@ -10,7 +10,7 @@ from mmscan.notify import NotifyError, build_message, notify_run, select_alerts,
 from mmscan.report import DISCLAIMER
 from mmscan.scoring import DEAL, SKIP, WORTH
 from mmscan.store import Store
-from tests.helpers import config, scored
+from tests.helpers import config, scored, seed_current
 
 NOW = datetime(2026, 10, 11, 12, 0, tzinfo=UTC)
 URL = "https://hooks.slack.test/services/T000/B000/SECRET"
@@ -80,17 +80,8 @@ def test_send_slack_non_200_raises():
 
 
 def _store_with_results(tmp_path, rows):
-    from mmscan.scoring import SCORED_COLUMNS, column_values
-
     store = Store(tmp_path / "db.sqlite")
-    run = store.start_run("scan", "{}", now=NOW)
-    ph = ",".join("?" * (len(SCORED_COLUMNS) + 1))
-    store.conn.executemany(
-        f"INSERT INTO results(run_id, {', '.join(SCORED_COLUMNS)}) VALUES ({ph})",
-        [(run, *column_values(s, SCORED_COLUMNS)) for s in rows],
-    )
-    store.conn.commit()
-    return store, run
+    return store, seed_current(store, rows, now=NOW)
 
 
 def test_nothing_to_post_sends_nothing(tmp_path, default_config_dict):
@@ -108,7 +99,9 @@ def test_nothing_to_post_sends_nothing(tmp_path, default_config_dict):
 
 
 def test_notify_run_posts_once(tmp_path, default_config_dict):
-    store, run = _store_with_results(tmp_path, [row("New", id="a"), row("Cheaper", id="b")])
+    store, run = _store_with_results(
+        tmp_path, [row("New", id="a"), row("Cheaper", id="b", date="2026-12-11")]
+    )
     sent = []
 
     def handler(req):
@@ -165,15 +158,11 @@ def test_dynamic_prices_alert_only_when_switched_on(default_config_dict):
 
 
 def _history_then_current(tmp_path, current):
-    """Fifteen economy MUC-SIN flights per carrier group at 1000 EUR earlier, then `current`."""
+    """Fifteen economy MUC-SIN flights per carrier group at 1000 EUR already on offer, then
+    `current` (what the run just changed)."""
     from datetime import timedelta
 
-    from mmscan.scoring import SCORED_COLUMNS, column_values
-
     store = Store(tmp_path / "deals.sqlite")
-    ph = ",".join("?" * (len(SCORED_COLUMNS) + 1))
-    sql = f"INSERT INTO results(run_id, {', '.join(SCORED_COLUMNS)}) VALUES ({ph})"
-    old = store.start_run("scan", "{}", now=NOW - timedelta(days=1))
     past = []
     for month, carriers in (("01", "SQ"), ("03", "LH")):  # separate usual prices; dates differ
         for i in range(15):
@@ -186,11 +175,7 @@ def _history_then_current(tmp_path, current):
             )
             s.updated_at = (NOW - timedelta(days=1)).isoformat()
             past.append(s)
-    store.conn.executemany(sql, [(old, *column_values(s, SCORED_COLUMNS)) for s in past])
-    run = store.start_run("watch", "{}", now=NOW)
-    store.conn.executemany(sql, [(run, *column_values(s, SCORED_COLUMNS)) for s in current])
-    store.conn.commit()
-    return store, run
+    return store, seed_current(store, past + current, now=NOW)
 
 
 def _new(total, id, **kw):
@@ -206,7 +191,7 @@ def test_new_deal_alert_needs_new_economy_flight_10_percent_below_usual(
     tmp_path, default_config_dict
 ):
     from mmscan.notify import select_new_deals
-    from mmscan.report import load_results
+    from mmscan.offers import load_current
 
     current = [
         _new(800.0, "big"),  # about 20% below usual: alert
@@ -218,11 +203,11 @@ def test_new_deal_alert_needs_new_economy_flight_10_percent_below_usual(
     current[3].change = ""  # seen before
     store, run = _history_then_current(tmp_path, current)
     cfg = config(default_config_dict, notify={"new_deals": {"enabled": True}})
-    deals = select_new_deals(load_results(store, run), store, cfg, run, NOW)
+    deals = select_new_deals(load_current(store), cfg, NOW)
     assert sorted(d.s.availability_id for d in deals) == ["big", "dyn"]
     assert next(d for d in deals if d.s.availability_id == "dyn").verified is False
     off = config(default_config_dict, notify={"new_deals": {"enabled": True, "unverified": False}})
-    only_chart = select_new_deals(load_results(store, run), store, off, run, NOW)
+    only_chart = select_new_deals(load_current(store), off, NOW)
     assert [d.s.availability_id for d in only_chart] == ["big"]
 
 

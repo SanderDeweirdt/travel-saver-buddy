@@ -3,13 +3,13 @@
 {% block body %}
 <div class="page-head">
   <h1>Best deals right now</h1>
-  {% if view %}<span class="sub">Run #{{ run_id }}{% if run %} · {{ run.kind }} · {{ run.started_at|when }} UTC{% endif %}</span>{% endif %}
+  {% if view %}<span class="sub">Prices as of {{ updated|when }} UTC</span>{% endif %}
 </div>
 {% if not view %}
-<div class="panel"><p class="empty" style="padding:32px;text-align:center;margin:0">No scored run yet. The scanner has not stored results.</p></div>
+<div class="panel"><p class="empty" style="padding:32px;text-align:center;margin:0">No prices yet. The scanner has not stored results.</p></div>
 {% else %}
 {% set pax = view.pax %}
-<div class="banner" role="note">{{ disclaimer }} Prices are for {{ pax }} traveller{{ "s" if pax != 1 }}, one way: miles at your mile value plus fees, against what that route usually costs (the median of the last {{ cfg_days }} days of scans). Only flights at least {{ '%g'|format(f.min_pct) }}% below usual are listed; every route is covered. <a href="/overview">All routes</a> shows every flight.</div>
+<div class="banner" role="note">{{ disclaimer }} Prices are for {{ pax }} traveller{{ "s" if pax != 1 }}, one way: miles at your mile value plus fees, against what that route usually costs (the median across the dates currently on offer). Only flights at least {{ '%g'|format(f.min_pct) }}% below usual are listed; every route is covered. <a href="/overview">All routes</a> shows every flight.</div>
 
 {% set best = view.best %}
 {% if best %}
@@ -21,7 +21,7 @@
   </div>
   <div class="stats">
     <div><b>{{ view.good_count }}</b><span class="muted">{{ cfg_good }}%+ below usual</span></div>
-    <div><b>{{ view.new_count }}</b><span class="muted">new this run</span></div>
+    <div><b>{{ view.new_count }}</b><span class="muted">new in the last scan</span></div>
   </div>
 </section>
 {% endif %}
@@ -96,6 +96,6 @@
 {% endif %}
 
 <details class="panel" style="margin-top:16px"><summary>How is this calculated?</summary>
-<p class="note" style="padding:0 14px">With miles = miles × {{ mile_ct }} ct (what a mile costs you) + fees (taxes and surcharges). The usual price is the median of that same total for the route and cabin over the last {{ cfg_days }} days, kept separately for fixed-chart and dynamic carriers. It is what the route normally costs with miles, not a cash ticket price. A route needs {{ cfg_min }} observations before it gets a usual price. Great deal is {{ cfg_great }}% or more below usual, Good deal {{ cfg_good }}%.</p></details>
+<p class="note" style="padding:0 14px">With miles = miles × {{ mile_ct }} ct (what a mile costs you) + fees (taxes and surcharges). The usual price is the median of that same total for the route and cabin across the dates currently on offer, kept separately for fixed-chart and dynamic carriers. It is what the route normally costs with miles, not a cash ticket price. A route needs {{ cfg_min }} flights on offer before it gets a usual price. Great deal is {{ cfg_great }}% or more below usual, Good deal {{ cfg_good }}%.</p></details>
 {% endif %}
 {% endblock %}

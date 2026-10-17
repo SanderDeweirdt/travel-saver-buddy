@@ -6,11 +6,12 @@ import json
 import statistics
 from datetime import datetime, timedelta
 
-from mmscan.baseline import baseline_for, route_baselines, thin_routes
+from mmscan.baseline import baseline_for, build_baselines, thin_routes
 from mmscan.config import Config
 from mmscan.deals import rank_deals, saving_verdict
+from mmscan.offers import load_current, route_points
 from mmscan.overview import directions, in_regions
-from mmscan.report import _age_hours, load_results, shortlist
+from mmscan.report import _age_hours, shortlist
 from mmscan.scoring import rank_key
 from mmscan.store import Store
 
@@ -45,19 +46,15 @@ def recent_runs(store: Store, limit: int = 100) -> list[dict]:
     ]
 
 
-def scored_runs(store: Store, limit: int = 30) -> list[dict]:
-    rows = store.conn.execute(
-        "SELECT r.id, r.kind, r.started_at FROM runs r WHERE r.id IN "
-        "(SELECT DISTINCT run_id FROM results) ORDER BY r.id DESC LIMIT ?",
-        (limit,),
-    ).fetchall()
-    return [dict(zip(("id", "kind", "started_at"), tuple(r), strict=True)) for r in rows]
+def last_update(store: Store) -> str | None:
+    """When a price on the pages was last confirmed by a scan; None before the first one."""
+    row = store.conn.execute("SELECT max(last_seen) FROM current_offers").fetchone()
+    return row[0]
 
 
 def shortlist_view(
     store: Store,
     cfg: Config,
-    run_id: int,
     now: datetime,
     route: str = "",
     cabin: str = "",
@@ -65,7 +62,7 @@ def shortlist_view(
     sort: str = "verdict",
     show_all: bool = False,
 ) -> dict:
-    results = load_results(store, run_id)
+    results = load_current(store)
     rows = results if show_all else shortlist(results, cfg)
     routes = sorted({f"{s.origin}-{s.destination}" for s in rows})
     if route:
@@ -75,7 +72,7 @@ def shortlist_view(
     if verdict:
         rows = [s for s in rows if s.verdict == verdict]
     rows = sorted(rows, key=SORTS.get(sort, rank_key))
-    baselines = route_baselines(store, cfg, run_id, now)
+    baselines = build_baselines(results, cfg)
     out = []
     for s in rows:
         b = baseline_for(baselines, cfg, s)
@@ -97,12 +94,11 @@ def shortlist_view(
     }
 
 
-def deals_view(
-    store: Store, cfg: Config, run_id: int, now: datetime, direction: str = "", **filters
-) -> dict:
-    """Every route in the run, one row per flight; `filters` go to rank_deals."""
-    results = in_regions(load_results(store, run_id), cfg, direction)
-    baselines = route_baselines(store, cfg, run_id, now)
+def deals_view(store: Store, cfg: Config, now: datetime, direction: str = "", **filters) -> dict:
+    """Every route on offer, one row per flight at its latest price; `filters` go to rank_deals."""
+    everything = load_current(store)
+    results = in_regions(everything, cfg, direction)
+    baselines = build_baselines(everything, cfg)
     out = rank_deals(results, baselines, cfg, now, **filters)
     out["total"] = len(results)
     out["thin_routes"] = thin_routes(baselines)
@@ -113,40 +109,14 @@ def deals_view(
 def route_history(
     store: Store, cfg: Config, origin: str, destination: str, cabin: str, now: datetime
 ) -> dict:
-    cutoff = (now - timedelta(days=180)).isoformat()
-    rows = store.conn.execute(
-        "SELECT r.run_id, u.started_at, r.total_eur FROM results r JOIN runs u ON u.id = r.run_id "
-        "WHERE r.origin=? AND r.destination=? AND r.cabin=? AND r.total_eur IS NOT NULL "
-        "AND r.expired = 0 AND u.started_at >= ? ORDER BY r.run_id",
-        (origin, destination, cabin, cutoff),
-    ).fetchall()
-    by_run: dict[int, list] = {}
-    for r in rows:
-        by_run.setdefault(r["run_id"], [r["started_at"], []])[1].append(r["total_eur"])
-    points = [
-        {
-            "run_id": run_id,
-            "ts": ts,
-            "low": min(v),
-            "median": statistics.median(v),
-            "n": len(v),
-        }
-        for run_id, (ts, v) in by_run.items()
+    points = route_points(store, cfg, origin, destination, cabin, now)
+    current = [
+        s
+        for s in load_current(store)
+        if (s.origin, s.destination, s.cabin) == (origin, destination, cabin)
     ]
-    latest = max(by_run) if by_run else None
-    current = (
-        [
-            s
-            for s in load_results(store, latest)
-            if (s.origin, s.destination, s.cabin) == (origin, destination, cabin)
-        ]
-        if latest
-        else []
-    )
-    baselines = route_baselines(store, cfg, latest, now) if latest else {}
-    here = [
-        b for k, b in baselines.items() if k[:3] == (origin, destination, cabin)
-    ]  # one per pricing group
+    baselines = build_baselines(current, cfg)
+    here = list(baselines.values())  # one per pricing group
     usual = max((b for b in here if b.ready), key=lambda b: b.n, default=None)
     rows = []
     for s in sorted(current, key=rank_key):
@@ -166,7 +136,6 @@ def route_history(
     best = max(priced, key=lambda r: r["pct"], default=None)
     return {
         "points": points,
-        "latest_run": latest,
         "rows": rows,
         "usual": usual,
         "samples_seen": max((b.n for b in here), default=0),

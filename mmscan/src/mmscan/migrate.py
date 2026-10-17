@@ -8,7 +8,17 @@ from pathlib import Path
 from mmscan.store import Store
 
 # Parents before children; each table's primary key is its idempotency guard.
-ORDER = ("runs", "api_calls", "availabilities", "trip_fetches", "trips", "results", "price_checks")
+ORDER = (
+    "runs",
+    "api_calls",
+    "availabilities",
+    "trip_fetches",
+    "trips",
+    "results",
+    "price_checks",
+    "observations",
+    "current_offers",
+)
 BATCH = 1000
 
 
@@ -19,7 +29,8 @@ def migrate(source: Path, url: str) -> list[tuple[str, int, int]]:
     dest = Store(url)
     out = []
     try:
-        for table in ORDER:
+        have = {r[0] for r in src.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        for table in (t for t in ORDER if t in have):  # an older source lacks the newer tables
             total = src.execute(f"SELECT count(*) FROM {table}").fetchone()[0]
             cols = [r[1] for r in src.execute(f"PRAGMA table_info({table})")]
             sql = (
@@ -34,8 +45,12 @@ def migrate(source: Path, url: str) -> list[tuple[str, int, int]]:
                         cur = dest.conn.execute(sql, tuple(row))
                         copied += cur.rowcount
             out.append((table, copied, total))
+        if "observations" not in have:  # a source from before observations: build them from results
+            from mmscan.backfill import backfill_observations
+
+            backfill_observations(dest)
         with dest.conn:
-            for table in ("runs", "api_calls", "price_checks"):
+            for table in ("runs", "api_calls", "price_checks", "observations"):
                 dest.conn.execute(
                     f"SELECT setval(pg_get_serial_sequence('{table}', 'id'), "
                     f"GREATEST((SELECT max(id) FROM {table}), 1))"

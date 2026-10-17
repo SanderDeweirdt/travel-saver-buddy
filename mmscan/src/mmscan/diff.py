@@ -1,41 +1,15 @@
-"""New and Cheaper, against the last time each route, date and cabin was seen.
+"""New and Cheaper, against the state a flight was in before the run that changed it.
 
-Comparing per result rather than against one previous run keeps hourly watchlist runs and daily
-full runs from flagging each other's results as New, so each deal is reported once."""
+`offers.rebuild_current` builds the comparison from `observations`: a flight is New when the run
+created its first observation and Cheaper when the run's new state costs less than the one before.
+Hourly watchlist runs and daily full runs therefore never flag each other's flights, so each deal is
+reported once."""
 
 from __future__ import annotations
 
 from typing import Literal
 
-from mmscan.store import Store
-
 DEFAULT_DROP_PCT = 5.0  # config: drops.min_pct
-
-
-def previous_run_id(store: Store, run_id: int) -> int | None:
-    """The most recent earlier run that has scored results (builder call 11)."""
-    row = store.conn.execute(
-        "SELECT max(run_id) FROM results WHERE run_id < ?", (run_id,)
-    ).fetchone()
-    return None if row[0] is None else int(row[0])
-
-
-def previous_totals(store: Store, run_id: int) -> dict[tuple, float | None] | None:
-    """Last known total per (origin, destination, date, cabin) over every earlier scored run.
-    A key seen only without a total maps to None. None overall when no earlier run was scored."""
-    rows = store.conn.execute(
-        "SELECT origin, destination, date, cabin, total_eur FROM results "
-        "WHERE run_id < ? AND expired = 0 ORDER BY run_id",
-        (run_id,),
-    ).fetchall()
-    if not rows:
-        return None
-    last: dict[tuple, float | None] = {}
-    for r in rows:
-        key = (r[0], r[1], r[2], r[3])
-        if r[4] is not None or key not in last:
-            last[key] = r[4]
-    return last
 
 
 def change(

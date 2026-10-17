@@ -70,7 +70,6 @@ def test_latest_runs_filter_by_kind(backend_store):
         s.save_availability(r, avail(f"a{r}", business=60000), "region")
     assert s.latest_scanned_run() == watch
     assert s.latest_scanned_run(("scan", "run")) == full
-    assert s.latest_scored_run() is None
 
 
 def test_purge_removes_old_rows(backend_store):
@@ -105,10 +104,12 @@ def test_score_run_round_trips_with_history(backend_store, default_config_dict):
         rows, _ = score_run(s, cfg, run, NOW - timedelta(days=days))
     (row,) = [r for r in rows if r.cabin == "business"]
     assert row.miles == 60000 and row.seats_ok is True and row.booking_link == "https://x.test"
-    stored = s.conn.execute("SELECT * FROM results WHERE run_id=?", (run,)).fetchall()
+    stored = s.conn.execute("SELECT * FROM current_offers").fetchall()
     assert len(stored) == len(rows)
     assert isinstance(stored[0]["fees_eur"], float) and stored[0]["expired"] in (0, False)
-    assert s.latest_scored_run() == run
+    assert s.latest_scanned_run() == run
+    # One observation per distinct price of the one flight (miles changed on every run).
+    assert s.conn.execute("SELECT count(*) FROM observations").fetchone()[0] == 4
 
 
 def test_read_only_store_cannot_write(backend_store, tmp_path):

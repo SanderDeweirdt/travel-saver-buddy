@@ -7,10 +7,10 @@ import logging
 import statistics
 from bisect import bisect_left, bisect_right
 from dataclasses import dataclass, fields
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 from mmscan.config import Config
-from mmscan.diff import change_for, previous_totals
+from mmscan.diff import change_for
 from mmscan.fares import FareSource, NoFares, value_band
 from mmscan.models import CABIN_PREFIX, Trip, fees_eur, parse_cabin_offers
 from mmscan.store import Store
@@ -298,23 +298,6 @@ def current_rows(store: Store, cfg: Config, run_id: int) -> tuple[list[Scored], 
     return out, warnings
 
 
-def history_rows(store: Store, cfg: Config, run_id: int, now: datetime) -> list[Scored]:
-    cutoff = (now - timedelta(days=cfg.relative.history_days)).isoformat()
-    rows = store.conn.execute(
-        "SELECT r.* FROM results r JOIN runs u ON u.id = r.run_id "
-        "WHERE r.run_id != ? AND u.started_at >= ? AND r.total_eur IS NOT NULL AND r.expired = 0 "
-        "ORDER BY r.run_id",
-        (run_id, cutoff),
-    ).fetchall()
-    out = []
-    for r in rows:
-        values = {c: r[c] for c in SCORED_COLUMNS}
-        for c in ("fee_estimated", "expired"):
-            values[c] = bool(values[c])
-        out.append(Scored(**values))
-    return out
-
-
 def _group(samples: list[Scored], key) -> dict[tuple, list[float]]:
     out: dict[tuple, list[float]] = {}
     for s in samples:
@@ -426,21 +409,12 @@ def score_run(
     now: datetime,
     fares: FareSource | None = None,
 ) -> tuple[list[Scored], list[str]]:
-    """Score every result of the run and write the `results` table. Returns (rows, warnings)."""
+    """Fold the run into `observations`, then score every fresh flight together and rebuild
+    `current_offers`. Returns (the current offers, warnings)."""
     from mmscan.offers import rebuild_current, record_observations
 
     current, warnings = current_rows(store, cfg, run_id)
     record_observations(store, run_id, current, now)
-    rebuild_current(store, cfg, run_id, now, fares)
-    history = history_rows(store, cfg, run_id, now)
-    prev = previous_totals(store, run_id)
-    scored = score_rows(current, history, cfg, fares, prev)
+    scored = rebuild_current(store, cfg, run_id, now, fares)
     warnings += list(getattr(fares, "warnings", []) or [])
-    placeholders = ",".join("?" * (len(SCORED_COLUMNS) + 1))
-    with store.conn:
-        store.conn.execute("DELETE FROM results WHERE run_id=?", (run_id,))
-        store.conn.executemany(
-            f"INSERT INTO results(run_id, {', '.join(SCORED_COLUMNS)}) VALUES ({placeholders})",
-            [(run_id, *column_values(s, SCORED_COLUMNS)) for s in scored],
-        )
     return scored, warnings
