@@ -1,6 +1,6 @@
 # PRD: mmscan v2, the always-on award watcher
 
-Oct 13, 2026 · @Sander · Status: draft for review
+Oct 13, 2026 · @Sander · Status: draft for review; see "Update, Oct 16" at the end for what changed in use
 
 Supersedes the scope and "not now" list of [`PRD.md`](PRD.md) (v1, 11 Oct). v1's API reference, scoring rules and
 report layout still apply unless this document says otherwise. Live API behaviour that differs from v1 is in
@@ -132,3 +132,22 @@ Priority: P0 must have for v2 to be trusted, P1 should have, P2 later.
 2. R2 and R4 behind `notify.slack` and a config check.
 3. R5, R7 and R8 as dashboard changes, one deploy each.
 4. R6 last, because it moves configuration into the database.
+
+## Update, Oct 16
+
+Changes made after the dashboard went live; they override the text above where they differ.
+
+- **Goal 2 and the focus.** The tool is used mainly to find mileage deals that are not on the partner
+  chart, so the dashboard covers every Europe to Asia, Asia to Europe and Asia to Asia route, not only the
+  benchmark routes, and defaults to economy and one traveller.
+- **R2 (Slack).** Alerts are on, with a new rule: post each flight (route, date, cabin) seen for the first
+  time that is at least 10% below its route's usual price (`notify.new_deals`). Dynamic-carrier prices
+  are included and marked unverified, which is a deliberate change from "dynamic carriers only after R1".
+  The older Shortlist-based alerts are off. R1 (the cached-versus-live gap) is still open, and the new
+  alert carries a link to check each price on miles-and-more.com.
+- **New: check link.** Every flight links to a prefilled Miles & More award search so a price can be
+  verified by hand (`miles_and_more.link_template`).
+- **Performance.** Page views were slow because the usual price was recomputed from a month of results on
+  every request. It is now cached per scan; remaining cost is the first view after each scan.
+- **Still not built:** R6 (editing trip profiles from the dashboard), per-user logins, and an automatic USD
+  rate.
