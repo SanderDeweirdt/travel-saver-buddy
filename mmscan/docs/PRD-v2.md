@@ -1,6 +1,6 @@
 # PRD: mmscan v2, the always-on award watcher
 
-Oct 13, 2026 · @Sander · Status: built and deployed (16 Oct); R6 and the P2 items are open. Updated 16 Oct to match the shipped product.
+Oct 13, 2026 · @Sander · Status: draft for review; see "Update, Oct 16" at the end for what changed in use
 
 Supersedes the scope and "not now" list of [`PRD.md`](PRD.md) (v1, 11 Oct). v1's API reference, scoring rules and
 report layout still apply unless this document says otherwise. Live API behaviour that differs from v1 is in
@@ -43,23 +43,14 @@ family travel from Belgium and Germany to Southeast Asia, starting with Philippi
 
 | Area | What exists |
 | --- | --- |
-| Scan | `scan`, `run`, `watch`: regions via Bulk Availability (Europe to Asia, Asia to Europe, and Asia to Asia in the daily run), a wider watchlist via Cached Search with trips |
-| Pricing | Fees come from the summary object in USD, converted at a fixed `usd_to_eur` (dated by `usd_to_eur_date`); Get Trips only for Shortlist results |
-| Baseline | `baseline.py`: usual price = median total cost per origin, destination, cabin and pricing group over `relative.history_days`; needs `relative.min_samples` observations; cached 10 minutes |
-| Scoring | Route and destination percentiles, benchmark ceilings (`deals.by_ceiling` now off), chart-rate flag; fixed-chart and dynamic carriers judged separately |
-| Dashboard | Best deals (`/`), All routes (`/overview`), My trips, Shortlist (`/shortlist`), Route, Data & alerts (`/data`); shared-password login; Miles & More link on every row |
-| Deals ranking | Saving against the usual price; verdicts at 30% (Great) and 10% (Good); Best deals shows flights at least `deals.min_saving_pct` (30%) below usual, on `deals.default_cabin`, for 1 traveller by default |
-| Trips | Trip profiles: round-trip pairing, whole-party price, budget bar, 30-day trend, cheapest-day calendar |
-| Alerts | Slack is on: `notify.new_deals` posts each new flight at least 10% below usual (all routes, economy, dynamic prices marked unverified); trip alerts; stale (over 48 h) results never sent |
-| Trust | `price_checks` table and `mmscan verify-add` for hand checks of cached against live miles, shown per carrier on the Data page |
+| Scan | `scan`, `run`, `watch`: regions via Bulk Availability, watchlist via Cached Search with trips |
+| Pricing | Fees come from the summary object in USD, converted at a fixed `usd_to_eur`; Get Trips only for Shortlist results |
+| Scoring | Route and destination percentiles, benchmark ceilings, chart-rate flag, value per mile; separate logic for fixed-chart and dynamic carriers |
+| History | SQLite locally, Postgres on Railway; 180-day retention; New/Cheaper compared with the last time each result was seen |
+| Trips | Trip profiles: narrow searches per leg, round-trip pairing, whole-party price, budget marker, alerts |
+| Dashboard | FastAPI: Shortlist, Trips, route history, Runs, Quota, xlsx/csv downloads, shared-password login with rate limiting |
+| Alerts | Slack webhook (built, currently off) |
 | Deploy | Railway: hourly cron `watch`, daily 05 UTC `run`, web service, Postgres |
-
-## Decisions since drafting
-
-- **Baseline:** the usual price is the route's own median total cost (miles at 1.16 ct plus fees), not a cash fare. seats.aero has no cash prices and no fare source was added; `cash_fares.csv` stays an optional extra.
-- **Thresholds:** Great deal at 30% below usual, Good deal at 10%, the same for both cabins.
-- **Slack:** switched on with the `new_deals` alert instead of the Shortlist alerts, which are off. It includes dynamic-carrier prices, marked unverified, so R2's "chart prices first" is relaxed for that one alert; the older alerts still exclude them unless `notify.unverified` is on.
-- **Scope of the pages:** Best deals and All routes cover every configured region pair, not only the shortlist focus.
 
 ## Requirements for the next version
 
@@ -76,7 +67,7 @@ Priority: P0 must have for v2 to be trusted, P1 should have, P2 later.
   Deals and trip alerts first, dynamic carriers only after R1.
   *Done when* a quiet hour posts nothing, a new fixed-chart Deal posts once, and the same Deal is not posted again
   unless its total drops by `drops.min_pct`.
-  **Status: built and on, as the `new_deals` alert (see Decisions).**
+  **Status: built and on, as the `new_deals` alert (see the Oct 16 update).**
 - **R3. Realistic ceilings.** The PRD v1 economy ceiling of 200 EUR in fees sits below almost every real fee
   (30 to 700 EUR). `config.yaml` already uses 280 EUR; replace the placeholders with ceilings derived from at least
   30 days of stored route statistics.
@@ -149,3 +140,22 @@ Priority: P0 must have for v2 to be trusted, P1 should have, P2 later.
 2. R2 and R4 behind `notify.slack` and a config check.
 3. R5, R7 and R8 as dashboard changes, one deploy each.
 4. R6 last, because it moves configuration into the database.
+
+## Update, Oct 16
+
+Changes made after the dashboard went live; they override the text above where they differ.
+
+- **Goal 2 and the focus.** The tool is used mainly to find mileage deals that are not on the partner
+  chart, so the dashboard covers every Europe to Asia, Asia to Europe and Asia to Asia route, not only the
+  benchmark routes, and defaults to economy and one traveller.
+- **R2 (Slack).** Alerts are on, with a new rule: post each flight (route, date, cabin) seen for the first
+  time that is at least 10% below its route's usual price (`notify.new_deals`). Dynamic-carrier prices
+  are included and marked unverified, which is a deliberate change from "dynamic carriers only after R1".
+  The older Shortlist-based alerts are off. R1 (the cached-versus-live gap) is still open, and the new
+  alert carries a link to check each price on miles-and-more.com.
+- **New: check link.** Every flight links to a prefilled Miles & More award search so a price can be
+  verified by hand (`miles_and_more.link_template`).
+- **Performance.** Page views were slow because the usual price was recomputed from a month of results on
+  every request. It is now cached per scan; remaining cost is the first view after each scan.
+- **Still not built:** R6 (editing trip profiles from the dashboard), per-user logins, and an automatic USD
+  rate.

@@ -130,23 +130,36 @@ makes no API calls.
 1. Should economy and business use the same thresholds? Kept the same for now.
 2. Is a 30-day window right, given hourly watch scans and a daily full run? Configurable via `relative.history_days`.
 
-## Status (Oct 16)
+## Status (Oct 14)
 
-M1 to M6 are built, merged (PR 13) and deployed; the v2 build answers at
-https://travel-saver-buddy-production.up.railway.app (checked from outside: `/healthz` 200, the v2 routes redirect to
-login; pages behind the login were not checked). Later changes on `main` went beyond this plan:
+M1 to M6 are built and tested on SQLite and Postgres. Left for Sander, not code:
 
-- Best deals and All routes (`/overview`) cover every region pair, one row per flight; Best deals shows only flights at
-  least `deals.min_saving_pct` (30%) below usual, opens on economy for 1 traveller, with a hide-chart toggle.
-- A Miles & More link template puts a prefilled award-search link on every row.
-- Asia to Asia region pair (daily run only) and a wider watchlist.
-- Baseline query slimmed and cached for 10 minutes; row limit of 300.
-- Slack is on, with a `new_deals` alert (new flights at least 10% below usual, all routes, economy).
-
-Left for Sander, not code:
-
+- Turn `notify.slack` on once the Best deals page has run a few days; chart-price Deals and trip alerts only,
+  because `notify.unverified` defaults to off.
 - Record hand checks with `mmscan verify-add` until each dynamic carrier has a measured live-to-cached ratio (R1).
 - Update `usd_to_eur` and `usd_to_eur_date` in `config.yaml` with today's rate.
-- Decide whether the `new_deals` alert should keep including unverified dynamic prices.
+- Not built (later): editing trip profiles from the dashboard (R6), per-user logins.
 
-Not built: editing trip profiles from the dashboard (R6), automatic USD rate, per-user logins.
+## Changes since (Oct 16)
+
+The Best deals page was reworked after the first use. Where the milestones above say otherwise, this wins.
+
+- **Every route, one row per flight.** Best deals no longer limits itself to the shortlist focus
+  (`shortlist.scope`); it covers every route between the configured `region_pairs`. A new **All routes**
+  page (`/overview`) lists the same rows with no saving cut, routes without a usual price included.
+- **Big savings only.** Best deals lists flights at least `deals.min_saving_pct` (30) below the usual
+  price. The usual price itself is unchanged (median total over `relative.history_days`, fixed-chart and
+  dynamic carriers separate, needs `relative.min_samples`).
+- **Defaults.** Economy (`deals.default_cabin`), one traveller instead of `min_seats`.
+- **Hide chart deals** toggle on both pages, next to "Chart price only"; hide wins if both are ticked.
+- **Region pairs.** Asia to Asia added; the daily `run` reads it, the hourly `watch` does not.
+- **More watchlist airports.** Origins DUS, HAM, BER, GVA, AMS, CDG and destinations CEB, CGK, DPS, HKT,
+  SGN, HAN added. No extra calls: each direction is one search.
+- **Miles & More link** on every row (`miles_and_more.link_template`, built from a real seats.aero link);
+  a link stored by seats.aero for the flight wins.
+- **Speed.** The usual price read a month of full result rows on every page view. It now reads six
+  columns and is cached for ten minutes per scan, and the tables show the first 300 flights with a
+  "Show more" link.
+- **Slack.** `notify.slack` is on. `notify.new_deals` posts each new flight (route, date, cabin) at least
+  10% below its usual price, economy only, dynamic prices marked unverified. The older Shortlist alerts
+  are off.
