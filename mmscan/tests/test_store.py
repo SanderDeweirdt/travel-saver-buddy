@@ -73,3 +73,32 @@ def test_price_checks_round_trip(tmp_path):
     (row,) = s.price_checks()
     assert row["carrier"] == "LH" and row["live_miles"] == 17000 and row["route"] == "MUC-SIN"
     s.close()
+
+
+def test_migrations_stamp_a_fresh_database(tmp_path):
+    from mmscan.store import MIGRATIONS
+
+    store = Store(tmp_path / "db.sqlite")
+    assert store.schema_version() == MIGRATIONS[-1][0]
+    tables = {r[0] for r in store.conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    assert {"observations", "current_offers", "schema_version"} <= tables
+    store.close()
+    again = Store(tmp_path / "db.sqlite")  # reopening applies nothing and keeps one version row
+    assert again.conn.execute("SELECT count(*) FROM schema_version").fetchone()[0] == 1
+
+
+def test_migrations_upgrade_a_pre_migration_database(tmp_path):
+    import sqlite3
+
+    from mmscan.store import SCHEMA
+
+    path = tmp_path / "old.sqlite"
+    old = sqlite3.connect(path)
+    old.executescript(SCHEMA)  # a database made before schema_version existed
+    old.execute("INSERT INTO runs(kind, started_at, status) VALUES ('scan', 'x', 'ok')")
+    old.commit()
+    old.close()
+    store = Store(path)
+    assert store.schema_version() >= 2
+    assert store.conn.execute("SELECT count(*) FROM runs").fetchone()[0] == 1  # data kept
+    assert store.conn.execute("SELECT count(*) FROM observations").fetchone()[0] == 0
