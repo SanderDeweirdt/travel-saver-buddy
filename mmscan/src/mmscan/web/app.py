@@ -17,7 +17,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from mmscan.config import Config, load_config
 from mmscan.links import mm_link
 from mmscan.report import DISCLAIMER, SHORTLIST_COLUMNS, row_values, shortlist, write_report
-from mmscan.store import Store
+from mmscan.store import FULL_RUNS, Store
 from mmscan.trips import age_hours, calendar_cells, trip_trend, trip_views
 from mmscan.web import queries
 from mmscan.web.auth import LoginLimiter, password_ok
@@ -136,7 +136,7 @@ def create_app(settings: WebSettings) -> FastAPI:
             "min_pct": min_pct,
             "limit": max(50, min(q["limit"], 20000)),
         }
-        run_id = store.latest_scored_run()
+        run_id = store.latest_scored_run(FULL_RUNS)
         view = None
         if run_id is not None:
             view = queries.deals_view(
@@ -231,7 +231,7 @@ def create_app(settings: WebSettings) -> FastAPI:
         all: int = 0,
     ):
         now = datetime.now(UTC)
-        run_id = run or store.latest_scored_run()
+        run_id = run or store.latest_scored_run(FULL_RUNS)
         view = None
         if run_id is not None:
             view = queries.shortlist_view(
@@ -319,7 +319,7 @@ def create_app(settings: WebSettings) -> FastAPI:
         return render(request, "quota.html", q=q)
 
     def _latest(store: Store) -> int:
-        run_id = store.latest_scored_run()
+        run_id = store.latest_scored_run(FULL_RUNS)
         if run_id is None:
             raise HTTPException(404, "No scored run yet.")
         return run_id
