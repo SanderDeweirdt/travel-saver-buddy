@@ -62,29 +62,37 @@ Priority: P0 must have for v2 to be trusted, P1 should have, P2 later.
   flight. Until this is understood, dynamic-carrier results must carry an "unverified" mark everywhere they appear.
   Measure the gap on a sample of at least 20 results and record the ratio per carrier in `api-findings.md`.
   *Done when* the documented gap per carrier exists and the dashboard says which prices are chart-based and which are not.
+  **Status: tooling built (Data page, `mmscan verify-add`); the measurements are still to be recorded.**
 - **R2. Re-enable Slack.** Alerts were switched off until cached mileage is trusted. Turn them on for fixed-chart
   Deals and trip alerts first, dynamic carriers only after R1.
   *Done when* a quiet hour posts nothing, a new fixed-chart Deal posts once, and the same Deal is not posted again
   unless its total drops by `drops.min_pct`.
+  **Status: built and on, as the `new_deals` alert (see the Oct 16 update).**
 - **R3. Realistic ceilings.** The PRD v1 economy ceiling of 200 EUR in fees sits below almost every real fee
   (30 to 700 EUR). `config.yaml` already uses 280 EUR; replace the placeholders with ceilings derived from at least
   30 days of stored route statistics.
   *Done when* each benchmark's ceiling cites the statistic it came from.
+  **Status: open. `deals.by_ceiling` was switched off instead, so ceilings no longer produce Deals.**
 - **R4. Currency.** Fees arrive in USD and are converted at a hand-edited rate. Either fetch the rate daily from a
   documented source or fail the run's Shortlist loudly when the rate is older than 30 days.
+  **Status: partly built. `usd_to_eur_date` plus a dashboard and run-log warning after 30 days; no automatic rate fetch.**
 
 ### P1: planning trips
 
 - **R5. Trip-first dashboard.** The Trips page is the default landing page when at least one trip profile exists.
   Each trip shows its best five round trips, the budget marker, the price trend of the best option over the last
   30 days, and one-click booking links.
+  **Status: built, except that Best deals (not Trips) is the landing page.**
 - **R6. Trip profiles outside the repo.** Profiles live in `config.yaml`, so every change is a commit and a redeploy.
   Allow editing them from the dashboard (stored in Postgres, validated by the same code as the file).
   *Done when* adding a trip needs no git commit and a bad profile is rejected with the key named.
+  **Status: open.**
 - **R7. Best-day view.** For a trip with flexible dates, show the cheapest total per departure day as a calendar,
   so the cheap weeks are visible at a glance.
+  **Status: built (calendar on My trips).**
 - **R8. Stale-data guard.** Any result whose `UpdatedAt` is over 48 hours old is marked stale on the dashboard and
   excluded from Slack.
+  **Status: built (dashboard marker, hidden by default; excluded from Slack).**
 
 ### P2: later
 

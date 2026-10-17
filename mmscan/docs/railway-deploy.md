@@ -50,6 +50,16 @@ including Asia to Asia, which the hourly watch does not read).
 
 The dashboard has no seats.aero key: it cannot call the API.
 
+### Where it lives
+
+The dashboard is at **https://travel-saver-buddy-production.up.railway.app** (the `dashboard` service's
+Railway domain). Everything except `/healthz` asks for `DASHBOARD_PASSWORD`. Paths: `/` Best deals,
+`/overview` All routes, `/trips`, `/shortlist` (old bookmarks with `?run=…&verdict=…&sort=verdict` belong
+here, not on `/`), `/data` Data & alerts, `/route/<from>/<to>/<cabin>`, and `/healthz` (`ok`, no login).
+
+Last checked 16 Oct 2026 from outside, without the password: `/healthz` returned 200 and `/shortlist` and
+`/data` redirected to the login page, so the v2 build was running. Pages behind the login were not checked.
+
 ## 4. Move existing local data (optional)
 
 If `data/mmscan.db` holds history you want (baselines need history), copy it once from your
