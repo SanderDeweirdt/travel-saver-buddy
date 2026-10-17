@@ -254,6 +254,20 @@ def rebuild_current(
     return scored
 
 
+def ensure_current(
+    store: Store, cfg: Config, now: datetime, fares: FareSource | None = None
+) -> bool:
+    """Fill `current_offers` from `observations` when it is empty, as after the migration that
+    created them: the pages would otherwise show nothing until the next scan. Returns whether it
+    rebuilt. Run id 0 means no flight counts as changed by this rebuild."""
+    if store.conn.execute("SELECT 1 FROM current_offers LIMIT 1").fetchone():
+        return False
+    if store.conn.execute("SELECT 1 FROM observations LIMIT 1").fetchone() is None:
+        return False
+    rebuild_current(store, cfg, 0, now, fares)
+    return True
+
+
 def _from_current_row(r) -> Scored:
     values = {c: r[c] for c in CURRENT_COLUMNS}
     for c in _CURRENT_BOOLS:

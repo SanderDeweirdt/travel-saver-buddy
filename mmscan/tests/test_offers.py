@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from mmscan.offers import load_current, record_observations
+from mmscan.offers import ensure_current, load_current, record_observations
 from mmscan.scoring import current_rows, score_run
 from mmscan.store import Store
 from tests.helpers import avail, config
@@ -164,3 +164,36 @@ def test_purge_drops_observations_not_seen_for_180_days(tmp_path, cfg):
     _scan(store, cfg, NOW, [("new", "2026-12-11", 35000, 12900)])
     store.purge_older_than(180, now=NOW)
     assert [r["date"] for r in _obs(store)] == ["2026-12-11"]
+
+
+def test_ensure_current_fills_an_empty_table_from_observations(tmp_path, cfg):
+    store = Store(tmp_path / "db.sqlite")
+    _scan(store, cfg, NOW, [("a", "2026-12-10", 35000, 12900)])
+    store.conn.execute("DELETE FROM current_offers")  # as right after the migration
+    store.conn.commit()
+    assert load_current(store) == []
+    assert ensure_current(store, cfg, NOW) is True
+    (cur,) = load_current(store)
+    assert cur.availability_id == "a" and cur.change == ""
+    assert ensure_current(store, cfg, NOW) is False  # nothing to do the second time
+
+
+def test_dashboard_start_fills_current_offers(tmp_path, default_config_dict, write_config):
+    from mmscan.web.app import create_app
+    from mmscan.web.settings import WebSettings
+
+    cfg_path = write_config(default_config_dict)
+    path = tmp_path / "web.db"
+    store = Store(path)
+    _scan(
+        store,
+        config(default_config_dict, relative={"min_samples": 3}),
+        datetime.now(UTC),
+        [("a", "2026-12-10", 35000, 12900)],
+    )
+    store.conn.execute("DELETE FROM current_offers")
+    store.conn.commit()
+    store.close()
+    create_app(WebSettings("pw", "s" * 32, path, cfg_path))
+    check = Store(path, readonly=True)
+    assert len(load_current(check)) == 1
