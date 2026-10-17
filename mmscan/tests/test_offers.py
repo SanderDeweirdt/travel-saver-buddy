@@ -125,3 +125,34 @@ def test_new_fx_rate_does_not_reprice_history(tmp_path, cfg, default_config_dict
     assert counts == {"new": 0, "changed": 0, "unchanged": 1}
     (cur,) = load_current(store)
     assert cur.fees_eur == pytest.approx(129 * 0.92)  # still the rate in force when it was scored
+
+
+def test_backfill_collapses_result_history_into_price_states(tmp_path):
+    from mmscan.scoring import SCORED_COLUMNS, column_values
+    from tests.helpers import scored
+
+    store = Store(tmp_path / "db.sqlite")
+    runs = [store.start_run("watch", "{}", now=NOW + timedelta(hours=h)) for h in range(4)]
+    ph = ",".join("?" * (len(SCORED_COLUMNS) + 1))
+    sql = f"INSERT INTO results(run_id, {', '.join(SCORED_COLUMNS)}) VALUES ({ph})"
+    totals = [(1000, 50.0), (1000, 50.0), (900, 50.0), (900, 50.0)]  # unchanged, drop, unchanged
+    for run, (miles, fees) in zip(runs, totals, strict=True):
+        s = scored(miles * 1.16 + fees, cabin="economy", miles=miles, fees=fees, id="a")
+        store.conn.execute(sql, (run, *column_values(s, SCORED_COLUMNS)))
+    other = scored(500.0, date="2026-12-12", cabin="economy", miles=300, fees=20.0, id="b")
+    store.conn.execute(sql, (runs[0], *column_values(other, SCORED_COLUMNS)))
+    store.conn.execute("DELETE FROM observations")
+    store.conn.execute("DELETE FROM schema_version")
+    store.conn.execute("INSERT INTO schema_version(version) VALUES (2)")
+    store.conn.commit()
+
+    store.migrate()
+
+    rows = store.conn.execute("SELECT * FROM observations WHERE date='2026-12-10' ORDER BY id")
+    rows = rows.fetchall()
+    assert [(r["miles"], r["run_id"]) for r in rows] == [(1000, runs[0]), (900, runs[2])]
+    assert rows[0]["first_seen"] == (NOW).isoformat()
+    assert rows[0]["last_seen"] == (NOW + timedelta(hours=1)).isoformat()
+    assert rows[1]["last_seen"] == (NOW + timedelta(hours=3)).isoformat()
+    assert store.conn.execute("SELECT count(*) FROM observations").fetchone()[0] == 3
+    assert rows[0]["fees_minor"] is None and rows[0]["fees_eur"] == 50.0

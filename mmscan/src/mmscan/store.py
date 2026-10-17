@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -209,13 +210,21 @@ CREATE TABLE IF NOT EXISTS current_offers (
 CREATE INDEX IF NOT EXISTS current_offers_route ON current_offers(origin, destination, cabin);
 """
 
+
+def _backfill_observations(store: Store) -> int:
+    from mmscan.backfill import backfill_observations
+
+    return backfill_observations(store)
+
+
 VERSION_TABLE = "CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)"
 
 # (version, DDL script or a function(store) for data migrations). Append only; never edit one that
 # has shipped. Migration 1 is the original schema, so existing databases are stamped, not rebuilt.
-MIGRATIONS: list[tuple[int, str]] = [
+MIGRATIONS: list[tuple[int, str | Callable[[Store], object]]] = [
     (1, SCHEMA),
     (2, OBSERVATIONS_SCHEMA),
+    (3, _backfill_observations),
 ]
 
 
@@ -275,12 +284,16 @@ class Store:
         for version, script in MIGRATIONS:
             if version <= have:
                 continue
-            ddl = pg_ddl(script) if self.postgres else script
             stamp = (
                 f"DELETE FROM schema_version;\nINSERT INTO schema_version(version) "
                 f"VALUES ({int(version)});"
             )
-            self.conn.executescript(f"{VERSION_TABLE};\n{ddl};\n{stamp}")
+            if callable(script):
+                script(self)  # a data migration; its work commits before the version moves
+                self.conn.executescript(f"{VERSION_TABLE};\n{stamp}")
+            else:
+                ddl = pg_ddl(script) if self.postgres else script
+                self.conn.executescript(f"{VERSION_TABLE};\n{ddl};\n{stamp}")
             if not self.postgres:
                 self.conn.commit()
         return MIGRATIONS[-1][0]
