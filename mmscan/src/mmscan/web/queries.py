@@ -83,6 +83,9 @@ def shortlist_view(
                 "samples": b.n if b else 0,
                 "age_h": _age_hours(s.updated_at, now),
                 "pricing": cfg.pricing_model(s.carriers),
+                "why": cfg.focus_reasons(
+                    s.origin, s.origin_region, s.destination, s.destination_region, s.cabin
+                ),
             }
         )
     return {

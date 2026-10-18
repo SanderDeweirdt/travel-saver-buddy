@@ -60,7 +60,7 @@ def test_healthz_is_public(client):
     "path",
     [
         "/",
-        "/shortlist",
+        "/watchlist",
         "/runs",
         "/trips",
         "/quota",
@@ -118,14 +118,14 @@ def test_limiter_window_and_compare():
 
 def test_shortlist_page_shows_fixture_data(client):
     login(client)
-    r = client.get("/shortlist")
+    r = client.get("/watchlist")
     assert r.status_code == 200
     assert "Cached data. Confirm price and seats on miles-and-more.com" in r.text
     assert "MUC→SIN" in r.text and "58,000" in r.text
     assert "https://example.test/book" in r.text
     # filters narrow the table
-    assert "58,000" not in client.get("/shortlist?cabin=economy").text
-    assert "Nothing matches" in client.get("/shortlist?route=FRA-KUL").text
+    assert "58,000" not in client.get("/watchlist?cabin=economy").text
+    assert "Nothing matches" in client.get("/watchlist?route=FRA-KUL").text
 
 
 def test_route_runs_quota_pages(client):
@@ -219,10 +219,10 @@ def test_shortlist_labels_dynamic_prices(tmp_path, default_config_dict):
     settings = WebSettings(PASSWORD, "s" * 32, path, ROOT / "config.yaml")
     c = TestClient(create_app(settings), base_url="https://testserver")
     login(c)
-    page = c.get("/shortlist?all=1").text
+    page = c.get("/watchlist?all=1").text
     assert "dynamic, verify" in page and ">chart<" in page
     assert ">Unranked</span>" in page  # the dynamic fare has no history yet
-    assert ">Unranked</span>" not in c.get("/shortlist").text  # and never reaches the Shortlist
+    assert ">Unranked</span>" not in c.get("/watchlist").text  # and never reaches the Shortlist
 
 
 def test_deals_view_reads_the_store(db, default_config_dict):
@@ -493,3 +493,13 @@ def test_deals_pages_show_a_newer_watch_price_without_a_run_label(db, default_co
     assert "Run #" not in text  # pages no longer belong to one run
     # Same flight date as the fixture's: the watch run's price replaces the older 58,000.
     assert "MUC→SIN" in text and "50,000" in text and "58,000" not in text
+
+
+def test_watchlist_page_explains_what_is_included_and_old_url_still_works(client):
+    login(client)
+    text = client.get("/watchlist").text
+    assert "<h1>Watchlist</h1>" in text and ">Watchlist</a>" in text
+    assert "What is on this page" in text
+    assert "MUC, FRA" in text and "SIN" in text  # the watchlist airports are listed
+    assert "Benchmark" in text and 'title="On your watchlist"' in text
+    assert client.get("/shortlist").status_code == 200  # old bookmarks keep working

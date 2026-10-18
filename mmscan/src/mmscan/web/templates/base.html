@@ -234,11 +234,11 @@ td small { color: var(--ink-2); }
     <a href="/" class="{{ 'on' if page in ('deals', 'route') }}">Best deals</a>
     <a href="/overview" class="{{ 'on' if page == 'overview' }}">All routes</a>
     <a href="/trips" class="{{ 'on' if page == 'trips' }}">My trips</a>
-    <a href="/shortlist" class="{{ 'on' if page == 'shortlist' }}">Shortlist</a>
+    <a href="/watchlist" class="{{ 'on' if page == 'shortlist' }}">Watchlist</a>
     <a href="/data" class="{{ 'on' if page in ('data', 'runs', 'quota') }}">Data &amp; alerts</a>
     <span class="sep"></span>
     <a href="/reports/latest.xlsx" title="Download the latest report as Excel">Excel ↓</a>
-    <a href="/reports/latest-shortlist.csv" title="Download the shortlist as CSV">CSV ↓</a>
+    <a href="/reports/latest-shortlist.csv" title="Download the watchlist as CSV">CSV ↓</a>
   </nav>
   <form method="post" action="/logout"><button type="submit" class="btn sm">Log out</button></form>
 </div></div>

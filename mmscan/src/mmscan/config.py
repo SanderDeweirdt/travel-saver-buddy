@@ -285,18 +285,27 @@ class Config(_Model):
     def trip_seats(self, trip: TripProfile) -> int:
         return trip.seats or self.min_seats
 
+    def focus_reasons(
+        self, origin: str, origin_region: str, dest: str, dest_region: str, cabin: str
+    ) -> list[str]:
+        """Why a flight is on the Watchlist page: "watchlist" when its airports are a watchlist
+        pair (and shortlist.focus_watchlist is on), "benchmark" when it matches a benchmark."""
+        out = []
+        wl = self.watchlist
+        if self.shortlist.focus_watchlist and (
+            (origin in wl.origins and dest in wl.destinations)
+            or (wl.both_directions and origin in wl.destinations and dest in wl.origins)
+        ):
+            out.append("watchlist")
+        if self.benchmark_for(cabin, origin, origin_region, dest, dest_region):
+            out.append("benchmark")
+        return out
+
     def in_focus(
         self, origin: str, origin_region: str, dest: str, dest_region: str, cabin: str
     ) -> bool:
         """Matches a benchmark, or (when focus_watchlist) a watchlist airport pair."""
-        if self.benchmark_for(cabin, origin, origin_region, dest, dest_region):
-            return True
-        wl = self.watchlist
-        if not self.shortlist.focus_watchlist:
-            return False
-        if origin in wl.origins and dest in wl.destinations:
-            return True
-        return wl.both_directions and origin in wl.destinations and dest in wl.origins
+        return bool(self.focus_reasons(origin, origin_region, dest, dest_region, cabin))
 
     def date_range(self, today: date) -> tuple[date, date]:
         return (

@@ -227,8 +227,9 @@ def create_app(settings: WebSettings) -> FastAPI:
         ctx = deals_context(store, q, min_pct=None, inline=True)
         return render(request, "overview.html", **ctx)
 
+    @app.get("/watchlist", response_class=HTMLResponse, dependencies=[Depends(require_login)])
     @app.get("/shortlist", response_class=HTMLResponse, dependencies=[Depends(require_login)])
-    def shortlist_page(
+    def watchlist_page(
         request: Request,
         store: Store = Depends(open_store),
         route: str = "",
@@ -247,6 +248,10 @@ def create_app(settings: WebSettings) -> FastAPI:
             "shortlist.html",
             view=view,
             updated=updated,
+            wl=cfg.watchlist,
+            benchmarks=cfg.benchmarks,
+            scope=cfg.shortlist.scope,
+            focus_watchlist=cfg.shortlist.focus_watchlist,
             f={"route": route, "cabin": cabin, "verdict": verdict, "sort": sort, "all": all},
             sorts=list(queries.SORTS),
         )
