@@ -239,3 +239,16 @@ def test_new_deal_alert_off_posts_nothing(tmp_path, default_config_dict):
     store, run = _history_then_current(tmp_path, [_new(800.0, "big")])
     n, payload = notify_run(store, config(default_config_dict), run, NOW, URL, None)
     assert (n, payload) == (0, None)
+
+
+def test_webhook_value_is_cleaned_and_checked(monkeypatch, tmp_path):
+    from mmscan.notify import WEBHOOK_ENV, webhook_from_env
+
+    good = "https://hooks.slack.test/services/T0/B0/XYZ"
+    for pasted in (good, f'"{good}"', f" '{good}' "):
+        monkeypatch.setenv(WEBHOOK_ENV, pasted)
+        assert webhook_from_env(tmp_path / ".env") == good
+    monkeypatch.setenv(WEBHOOK_ENV, "hooks.slack.test/services/T0/B0/SECRET")
+    with pytest.raises(NotifyError, match="must start with https://") as e:
+        webhook_from_env(tmp_path / ".env")
+    assert "SECRET" not in str(e.value)  # the secret never lands in the run log

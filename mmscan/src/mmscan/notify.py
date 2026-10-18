@@ -32,11 +32,17 @@ class NotifyError(Exception):
 
 def webhook_from_env(dotenv_path: Path | None = None) -> str:
     load_dotenv(dotenv_path or Path(".env"))
-    url = os.environ.get(WEBHOOK_ENV, "").strip()
+    url = os.environ.get(WEBHOOK_ENV, "").strip().strip("\"'").strip()  # pasted with quotes
     if not url:
         raise NotifyError(
             f"{WEBHOOK_ENV} is not set. Put the Slack incoming webhook URL in .env "
             f"(see .env.example)."
+        )
+    if not url.startswith(("https://", "http://")):
+        # Never echo the value: the URL is a secret.
+        raise NotifyError(
+            f"{WEBHOOK_ENV} must start with https:// (it starts with {url[:8]!r}). Paste only the "
+            f"URL, with no name= prefix and no quotes."
         )
     return url
 
