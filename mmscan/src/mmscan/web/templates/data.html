@@ -16,6 +16,10 @@
     <div class="v" style="font-size:20px">{% if not w %}No runs yet{% elif late %}Late{% elif bad %}Last run {{ w.status }}{% else %}Healthy{% endif %}</div>
     <div class="d">{% if w %}last watch {{ w.started_at|when }} UTC{% endif %}{% if d.last_full %} · full run {{ d.last_full.started_at|when }}{% endif %}</div>
     <div class="d">partial or failed this week: {{ d.failed_week }}</div></div>
+  {% set cv = d.coverage %}
+  <div class="tile"><div class="k">Routes tracked</div><div class="v">{{ "{:,}".format(cv.routes) }}</div>
+    <div class="d">{{ cv.on_watchlist }} of {{ cv.watchlist_pairs }} watchlist pairs have a price; the rest come from the region scans</div>
+    <div class="d">{{ "{:,}".format(cv.flights) }} flights on offer (route, date, cabin)</div></div>
   <div class="tile {{ 'warn' if d.fx.stale }}"><div class="k">USD → EUR rate</div><div class="v">{{ d.fx.rate if d.fx.rate else "not set" }}</div>
     <div class="d">{% if d.fx.age_days is none %}No date recorded. Set <code>usd_to_eur_date</code>.{% elif d.fx.stale %}Last checked {{ d.fx.age_days }} days ago: update it.{% else %}Checked {{ d.fx.age_days }} days ago{% endif %}</div></div>
 </div>

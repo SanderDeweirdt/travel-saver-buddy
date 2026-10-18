@@ -503,3 +503,10 @@ def test_watchlist_page_explains_what_is_included_and_old_url_still_works(client
     assert "MUC, FRA" in text and "SIN" in text  # the watchlist airports are listed
     assert "Benchmark" in text and 'title="On your watchlist"' in text
     assert client.get("/shortlist").status_code == 200  # old bookmarks keep working
+
+
+def test_data_page_shows_routes_tracked(client):
+    login(client)
+    text = client.get("/data").text
+    assert "Routes tracked" in text and "watchlist pairs have a price" in text
+    assert "flights on offer" in text
