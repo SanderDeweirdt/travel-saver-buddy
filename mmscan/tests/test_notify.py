@@ -252,3 +252,26 @@ def test_webhook_value_is_cleaned_and_checked(monkeypatch, tmp_path):
     with pytest.raises(NotifyError, match="must start with https://") as e:
         webhook_from_env(tmp_path / ".env")
     assert "SECRET" not in str(e.value)  # the secret never lands in the run log
+
+
+def test_cli_notify_test_posts_hello_world_and_reports_problems(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)  # no database, no config: --test reads no data
+    sent = []
+
+    def fake_send(url, payload, transport=None):
+        sent.append((url, payload))
+
+    monkeypatch.setattr("mmscan.notify.send_slack", fake_send)
+    monkeypatch.setenv("SLACK_WEBHOOK_URL", '"https://hooks.slack.test/services/T0/B0/XYZ"')
+    r = CliRunner().invoke(app, ["notify", "--test"])
+    assert r.exit_code == 0 and "Slack test posted" in r.output
+    assert sent[0][0] == "https://hooks.slack.test/services/T0/B0/XYZ"
+    assert "Hello world" in sent[0][1]["text"] and "XYZ" not in r.output
+
+    dry = CliRunner().invoke(app, ["notify", "--test", "--dry-run"])
+    assert dry.exit_code == 0 and "Would post" in dry.output and len(sent) == 1
+
+    monkeypatch.setenv("SLACK_WEBHOOK_URL", "hooks.slack.test/services/T0/B0/SECRET")
+    bad = CliRunner().invoke(app, ["notify", "--test"])
+    assert bad.exit_code == 1 and "must start with https://" in bad.output
+    assert "SECRET" not in bad.output

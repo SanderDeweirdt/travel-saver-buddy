@@ -45,7 +45,7 @@ Every command takes `--config PATH` (default `config.yaml`), `--dry-run`
 | `mmscan report` | Spreadsheet, Shortlist CSV and the terminal top 10 | 0 |
 | `mmscan run` | Scan, score, fetch trip details for Shortlist results only, score again, report, notify; prints the planned calls first | Scan plus at most `enrich.max_calls` |
 | `mmscan watch` | Watchlist only: scan (first `watch.max_pages` page per direction), score against stored history, post new deals to Slack. For hourly runs | 2 with the default config |
-| `mmscan notify` | Posts the latest run's alerts to Slack (new deals, plus any older-style alerts that are switched on); nothing when there are none. `--dry-run` prints the message | 0 |
+| `mmscan notify` | Posts the latest run's alerts to Slack (new deals, plus any older-style alerts that are switched on); nothing when there are none. `--dry-run` prints the message. `--test` posts a "Hello world" to check the webhook (reads no data) | 0 |
 | `mmscan trips` | Best round trips per trip profile, from stored results (`--top N`) | 0 |
 | `mmscan verify-add` | Records one hand check of a cached price against the live one (carrier, cached miles, live miles); feeds the dashboard's trust table | 0 |
 | `mmscan quota` | Calls left today (last `X-RateLimit-Remaining`) and calls made by mmscan today | 0 |

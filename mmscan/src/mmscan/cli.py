@@ -290,14 +290,38 @@ def report(
     _do_report(store, cfg, run_id)
 
 
+def _slack_test(dry_run: bool) -> None:
+    """Send a hello world through the same webhook loading and sending the alerts use."""
+    from mmscan.notify import NotifyError, send_slack, webhook_from_env
+
+    payload = {"text": "Hello world from mmscan :wave: (webhook test, safe to ignore)"}
+    try:
+        url = webhook_from_env()
+        if dry_run:
+            typer.echo(f"Would post {payload['text']!r} to the webhook ({len(url)} characters).")
+            return
+        send_slack(url, payload)
+    except NotifyError as e:
+        typer.echo(f"Slack test failed: {e}", err=True)
+        raise typer.Exit(1) from e
+    typer.echo("Slack test posted: check the channel the webhook belongs to.")
+
+
 @app.command()
 def notify(
     config: ConfigOpt = Path("config.yaml"),
     dry_run: DryRunOpt = False,
     verbose: VerboseOpt = False,
+    test: Annotated[
+        bool,
+        typer.Option("--test", help="Post a 'Hello world' to check the webhook; reads no data."),
+    ] = False,
 ) -> None:
     """Post new or cheaper results of the latest scored run to Slack. No API calls."""
     _setup_logging(verbose)
+    if test:
+        _slack_test(dry_run)
+        return
     cfg = _load(config)
     target = database_target()
     if isinstance(target, Path) and not target.exists():
