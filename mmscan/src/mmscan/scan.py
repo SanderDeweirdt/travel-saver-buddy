@@ -73,14 +73,15 @@ def region_requests(cfg: Config, today: date) -> list[tuple[str, dict]]:
     cabin = cfg.cabins[0] if len(cfg.cabins) == 1 else None
     out = []
     for pair in cfg.region_pairs:
-        params = {
-            "source": cfg.source,
-            "cabin": cabin,
-            "origin_region": pair.origin,
-            "destination_region": pair.destination,
-            **_common(cfg, today),
-        }
-        out.append(("availability", {k: v for k, v in params.items() if v is not None}))
+        for source in pair.sources or [cfg.source]:
+            params = {
+                "source": source,
+                "cabin": cabin,
+                "origin_region": pair.origin,
+                "destination_region": pair.destination,
+                **_common(cfg, today),
+            }
+            out.append(("availability", {k: v for k, v in params.items() if v is not None}))
     return out
 
 

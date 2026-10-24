@@ -24,7 +24,11 @@ date_window:
 region_pairs:
   - {origin: Europe, destination: Asia}
   - {origin: Asia, destination: Europe}
-  - {origin: Asia, destination: Asia}   # flights within Asia; daily full run only, the hourly watch skips it
+  # Flights within Asia; daily full run only, the hourly watch skips it. Miles & More returns
+  # nothing here, so ask the Star Alliance partners' own programs (one call per source).
+  - origin: Asia
+    destination: Asia
+    sources: [singapore, aeroplan, united, lifemiles, turkish, ethiopian]
 
 watchlist:
   origins: [MUC, FRA, ZRH, VIE, BRU, DUS, HAM, BER, GVA, AMS, CDG]

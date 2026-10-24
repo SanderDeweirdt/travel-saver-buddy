@@ -167,3 +167,18 @@ def test_repo_config_also_scans_flights_within_asia():
     cfg = load_config(Path(__file__).resolve().parents[1] / "config.yaml")
     pairs = {(p["origin_region"], p["destination_region"]) for _, p in region_requests(cfg, TODAY)}
     assert pairs == {("Europe", "Asia"), ("Asia", "Europe"), ("Asia", "Asia")}
+
+
+def test_repo_config_asks_star_alliance_programs_for_flights_within_asia():
+    from pathlib import Path
+
+    from mmscan.config import load_config
+    from mmscan.scan import region_requests
+
+    cfg = load_config(Path(__file__).resolve().parents[1] / "config.yaml")
+    reqs = [p for _, p in region_requests(cfg, TODAY) if p["origin_region"] == p["destination_region"]]
+    sources = {p["source"] for p in reqs}
+    assert "singapore" in sources and "lufthansa" not in sources
+    assert len(reqs) == len(sources)
+    europe = [p["source"] for _, p in region_requests(cfg, TODAY) if p["origin_region"] != p["destination_region"]]
+    assert set(europe) == {"lufthansa"}

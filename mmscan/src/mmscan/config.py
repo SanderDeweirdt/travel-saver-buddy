@@ -39,6 +39,9 @@ class DateWindow(_Model):
 class RegionPair(_Model):
     origin: Region
     destination: Region
+    # seats.aero programs to ask for this pair, one Bulk Availability request each. Empty = the
+    # top-level `source`.
+    sources: list[str] = []
 
 
 class Watchlist(_Model):
