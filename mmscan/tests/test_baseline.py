@@ -19,7 +19,7 @@ def cfg(default_config_dict, n=3, **kw):
 def test_median_and_sample_count(default_config_dict):
     c = cfg(default_config_dict)
     rows = [scored(t, date=f"2026-12-{d:02d}") for d, t in ((1, 900), (2, 1000), (3, 1200))]
-    b = build_baselines(rows, c)[("MUC", "SIN", "business", "fixed")]
+    b = build_baselines(rows, c)[("MUC", "SIN", "business", "fixed", None)]
     assert (b.median, b.n, b.ready) == (1000, 3, True)
 
 
@@ -47,7 +47,7 @@ def test_latest_observation_wins_and_expired_is_ignored(default_config_dict):
     old, new = scored(1000, id="x"), scored(700, id="x")
     gone = scored(5000, date="2026-12-09")
     gone.expired = True
-    b = build_baselines([old, new, gone], c)[("MUC", "SIN", "business", "fixed")]
+    b = build_baselines([old, new, gone], c)[("MUC", "SIN", "business", "fixed", None)]
     assert (b.median, b.n) == (700, 1)
 
 
@@ -76,6 +76,6 @@ def test_route_baselines_from_the_store(tmp_path, default_config_dict):
         )
         score_run(store, c, run, at)
         store.finish_run(run, "ok", {}, [], now=at)
-    b = route_baselines(store, c)[("MUC", "SIN", "business", "fixed")]
+    b = route_baselines(store, c)[("MUC", "SIN", "business", "fixed", "lufthansa")]
     assert b.ready and b.n == 3  # three flight dates
     store.close()

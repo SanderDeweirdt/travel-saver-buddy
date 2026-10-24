@@ -1,4 +1,4 @@
-"""Link to Miles & More for one flight, so a price can be checked by hand."""
+"""Link to the flight's mileage program for one flight, so a price can be checked by hand."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ def mm_link(cfg: Config, s: Scored, pax: int = 1) -> str | None:
     None when neither exists (no template set, or the flight lacks a route or date)."""
     if s.booking_link:
         return s.booking_link
-    template = cfg.miles_and_more.link_template
+    template = cfg.link_template_for(s.source)
     if not template or not (s.origin and s.destination and s.date):
         return None
     code = CABIN_CODES.get(s.cabin)

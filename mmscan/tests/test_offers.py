@@ -197,3 +197,42 @@ def test_dashboard_start_fills_current_offers(tmp_path, default_config_dict, wri
     create_app(WebSettings("pw", "s" * 32, path, cfg_path))
     check = Store(path, readonly=True)
     assert len(load_current(check)) == 1
+
+
+def test_each_program_keeps_its_own_price_and_mile_value(default_config_dict, tmp_path):
+    c = config(
+        default_config_dict,
+        programs={"singapore": {"mile_cost_eur_cents": 2.0, "label": "KrisFlyer"}},
+    )
+    store = Store(tmp_path / "db.sqlite")
+    run = store.start_run("watch", "{}", now=NOW)
+    for id_, source, miles in (("a", "lufthansa", 10000), ("b", "singapore", 10000)):
+        store.save_availability(
+            run,
+            {
+                **avail(id_, date="2026-12-10", taxes={"economy": 5000}, economy=miles),
+                "Source": source,
+            },
+            "watchlist",
+        )
+    score_run(store, c, run, NOW)
+
+    by_source = {s.source: s for s in load_current(store)}
+    assert set(by_source) == {"lufthansa", "singapore"}
+    assert by_source["lufthansa"].total_eur == pytest.approx(10000 * 1.16 / 100 + 50 * 0.92)
+    assert by_source["singapore"].total_eur == pytest.approx(10000 * 2.0 / 100 + 50 * 0.92)
+    assert c.program_label("singapore") == "KrisFlyer" and c.program_label(None) == "M&M"
+
+
+def test_database_from_before_programs_were_stored_is_tagged_miles_and_more(tmp_path):
+    store = Store(tmp_path / "db.sqlite")
+    store.conn.execute("DELETE FROM schema_version")
+    store.conn.execute("INSERT INTO schema_version(version) VALUES (3)")
+    store.conn.execute(
+        "INSERT INTO observations(key, first_seen, last_seen, cabin, source) "
+        "VALUES ('MUC|SIN|2026-12-10|economy', 'x', 'x', 'economy', NULL)"
+    )
+    store.conn.commit()
+
+    assert store.migrate() == 4
+    assert store.conn.execute("SELECT source FROM observations").fetchone()[0] == "lufthansa"

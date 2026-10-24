@@ -233,8 +233,30 @@ class MilesAndMore(_Model):
         return self
 
 
+class Program(_Model):
+    """One seats.aero mileage program (a `source`) with its own value per mile and booking link."""
+
+    # What one mile of this program costs you, in euro cents. Unset = the top-level value.
+    mile_cost_eur_cents: float | None = Field(None, gt=0)
+    # Prefilled award-search URL, same placeholders as miles_and_more.link_template.
+    link_template: str = ""
+    label: str = ""  # short name on the Book button; empty = the source id
+
+    @model_validator(mode="after")
+    def _check_template(self) -> Program:
+        bad = template_fields(self.link_template) - LINK_PLACEHOLDERS
+        if bad:
+            raise ValueError(
+                f"link_template: unknown placeholder {sorted(bad)}; use {sorted(LINK_PLACEHOLDERS)}"
+            )
+        return self
+
+
 class Config(_Model):
     source: str = "lufthansa"
+    # Per-program overrides, keyed by seats.aero source id. The top-level `source` falls back to
+    # mile_cost_eur_cents and miles_and_more.link_template when it has no entry here.
+    programs: dict[str, Program] = {}
     # IATA codes of Miles & More carriers that price awards dynamically (no chart). Everything
     # else on the program is a fixed partner chart. The list has grown before: keep it current.
     dynamic_airlines: list[str] = ["LH", "LX", "OS", "CL", "4Y", "EN", "WK"]
@@ -281,6 +303,24 @@ class Config(_Model):
         if len(set(names)) != len(names):
             raise ValueError("trips: names must be unique")
         return self
+
+    def mile_cents(self, source: str | None) -> float:
+        """Euro cents one mile of `source` costs you. No source means the default program."""
+        program = self.programs.get(source or self.source)
+        return (program.mile_cost_eur_cents if program else None) or self.mile_cost_eur_cents
+
+    def link_template_for(self, source: str | None) -> str:
+        program = self.programs.get(source or self.source)
+        if program and program.link_template:
+            return program.link_template
+        return self.miles_and_more.link_template if (source or self.source) == self.source else ""
+
+    def program_label(self, source: str | None) -> str:
+        key = source or self.source
+        program = self.programs.get(key)
+        if program and program.label:
+            return program.label
+        return "M&M" if key == "lufthansa" else key
 
     def trip_cabins(self, trip: TripProfile) -> list[str]:
         return list(trip.cabins or self.cabins)

@@ -219,6 +219,23 @@ def _backfill_observations(store: Store) -> int:
     return backfill_observations(store)
 
 
+# Which seats.aero program each flight came from. Everything stored before this was Miles & More.
+SOURCE_TABLES = ("observations", "current_offers", "results")
+SOURCE_COLUMNS = "\n".join(f"ALTER TABLE {t} ADD COLUMN source TEXT;" for t in SOURCE_TABLES)
+
+
+def _add_source_columns(store: Store) -> None:
+    """Migration 4. A column may already exist (a database rebuilt from the newer schema), so each
+    is checked first; SQLite has no ADD COLUMN IF NOT EXISTS."""
+    for table in SOURCE_TABLES:
+        if store.postgres:
+            store.conn.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS source TEXT")
+        elif "source" not in {r[1] for r in store.conn.execute(f"PRAGMA table_info({table})")}:
+            store.conn.execute(f"ALTER TABLE {table} ADD COLUMN source TEXT")
+        store.conn.execute(f"UPDATE {table} SET source = 'lufthansa' WHERE source IS NULL")
+    store.conn.commit()
+
+
 VERSION_TABLE = "CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)"
 
 # (version, DDL script or a function(store) for data migrations). Append only; never edit one that
@@ -227,6 +244,7 @@ MIGRATIONS: list[tuple[int, str | Callable[[Store], object]]] = [
     (1, SCHEMA),
     (2, OBSERVATIONS_SCHEMA),
     (3, _backfill_observations),
+    (4, _add_source_columns),
 ]
 
 
@@ -239,7 +257,7 @@ def pg_ddl(sql: str) -> str:
 
 def pg_schema() -> str:
     """The whole schema in Postgres types."""
-    return pg_ddl(SCHEMA + OBSERVATIONS_SCHEMA)
+    return pg_ddl(SCHEMA + OBSERVATIONS_SCHEMA + SOURCE_COLUMNS)
 
 
 def utcnow() -> datetime:

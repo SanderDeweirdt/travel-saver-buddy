@@ -20,7 +20,10 @@ from mmscan.offers import load_current
 from mmscan.scoring import DEAL, WORTH, Scored, percentile
 from mmscan.store import Store
 
-DISCLAIMER = "Cached data. Confirm price and seats on miles-and-more.com before acting."
+DISCLAIMER = (
+    "Cached data. Confirm price and seats on miles-and-more.com (or the program's own site) "
+    "before acting."
+)
 STALE_HOURS = 48
 GREEN = PatternFill("solid", fgColor="C6EFCE")
 AMBER = PatternFill("solid", fgColor="FFEB9C")
@@ -101,7 +104,7 @@ def row_values(s: Scored, cfg: Config, now: datetime) -> list:
     flags = [
         name for name, on in (("chart_rate", s.chart_rate), ("ceiling_good", s.ceiling_good)) if on
     ]
-    miles_cost = None if s.miles is None else round(s.miles * cfg.mile_cost_eur_cents / 100, 2)
+    miles_cost = None if s.miles is None else round(s.miles * cfg.mile_cents(s.source) / 100, 2)
     return [
         s.verdict,
         s.change or None,

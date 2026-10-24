@@ -14,7 +14,7 @@ from mmscan.offers import load_current
 from mmscan.scoring import Scored
 from mmscan.store import Store
 
-Key = tuple[str | None, str | None, str, str]  # origin, destination, cabin, "fixed" | "dynamic"
+Key = tuple[str | None, str | None, str, str, str | None]  # + "fixed" | "dynamic", program
 
 
 @dataclass(frozen=True)
@@ -30,7 +30,7 @@ def price_group(cfg: Config, carriers: str | None) -> str:
 
 
 def baseline_key(cfg: Config, s: Scored) -> Key:
-    return (s.origin, s.destination, s.cabin, price_group(cfg, s.carriers))
+    return (s.origin, s.destination, s.cabin, price_group(cfg, s.carriers), s.source)
 
 
 def build_baselines(samples: list[Scored], cfg: Config) -> dict[Key, Baseline]:

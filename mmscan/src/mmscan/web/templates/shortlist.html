@@ -76,7 +76,7 @@
   <td data-label="Date" class="nowrap">{{ s.date }}</td>
   <td data-label="Route" class="route"><a href="/route/{{ s.origin }}/{{ s.destination }}/{{ s.cabin }}">{{ s.origin }}→{{ s.destination }}</a></td>
   <td data-label="Cabin">{{ s.cabin }}</td>
-  <td data-label="Miles" class="n">{{ "{:,}".format(s.miles) if s.miles is not none else "–" }}</td>
+  <td data-label="Miles" class="n">{{ "{:,}".format(s.miles) if s.miles is not none else "–" }} <span class="muted">{{ program_label(s.source) }}</span></td>
   <td data-label="Fees €" class="n">{{ s.fees_eur|money }}{% if s.fee_estimated %}<span class="muted" title="Fee estimated"> ~</span>{% endif %}</td>
   <td data-label="Total €" class="n"><span>
     <span class="total">{{ s.total_eur|money }}</span>
@@ -96,7 +96,7 @@
     {% if s.ceiling_good %}<span class="chip good">ceiling_good</span>{% endif %}
     {% if r.age_h is not none %}<span class="chip {{ 'bad' if r.age_h > 48 }}">{{ "%.0f"|format(r.age_h) }}h old{{ " (stale)" if r.age_h > 48 }}</span>{% endif %}
   </span></td>
-  <td data-label="">{% set link = mm_link(s) %}{% if link %}<a class="btn sm primary" href="{{ link }}" rel="noopener noreferrer" target="_blank" title="Open on miles-and-more.com to check this price">M&amp;M ↗</a>{% endif %}</td>
+  <td data-label="">{% set link = mm_link(s) %}{% if link %}<a class="btn sm primary" href="{{ link }}" rel="noopener noreferrer" target="_blank" title="Open on the {{ program_label(s.source) }} site to check this price">{{ program_label(s.source) }} ↗</a>{% endif %}</td>
 </tr>
 {% else %}<tr><td class="empty" colspan="11">Nothing matches.</td></tr>{% endfor %}
 </tbody></table></div></div>

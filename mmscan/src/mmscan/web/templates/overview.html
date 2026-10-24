@@ -44,7 +44,7 @@
   <td data-label="Verdict" class="verdict">{% if d.verdict %}<span class="tag {{ 'deal' if d.verdict in ('Great deal', 'Good deal') else 'worth' if d.verdict == 'Marginal' else 'over' }}">{{ d.verdict }}</span>{% else %}<span class="muted">Building history</span>{% endif %}</td>
   <td data-label="Route" class="route"><a href="/route/{{ s.origin }}/{{ s.destination }}/{{ s.cabin }}">{{ s.origin }}→{{ s.destination }}</a> <span class="muted">{{ s.cabin }}{% if s.carriers %} · {{ s.carriers }}{% endif %}</span></td>
   <td data-label="Date" class="nowrap">{{ s.date }}</td>
-  <td data-label="Miles" class="n">{{ "{:,}".format(d.party_miles) }}</td>
+  <td data-label="Miles" class="n">{{ "{:,}".format(d.party_miles) }} <span class="muted">{{ program_label(d.s.source) }}</span></td>
   <td data-label="Fees €" class="n">{{ d.party_fees|money }}</td>
   <td data-label="With miles €" class="n"><b>{{ d.party_total|money }}</b></td>
   <td data-label="Usual €" class="n muted">{{ d.party_usual|money if d.party_usual is not none else "–" }}</td>
@@ -56,7 +56,7 @@
     {% if d.age_h is not none and d.age_h > 48 %}<span class="chip bad" data-tip="Data older than 48 hours">Stale</span>{% endif %}
     {% if not s.seats %}<span class="chip" data-tip="seats.aero reports no seat count">Seats ?</span>{% endif %}
   </span></td>
-  <td data-label="Book">{% set link = mm_link(s, pax) %}{% if link %}<a class="btn sm" href="{{ link }}" rel="noopener noreferrer" target="_blank" title="Open on miles-and-more.com to check this price">M&amp;M ↗</a>{% else %}<span class="muted">–</span>{% endif %}</td>
+  <td data-label="Book">{% set link = mm_link(s, pax) %}{% if link %}<a class="btn sm" href="{{ link }}" rel="noopener noreferrer" target="_blank" title="Open on the {{ program_label(s.source) }} site to check this price">{{ program_label(s.source) }} ↗</a>{% else %}<span class="muted">–</span>{% endif %}</td>
 </tr>
 {% else %}<tr><td class="empty" colspan="10">Nothing matches these filters.</td></tr>{% endfor %}
 </tbody></table></div></div>

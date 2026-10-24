@@ -8,8 +8,22 @@ min_seats: 2
 # This list has grown before; Brussels, Eurowings and ITA are the likely next. IATA codes.
 dynamic_airlines: [LH, LX, OS, CL, 4Y, EN, WK]  # WK (Edelweiss): reported by one source, verify
 
-# What one mile costs you, in euro cents. Turns miles into euros.
+# What one mile costs you, in euro cents. Turns miles into euros. This is the Miles & More value
+# (the top-level `source`); other programs take their own value from `programs` below.
 mile_cost_eur_cents: 1.16
+
+# The other Star Alliance programs scanned for flights within Asia, keyed by seats.aero source id.
+# mile_cost_eur_cents is a rough market value per mile, a starting point: set what a mile of each
+# really cost you. link_template is optional (same placeholders as miles_and_more); without one a
+# row links only when seats.aero stored a booking link for it. label is the Book button's text.
+programs:
+  singapore:    {label: KrisFlyer,   mile_cost_eur_cents: 1.5}
+  aeroplan:     {label: Aeroplan,    mile_cost_eur_cents: 1.4}
+  united:       {label: United,      mile_cost_eur_cents: 1.3}
+  lifemiles:    {label: LifeMiles,   mile_cost_eur_cents: 1.3}
+  connectmiles: {label: ConnectMiles, mile_cost_eur_cents: 1.3}
+  turkish:      {label: Turkish,     mile_cost_eur_cents: 1.2}
+  ethiopian:    {label: Ethiopian,   mile_cost_eur_cents: 1.0}
 
 # seats.aero reports Miles & More fees in USD. Fixed rate, euro per dollar; update it now and
 # then. Fees run 30-700 EUR, so a few percent of drift barely moves a total. Without it, USD
@@ -28,7 +42,7 @@ region_pairs:
   # nothing here, so ask the Star Alliance partners' own programs (one call per source).
   - origin: Asia
     destination: Asia
-    sources: [singapore, aeroplan, united, lifemiles, turkish, ethiopian]
+    sources: [singapore, aeroplan, united, lifemiles, connectmiles, turkish, ethiopian]
 
 watchlist:
   origins: [MUC, FRA, ZRH, VIE, BRU, DUS, HAM, BER, GVA, AMS, CDG]

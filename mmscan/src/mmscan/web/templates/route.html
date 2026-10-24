@@ -41,7 +41,7 @@
 <tbody>{% for r in rows %}{% set s = r.s %}<tr>
 <td data-label="Verdict"><span class="tag {{ 'deal' if s.verdict == 'Deal' else 'worth' if s.verdict == 'Worth a look' }}">{{ s.verdict }}</span>{% if r.pricing != "fixed" %} <span class="chip warn" data-tip="Dynamic price: cached miles can be far below the live price">⚠ Unverified</span>{% endif %}</td>
 <td data-label="Date">{{ s.date }}</td>
-<td data-label="Miles" class="n">{{ "{:,}".format(s.miles) if s.miles is not none else "–" }}</td>
+<td data-label="Miles" class="n">{{ "{:,}".format(s.miles) if s.miles is not none else "–" }} <span class="muted">{{ program_label(s.source) }}</span></td>
 <td data-label="Fees €" class="n">{{ s.fees_eur|money }}</td>
 <td data-label="Total €" class="n"><span class="total">{{ s.total_eur|money }}</span></td>
 <td data-label="Usual €" class="n muted">{{ r.usual|money if r.usual else "–" }}</td>

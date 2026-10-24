@@ -114,6 +114,7 @@ class Scored:
     arrives_at: str | None
     booking_link: str | None
     updated_at: str | None
+    source: str | None = None  # seats.aero program; None on rows from before programs were stored
     route_good: bool | None = None
     destination_good: bool | None = None
     ceiling_good: bool | None = None
@@ -138,7 +139,7 @@ class Scored:
 
     @property
     def key(self) -> tuple:
-        return (self.origin, self.destination, self.date, self.cabin)
+        return (self.origin, self.destination, self.date, self.cabin, self.source)
 
 
 TRANSIENT = ("fees_minor", "currency", "first_seen", "last_seen")
@@ -167,8 +168,10 @@ def _offer_row(avail: dict, row, cabin: str, offer, trips, link, cfg: Config) ->
         destination_region=route.get("DestinationRegion"),
         updated_at=row["updated_at"],
         booking_link=link,
+        source=row["source"] or avail.get("Source"),
     )
-    picked = pick_trip(trips, cabin, cfg.min_seats, cfg.mile_cost_eur_cents, cfg.usd_to_eur)
+    cents = cfg.mile_cents(base["source"])
+    picked = pick_trip(trips, cabin, cfg.min_seats, cents, cfg.usd_to_eur)
     if picked:
         trip, seats_ok = picked
         fees = fees_eur(trip.taxes_minor, trip.currency, cfg.usd_to_eur)
@@ -177,7 +180,7 @@ def _offer_row(avail: dict, row, cabin: str, offer, trips, link, cfg: Config) ->
             miles=trip.miles,
             fees_eur=fees,
             fee_estimated=False,
-            total_eur=total_cost_eur(trip.miles, fees, cfg.mile_cost_eur_cents),
+            total_eur=total_cost_eur(trip.miles, fees, cents),
             seats=trip.seats,
             stops=trip.stops,
             carriers=trip.carriers,
@@ -202,7 +205,7 @@ def _offer_row(avail: dict, row, cabin: str, offer, trips, link, cfg: Config) ->
         miles=offer.miles,
         fees_eur=fees,
         fee_estimated=not priced,
-        total_eur=total_cost_eur(offer.miles, fees, cfg.mile_cost_eur_cents) if priced else None,
+        total_eur=total_cost_eur(offer.miles, fees, cents) if priced else None,
         seats=offer.seats,
         stops=None,
         carriers=offer.airlines,
@@ -268,7 +271,8 @@ def current_rows(store: Store, cfg: Config, run_id: int) -> tuple[list[Scored], 
     warnings: list[str] = []
     currencies: dict[str, int] = {}
     for row in store.conn.execute(
-        "SELECT id, updated_at, raw_json FROM availabilities WHERE run_id=? ORDER BY id", (run_id,)
+        "SELECT id, updated_at, source, raw_json FROM availabilities WHERE run_id=? ORDER BY id",
+        (run_id,),
     ).fetchall():
         avail = json.loads(row["raw_json"])
         if avail.get("TaxesCurrency") is not None:
@@ -307,11 +311,11 @@ def _group(samples: list[Scored], key) -> dict[tuple, list[float]]:
 
 
 def _route(s: Scored) -> tuple:
-    return (s.origin, s.destination, s.cabin)
+    return (s.origin, s.destination, s.cabin, s.source)
 
 
 def _dest(s: Scored) -> tuple:
-    return (s.origin_region, s.destination, s.cabin)
+    return (s.origin_region, s.destination, s.cabin, s.source)
 
 
 def score_rows(
@@ -322,7 +326,6 @@ def score_rows(
     prev: dict[tuple, float | None] | None = None,
 ) -> list[Scored]:
     fares = fares or NoFares()
-    cents = cfg.mile_cost_eur_cents
     live = [s for s in current if not s.expired]
 
     # Latest observation per (origin, destination, date, cabin) wins (builder call 7).
@@ -339,7 +342,7 @@ def score_rows(
             fees = actual.get(_route(s))
             if fees:
                 s.fees_eur = round(statistics.median(fees), 2)
-                s.total_eur = total_cost_eur(s.miles, s.fees_eur, cents)
+                s.total_eur = total_cost_eur(s.miles, s.fees_eur, cfg.mile_cents(s.source))
 
     samples = list(latest.values())
     by_route = {k: sorted(v) for k, v in _group(samples, _route).items()}
@@ -414,7 +417,7 @@ def score_run(
     from mmscan.offers import rebuild_current, record_observations
 
     current, warnings = current_rows(store, cfg, run_id)
-    record_observations(store, run_id, current, now)
+    record_observations(store, run_id, current, now, cfg.source)
     scored = rebuild_current(store, cfg, run_id, now, fares)
     warnings += list(getattr(fares, "warnings", []) or [])
     return scored, warnings

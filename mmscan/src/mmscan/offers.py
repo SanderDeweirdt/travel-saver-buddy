@@ -44,8 +44,11 @@ PREVIOUS = (
 )
 
 
-def flight_key(s: Scored) -> str:
-    return f"{s.origin}|{s.destination}|{s.date}|{s.cabin}"
+def flight_key(s: Scored, default_source: str = "lufthansa") -> str:
+    """The default program keeps the original key, so history from before programs were stored
+    still lines up; any other program's flights are separate keys with its id appended."""
+    key = f"{s.origin}|{s.destination}|{s.date}|{s.cabin}"
+    return key if s.source in (None, default_source) else f"{key}|{s.source}"
 
 
 def _same_state(old, s: Scored) -> bool:
@@ -66,6 +69,7 @@ def _same_state(old, s: Scored) -> bool:
 
 _DETAIL = (
     "availability_id",
+    "source",
     "origin_region",
     "destination_region",
     "seats",
@@ -85,7 +89,7 @@ def _detail_values(s: Scored) -> tuple:
 
 
 def record_observations(
-    store: Store, run_id: int, rows: list[Scored], now: datetime
+    store: Store, run_id: int, rows: list[Scored], now: datetime, default_source: str = "lufthansa"
 ) -> dict[str, int]:
     """Fold a run's scored rows into `observations`. A flight whose price state is unchanged gets
     `last_seen` (and its details) refreshed; a changed one gets a new row, or, when the run itself
@@ -97,7 +101,7 @@ def record_observations(
     for s in rows:
         if s.miles is None or not s.date:
             continue
-        key = flight_key(s)
+        key = flight_key(s, default_source)
         old = latest.get(key)
         if old is not None and _same_state(old, s):
             counts["unchanged"] += 1
@@ -159,7 +163,7 @@ def _to_scored(r, cfg: Config) -> Scored:
     total = (
         None
         if fees is None or miles is None
-        else total_cost_eur(miles, fees, cfg.mile_cost_eur_cents)
+        else total_cost_eur(miles, fees, cfg.mile_cents(r["source"]))
     )
     seats = r["seats"]
     return Scored(
@@ -181,6 +185,7 @@ def _to_scored(r, cfg: Config) -> Scored:
         departs_at=r["departs_at"],
         arrives_at=r["arrives_at"],
         booking_link=r["booking_link"],
+        source=r["source"],
         updated_at=r["source_updated_at"],
         seats_ok=seats is None or seats >= cfg.min_seats,
         direct=None if r["direct"] is None else bool(r["direct"]),
@@ -222,7 +227,7 @@ def _previous_totals(
     previous = {r["key"]: r for r in store.conn.execute(PREVIOUS).fetchall()}
     prev: dict[tuple, float | None] = {}
     for r in rows:
-        s_key = (r["origin"], r["destination"], r["date"], r["cabin"])
+        s_key = (r["origin"], r["destination"], r["date"], r["cabin"], r["source"])
         if r["run_id"] != run_id:
             prev[s_key] = _total(r, cfg)
         elif r["key"] in previous:
@@ -243,7 +248,7 @@ def rebuild_current(
     current = [_to_scored(r, cfg) for r in rows]
     prev = _previous_totals(store, cfg, rows, run_id)
     scored = score_rows(current, [], cfg, fares, prev)
-    keys = {s.key: flight_key(s) for s in scored}
+    keys = {s.key: flight_key(s, cfg.source) for s in scored}
     with store.conn:
         store.conn.execute("DELETE FROM current_offers")
         store.conn.executemany(

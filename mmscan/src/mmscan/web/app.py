@@ -70,6 +70,7 @@ def create_app(settings: WebSettings) -> FastAPI:
     templates.env.globals["mm_link"] = lambda s, pax=1: mm_link(cfg, s, pax)
     limiter = LoginLimiter()
     cfg: Config = load_config(settings.config_path)
+    templates.env.globals["program_label"] = cfg.program_label
     boot = Store(settings.database)  # create the schema once; request handlers only read
     try:
         ensure_current(
@@ -204,6 +205,11 @@ def create_app(settings: WebSettings) -> FastAPI:
             cfg_good=f"{cfg.savings.good_pct:g}",
             cfg_great=f"{cfg.savings.great_pct:g}",
             mile_ct=cfg.mile_cost_eur_cents,
+            program_cents={
+                cfg.program_label(k): v.mile_cost_eur_cents
+                for k, v in cfg.programs.items()
+                if v.mile_cost_eur_cents
+            },
         )
 
     @app.get("/overview", response_class=HTMLResponse, dependencies=[Depends(require_login)])
