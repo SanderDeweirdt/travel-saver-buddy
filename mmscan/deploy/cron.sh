@@ -1,6 +1,6 @@
 #!/bin/sh
 # Railway cron entry point (schedule "7 * * * *", UTC).
-# Every run: `mmscan watch`. At 05 UTC also `mmscan run` (the full daily scan).
+# Every run: `mmscan watch`. At 11 UTC also `mmscan run` (the full daily scan).
 # A failing command does not stop the next one; the exit code is non-zero if any failed.
 # Railway cron services must exit, so each command is time-boxed.
 
@@ -10,7 +10,7 @@ export MMSCAN_REPORT_DIR="$report_dir"   # reports are built on demand by the da
 
 timeout 20m mmscan watch || rc=1
 
-if [ "$(date -u +%H)" = "05" ]; then
+if [ "$(date -u +%H)" = "11" ]; then
     timeout 40m mmscan run || rc=1
 fi
 

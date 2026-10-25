@@ -32,7 +32,7 @@ web service. Both services build the same image from `mmscan/Dockerfile`.
      without it every scan logs a "notify failed" warning and posts nothing (the scan itself still
      succeeds)
 
-Each run does `mmscan watch`; at 05 UTC it also does `mmscan run` (full daily scan: all `region_pairs`,
+Each run does `mmscan watch`; at 11 UTC it also does `mmscan run` (full daily scan: all `region_pairs`,
 including Asia to Asia, which the hourly watch does not read).
 
 ## 3. Dashboard service (web)
@@ -101,7 +101,7 @@ Secrets never go in it.
 - [ ] Preview the Slack message: `railway run --service scanner mmscan notify --dry-run` (prints it,
       sends nothing). Without `--dry-run` it posts for real.
 - [ ] The dashboard shows the run under **Runs** and rows on the **Shortlist** (a watch run only
-      covers the watchlist; the 05 UTC run fills in the full picture).
+      covers the watchlist; the 11 UTC run fills in the full picture).
 - [ ] **Quota** shows calls today below the cap.
 - [ ] **Data & alerts** shows the scanner as Healthy and the USD rate as checked within 30 days (`usd_to_eur_date`).
 
