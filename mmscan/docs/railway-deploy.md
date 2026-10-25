@@ -23,7 +23,7 @@ web service. Both services build the same image from `mmscan/Dockerfile`.
    - **Source, Root Directory**: `mmscan`
    - **Build, Builder**: Dockerfile (path `Dockerfile`; auto-detected)
    - **Deploy, Custom Start Command**: `sh deploy/cron.sh`
-   - **Deploy, Cron Schedule**: `7 * * * *` (UTC, hourly at :07; Railway needs at least 5 minutes between runs)
+   - **Deploy, Cron Schedule**: `7 11 * * *` (UTC, daily at 11:07)
    - **Deploy, Restart Policy**: Never (a failed run must not retry and spend API calls)
 3. Variables (Variables tab):
    - `DATABASE_URL` = `${{Postgres.DATABASE_URL}}` (reference variable, pick it from the dropdown)
@@ -32,8 +32,9 @@ web service. Both services build the same image from `mmscan/Dockerfile`.
      without it every scan logs a "notify failed" warning and posts nothing (the scan itself still
      succeeds)
 
-Each run does `mmscan watch`; at 11 UTC it also does `mmscan run` (full daily scan: all `region_pairs`,
-including Asia to Asia, which the hourly watch does not read).
+Each run does `mmscan run` (the full daily scan: all `region_pairs`, including Asia to Asia, plus
+the watchlist). There is no hourly `mmscan watch`; `cron.sh` also checks the hour, so the full scan
+runs only at 11 UTC even if the schedule is ever set to hourly.
 
 ## 3. Dashboard service (web)
 
@@ -101,16 +102,16 @@ Secrets never go in it.
 - [ ] Preview the Slack message: `railway run --service scanner mmscan notify --dry-run` (prints it,
       sends nothing). Without `--dry-run` it posts for real.
 - [ ] The dashboard shows the run under **Runs** and rows on the **Shortlist** (a watch run only
-      covers the watchlist; the 11 UTC run fills in the full picture).
+      covers the watchlist; the daily 11 UTC run is the full picture).
 - [ ] **Quota** shows calls today below the cap.
 - [ ] **Data & alerts** shows the scanner as Healthy and the USD rate as checked within 30 days (`usd_to_eur_date`).
 
 ## Risks
 
-- **Cost:** Railway bills by usage. The cron service runs for a few minutes per hour; the
+- **Cost:** Railway bills by usage. The cron service runs for a few minutes a day; the
   dashboard and Postgres run all day. Check the usage page after a few days.
 - **API cap:** `api.daily_call_cap` (300) is counted from the `api_calls` table, so it holds across
-  runs. Hourly `watch` costs 2 calls (48 a day) plus the daily `run`.
+  runs. The daily `run` costs about 50 calls.
 - **seats.aero terms:** personal, non-commercial use; do not redistribute data. The dashboard sits
   behind a login on every route except `/healthz`; keep the password private and do not share the
   downloads.

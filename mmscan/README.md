@@ -187,18 +187,16 @@ If the tool runs in a cloud environment with a network allowlist, add
 
 ## Getting told fast: schedule
 
-seats.aero has no webhooks, and its cached data refreshes every few hours,
-so polling more often than hourly finds little new. Two schedules cover it:
+seats.aero has no webhooks, so scanning is polling. One daily schedule covers every region pair:
 
 ```cron
-# Hourly: watchlist only, posts new deals to Slack (2 calls). Asia to Asia is not in it.
-7 * * * *  cd /path/to/mmscan && uv run mmscan watch >> data/watch.log 2>&1
-# Daily: all three region pairs, fees for candidates, full report (about 5 + pages + 150 calls).
-37 5 * * * cd /path/to/mmscan && uv run mmscan run   >> data/run.log 2>&1
+# Daily: all region pairs, fees for candidates, full report (about 50 calls).
+7 11 * * * cd /path/to/mmscan && uv run mmscan run >> data/run.log 2>&1
 ```
 
-That is roughly 48 + 160 calls a day, inside the 300 `api.daily_call_cap`
-and the 1,000-call Pro allowance.
+That is roughly 50 calls a day, inside the 300 `api.daily_call_cap` and the 1,000-call Pro
+allowance. `mmscan watch` (watchlist only, 2 calls) still exists if you want an extra scan between
+runs, but nothing schedules it.
 
 New and Cheaper compare each route, date and cabin with the price it had
 before the run that changed it, not with one previous run. So hourly watch
