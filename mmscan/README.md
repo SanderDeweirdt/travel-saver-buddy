@@ -62,7 +62,7 @@ keeps what it stored, is marked `partial`, and exits non-zero.
 
 Reports go to `reports/mmscan_YYYY-MM-DD_HHMM.xlsx` (sheets Shortlist, All
 results, Route stats, Run log) and `..._shortlist.csv`. The database is
-`data/mmscan.db`; runs, calls and prices not seen for 180 days are deleted at the start of each
+`data/mmscan.db`; runs, calls and prices not seen for 180 days are deleted (per-run availabilities and results after 14 days) at the start of each
 scan.
 
 ## Tuning `config.yaml`
