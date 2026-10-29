@@ -469,11 +469,20 @@ class Store:
 
     # Retention
 
-    def purge_older_than(self, days: int = 180, now: datetime | None = None) -> None:
-        cutoff = ((now or utcnow()) - timedelta(days=days)).isoformat()
-        old_runs = "SELECT id FROM runs WHERE started_at < ?"
+    def purge_older_than(
+        self, days: int = 180, now: datetime | None = None, detail_days: int = 14
+    ) -> None:
+        """Drop old history. The per-run copies (`availabilities` with their raw JSON, `results`)
+        are only read for the latest run; the price history lives in `observations`. They go after
+        `detail_days` so the database does not fill up; the rest goes after `days`."""
+        now = now or utcnow()
+        cutoff = (now - timedelta(days=days)).isoformat()
+        detail_cutoff = (now - timedelta(days=min(days, detail_days))).isoformat()
+        stale_runs = "SELECT id FROM runs WHERE started_at < ?"
         for table in ("availabilities", "results"):
-            self.conn.execute(f"DELETE FROM {table} WHERE run_id IN ({old_runs})", (cutoff,))
+            self.conn.execute(
+                f"DELETE FROM {table} WHERE run_id IN ({stale_runs})", (detail_cutoff,)
+            )
         self.conn.execute("DELETE FROM runs WHERE started_at < ?", (cutoff,))
         self.conn.execute("DELETE FROM api_calls WHERE ts < ?", (cutoff,))
         self.conn.execute("DELETE FROM observations WHERE last_seen < ?", (cutoff,))

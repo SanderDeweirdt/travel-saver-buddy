@@ -102,3 +102,15 @@ def test_migrations_upgrade_a_pre_migration_database(tmp_path):
     assert store.schema_version() >= 2
     assert store.conn.execute("SELECT count(*) FROM runs").fetchone()[0] == 1  # data kept
     assert store.conn.execute("SELECT count(*) FROM observations").fetchone()[0] == 0
+
+
+def test_purge_drops_per_run_detail_after_two_weeks_but_keeps_the_run(tmp_path):
+    store = Store(tmp_path / "db.sqlite")
+    mid = store.start_run("scan", "{}", now=NOW - timedelta(days=30))
+    store.conn.execute(
+        "INSERT INTO availabilities(run_id, id, origin_kind, raw_json) VALUES (?,?,?,?)",
+        (mid, "a", "region", "{}"),
+    )
+    store.purge_older_than(180, now=NOW)
+    assert store.conn.execute("SELECT count(*) FROM runs").fetchone()[0] == 1
+    assert store.conn.execute("SELECT count(*) FROM availabilities").fetchone()[0] == 0
