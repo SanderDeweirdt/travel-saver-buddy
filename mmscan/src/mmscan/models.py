@@ -105,14 +105,21 @@ def parse_trip(d: dict) -> Trip:
     )
 
 
-def fees_eur(taxes_minor: int, currency: str, usd_to_eur: float | None = None) -> float | None:
+def fees_eur(
+    taxes_minor: int,
+    currency: str,
+    usd_to_eur: float | None = None,
+    rates: dict[str, float] | None = None,
+) -> float | None:
     """Fees in euros from minor units. Empty currency is taken as EUR (builder call 3). The live
-    API reports lufthansa fees in USD, converted at the configured fixed rate. Anything else, or
-    USD without a rate, is unpriced."""
+    API reports lufthansa fees in USD, converted at the configured fixed rate; other currencies
+    (Aeroplan reports CAD) use `rates`, euro per unit. Anything else, or a currency without a
+    rate, is unpriced."""
     if currency in ("EUR", ""):
         return taxes_minor / 100
-    if currency == "USD" and usd_to_eur:
-        return round(taxes_minor / 100 * usd_to_eur, 2)
+    rate = usd_to_eur if currency == "USD" else (rates or {}).get(currency)
+    if rate:
+        return round(taxes_minor / 100 * rate, 2)
     return None
 
 

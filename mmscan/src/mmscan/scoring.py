@@ -60,7 +60,12 @@ def total_cost_eur(miles: int, fees: float, cents: float) -> float:
 
 
 def pick_trip(
-    trips: list[Trip], cabin: str, min_seats: int, cents: float, usd_to_eur: float | None = None
+    trips: list[Trip],
+    cabin: str,
+    min_seats: int,
+    cents: float,
+    usd_to_eur: float | None = None,
+    rates: dict[str, float] | None = None,
 ) -> tuple[Trip, bool] | None:
     """Cheapest priced trip in the cabin that meets min_seats (unknown seats count as meeting,
     builder call 4); otherwise the cheapest priced one with seats_ok False."""
@@ -69,13 +74,13 @@ def pick_trip(
         for t in trips
         if t.cabin == cabin
         and t.miles > 0
-        and fees_eur(t.taxes_minor, t.currency, usd_to_eur) is not None
+        and fees_eur(t.taxes_minor, t.currency, usd_to_eur, rates) is not None
     ]
     if not priced:
         return None
 
     def key(t: Trip) -> tuple:
-        fee = fees_eur(t.taxes_minor, t.currency, usd_to_eur)
+        fee = fees_eur(t.taxes_minor, t.currency, usd_to_eur, rates)
         return (total_cost_eur(t.miles, fee, cents), t.stops, t.id)
 
     meets = [t for t in priced if t.seats is None or t.seats >= min_seats]
@@ -171,10 +176,10 @@ def _offer_row(avail: dict, row, cabin: str, offer, trips, link, cfg: Config) ->
         source=row["source"] or avail.get("Source"),
     )
     cents = cfg.mile_cents(base["source"])
-    picked = pick_trip(trips, cabin, cfg.min_seats, cents, cfg.usd_to_eur)
+    picked = pick_trip(trips, cabin, cfg.min_seats, cents, cfg.usd_to_eur, cfg.fx_to_eur)
     if picked:
         trip, seats_ok = picked
-        fees = fees_eur(trip.taxes_minor, trip.currency, cfg.usd_to_eur)
+        fees = fees_eur(trip.taxes_minor, trip.currency, cfg.usd_to_eur, cfg.fx_to_eur)
         return Scored(
             **base,
             miles=trip.miles,
@@ -193,12 +198,14 @@ def _offer_row(avail: dict, row, cabin: str, offer, trips, link, cfg: Config) ->
             currency=trip.currency,
         )
     # No trip details: the summary carries the cheapest trip's taxes per cabin (live finding).
+    # A fee of 0 is free (Singapore and Ethiopian report 0 on every flight); only a missing one
+    # leaves the flight unpriced.
     taxes = avail.get(f"{CABIN_PREFIX[cabin]}TotalTaxes")
     fees = None
     minor, currency = None, None
-    if isinstance(taxes, int) and not isinstance(taxes, bool) and taxes > 0:
+    if isinstance(taxes, int) and not isinstance(taxes, bool) and taxes >= 0:
         minor, currency = taxes, avail.get("TaxesCurrency") or ""
-        fees = fees_eur(taxes, currency, cfg.usd_to_eur)
+        fees = fees_eur(taxes, currency, cfg.usd_to_eur, cfg.fx_to_eur)
     priced = fees is not None
     return Scored(
         **base,
@@ -260,7 +267,14 @@ def _currency_warnings(currencies: dict[str, int], cfg: Config) -> list[str]:
                 f"they are unpriced"
             )
     for cur, n in sorted(currencies.items()):
-        if cur not in ("", "EUR", "USD"):
+        if cur in ("", "EUR", "USD"):
+            continue
+        if cur in cfg.fx_to_eur:
+            out.append(
+                f"{n} objects report fees in {cur}; converted at fx_to_eur.{cur}="
+                f"{cfg.fx_to_eur[cur]}"
+            )
+        else:
             out.append(f"{n} objects report fees in {cur}; they are unpriced")
     return out
 

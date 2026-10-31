@@ -72,6 +72,7 @@ scan.
 | `source`, `cabins`, `min_seats` | Program, cabins read from each result, seats you need. Fewer seats are kept but flagged. |
 | `mile_cost_eur_cents` | What one mile costs you; turns miles into euros for the total cost. |
 | `usd_to_eur` | Fixed rate for fees: seats.aero reports Miles & More fees in USD. Update it now and then. Without it the Shortlist stays empty. |
+| `fx_to_eur` | Fixed euro-per-unit rates for fees in other currencies (Aeroplan reports CAD). A currency without a rate stays unpriced. |
 | `date_window` | Days from today to scan, recalculated each run. |
 | `region_pairs` | Continent-level pairs for Bulk Availability: Europe to Asia, Asia to Europe and Asia to Asia. They set what the Best deals and All routes pages cover. Asia to Asia is read by the daily `run` only, not the hourly `watch`. |
 | `watchlist` | Airports searched with trips included, so their fees are free (11 European origins, 10 Southeast Asian destinations by default). `both_directions` adds the return direction. More airports do not add calls: each direction is one search. |

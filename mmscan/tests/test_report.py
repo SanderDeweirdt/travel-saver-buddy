@@ -35,7 +35,9 @@ def build(tmp_path, default_config_dict, n=12):
             {},
         )
     # One unpriced result on the same route gets an estimated fee.
-    store.save_availability(run, avail("est", date="2026-12-30", business=40000), "region")
+    est = avail("est", date="2026-12-30", business=40000)
+    del est["JTotalTaxes"]  # a fee of 0 is free; a missing one is unknown
+    store.save_availability(run, est, "region")
     score_run(store, cfg, run, NOW)
     return store, cfg, run
 

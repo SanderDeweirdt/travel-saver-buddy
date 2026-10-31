@@ -59,8 +59,10 @@ def test_without_a_rate_usd_fees_stay_unpriced(tmp_path, default_config_dict):
     assert any("usd_to_eur is not set" in w for w in warnings)
 
 
-def test_zero_summary_taxes_mean_unknown_not_free(tmp_path, default_config_dict):
-    store, run = _store(tmp_path, avail("a", business=55000))
+def test_missing_summary_taxes_mean_unknown(tmp_path, default_config_dict):
+    a = avail("a", business=55000)
+    del a["JTotalTaxes"]
+    store, run = _store(tmp_path, a)
     [r], _ = score_run(store, config(default_config_dict), run, NOW)
     assert r.total_eur is None and r.fee_estimated is True
 
@@ -163,3 +165,35 @@ def test_run_prices_from_summary_then_enriches_only_the_shortlist(
     assert rows["good"]["booking_link"] == "https://book.test/x"
     assert rows["pricey"]["verdict"] == "Skip" and rows["pricey"]["flight_numbers"] is None
     assert list((tmp_path / "reports").glob("*.xlsx"))
+
+
+def test_fees_eur_converts_other_currencies_at_their_fixed_rate():
+    assert fees_eur(10000, "CAD", 0.92, {"CAD": 0.66}) == 66.0
+    assert fees_eur(10000, "CAD", 0.92) is None
+    assert fees_eur(10000, "SGD", 0.92, {"CAD": 0.66}) is None
+
+
+def test_cad_fees_are_priced_with_a_rate(tmp_path, default_config_dict):
+    store, run = _store(
+        tmp_path, avail("a", business=55000, taxes={"business": 10000}, currency="CAD")
+    )
+    cfg = config(default_config_dict, fx_to_eur={"CAD": 0.66})
+    [r], warnings = score_run(store, cfg, run, NOW)
+    assert r.fees_eur == 66.0 and r.fee_estimated is False and r.total_eur is not None
+    assert any("fees in CAD; converted at fx_to_eur.CAD=0.66" in w for w in warnings)
+
+
+def test_cad_fees_stay_unpriced_without_a_rate(tmp_path, default_config_dict):
+    store, run = _store(
+        tmp_path, avail("a", business=55000, taxes={"business": 10000}, currency="CAD")
+    )
+    cfg = config(default_config_dict, fx_to_eur={})
+    [r], warnings = score_run(store, cfg, run, NOW)
+    assert r.total_eur is None and r.fee_estimated is True
+    assert any("fees in CAD; they are unpriced" in w for w in warnings)
+
+
+def test_a_zero_fee_is_free_not_unpriced(tmp_path, default_config_dict):
+    store, run = _store(tmp_path, avail("a", business=55000, taxes={"business": 0}))
+    [r], _ = score_run(store, config(default_config_dict), run, NOW)
+    assert r.fees_eur == 0 and r.fee_estimated is False and r.total_eur is not None

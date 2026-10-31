@@ -174,7 +174,7 @@ def _do_enrich(
         f"{stats.priced} priced, {stats.expired} expired, {stats.skipped_cached} already cached, "
         f"{stats.left_over} left for the next run."
     )
-    spread = fee_spread(store, cfg.usd_to_eur)
+    spread = fee_spread(store, cfg.usd_to_eur, cfg.fx_to_eur)
     if spread:
         typer.echo("Fee spread per route and cabin (EUR): n, min, median, max")
         for o, d, c, n, lo, med, hi in spread:

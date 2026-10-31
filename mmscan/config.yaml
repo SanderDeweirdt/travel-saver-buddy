@@ -21,7 +21,6 @@ programs:
   aeroplan:     {label: Aeroplan,    mile_cost_eur_cents: 1.4}
   united:       {label: United,      mile_cost_eur_cents: 1.3}
   lifemiles:    {label: LifeMiles,   mile_cost_eur_cents: 1.3}
-  connectmiles: {label: ConnectMiles, mile_cost_eur_cents: 1.3}
   turkish:      {label: Turkish,     mile_cost_eur_cents: 1.2}
   ethiopian:    {label: Ethiopian,   mile_cost_eur_cents: 1.0}
 
@@ -30,6 +29,10 @@ programs:
 # fees are unpriced and the Shortlist stays empty.
 usd_to_eur: 0.92
 usd_to_eur_date: "2026-10-12"   # update this whenever you update the rate; the dashboard warns after 30 days
+# Fixed euro per unit for the other currencies a program reports fees in. Aeroplan reports CAD.
+# An approximate rate (about 0.92 / 1.39); update it now and then.
+fx_to_eur:
+  CAD: 0.66
 
 date_window:
   start_offset_days: 0
@@ -42,7 +45,7 @@ region_pairs:
   # nothing here, so ask the Star Alliance partners' own programs (one call per source).
   - origin: Asia
     destination: Asia
-    sources: [singapore, aeroplan, united, lifemiles, connectmiles, turkish, ethiopian]
+    sources: [singapore, aeroplan, united, lifemiles, turkish, ethiopian]
 
 watchlist:
   origins: [MUC, FRA, ZRH, VIE, BRU, DUS, HAM, BER, GVA, AMS, CDG]

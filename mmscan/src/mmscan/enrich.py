@@ -126,7 +126,7 @@ def shortlist_candidates(store: Store, cfg: Config, run_id: int) -> list[str]:
 
 
 def fee_spread(
-    store: Store, usd_to_eur: float | None = None
+    store: Store, usd_to_eur: float | None = None, rates: dict[str, float] | None = None
 ) -> list[tuple[str, str, str, int, float, float, float]]:
     """Min, median and max fee per route and cabin over every stored trip (builder call 10)."""
     rows = store.conn.execute(
@@ -136,7 +136,7 @@ def fee_spread(
     ).fetchall()
     groups: dict[tuple, list[float]] = {}
     for r in rows:
-        fee = fees_eur(r["total_taxes"] or 0, r["taxes_currency"] or "", usd_to_eur)
+        fee = fees_eur(r["total_taxes"] or 0, r["taxes_currency"] or "", usd_to_eur, rates)
         if fee is not None:
             groups.setdefault((r["origin"], r["destination"], r["cabin"]), []).append(fee)
     return [

@@ -183,3 +183,24 @@ def test_repo_config_asks_star_alliance_programs_for_flights_within_asia():
     assert len(reqs) == len(sources)
     europe = [p["source"] for p in all_reqs if p["origin_region"] != p["destination_region"]]
     assert set(europe) == {"lufthansa"}
+
+
+def test_a_rejected_source_is_skipped_and_the_others_still_run(tmp_path, default_config_dict):
+    default_config_dict["region_pairs"] = [
+        {"origin": "Asia", "destination": "Asia", "sources": ["aeroplan", "bogus", "united"]}
+    ]
+    sent = []
+
+    def handler(req):
+        src = req.url.params["source"]
+        sent.append(src)
+        if src == "bogus":
+            return httpx.Response(400, json={"error": True, "code": "invalid_source"})
+        return page([f"id-{src}"], False)
+
+    client, store = make(tmp_path, handler)
+    run = store.start_run("scan", "{}")
+    stats = scan_regions(client, store, cfg_from(default_config_dict), run, TODAY)
+    assert sent[0] == "aeroplan" and sent[-1] == "united" and "bogus" in sent
+    assert stats["region_results"] == 2
+    assert any("Skipped bogus" in w for w in stats["warnings"])

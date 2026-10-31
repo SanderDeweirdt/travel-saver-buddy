@@ -265,6 +265,8 @@ class Config(_Model):
     mile_cost_eur_cents: float = Field(gt=0)
     usd_to_eur: float | None = Field(None, gt=0)
     usd_to_eur_date: date | None = None  # when the rate above was last checked
+    # Fixed euro-per-unit rates for the other currencies programs report fees in (Aeroplan: CAD).
+    fx_to_eur: dict[str, float] = {}
     date_window: DateWindow = DateWindow()
     region_pairs: list[RegionPair] = []
     watchlist: Watchlist = Watchlist()

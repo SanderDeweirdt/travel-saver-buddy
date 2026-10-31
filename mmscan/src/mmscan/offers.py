@@ -155,7 +155,7 @@ def record_observations(
 def _to_scored(r, cfg: Config) -> Scored:
     """An observation as an unscored row. Totals come from the raw fee and today's config."""
     if r["fees_minor"] is not None:
-        fees = fees_eur(r["fees_minor"], r["currency"] or "", cfg.usd_to_eur)
+        fees = fees_eur(r["fees_minor"], r["currency"] or "", cfg.usd_to_eur, cfg.fx_to_eur)
         estimated = fees is None
     else:  # backfilled from an older results row: only the converted fee survives
         fees, estimated = r["fees_eur"], bool(r["fee_estimated"])
