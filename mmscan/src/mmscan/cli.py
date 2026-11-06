@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Annotated
@@ -38,7 +39,13 @@ def _setup_logging(verbose: bool) -> None:
     logging.basicConfig(
         level=logging.DEBUG if verbose else logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        # stdout, not the stderr default: hosts like Railway tag all stderr
+        # output as severity=error, even for INFO lines.
+        stream=sys.stdout,
     )
+    if not verbose:
+        # One INFO line per paginated API request is too noisy.
+        logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
 def _load(config: Path) -> Config:
