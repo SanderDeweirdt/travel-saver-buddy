@@ -205,6 +205,13 @@ class Notify(_Model):
     max_items: int = Field(10, ge=1, le=40)
 
 
+class Storage(_Model):
+    # Size of the Railway volume the database lives on, in GB. The app cannot see the volume, so
+    # set it to the plan's size. The Data page and Slack warn when the database passes warn_pct.
+    limit_gb: float = Field(5.0, gt=0)
+    warn_pct: int = Field(70, ge=1, le=100)
+
+
 class Output(_Model):
     dir: Path = Path("./reports")
     formats: list[Literal["xlsx", "csv"]] = ["xlsx", "csv"]
@@ -278,6 +285,7 @@ class Config(_Model):
     api: Api = Api()
     output: Output = Output()
     notify: Notify = Notify()
+    storage: Storage = Storage()
     shortlist: ShortlistScope = ShortlistScope()
     deals: Deals = Deals()
     miles_and_more: MilesAndMore = MilesAndMore()

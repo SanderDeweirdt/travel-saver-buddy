@@ -12,5 +12,11 @@ if [ "$(date -u +%H)" = "11" ]; then
     timeout 40m mmscan run || rc=1
 fi
 
+# Postgres keeps the space of deleted rows inside its files, so the volume never shrinks by itself.
+# Once a month, after the scan, rewrite the tables with `mmscan vacuum`.
+if [ "$(date -u +%d)" = "01" ] && [ "$(date -u +%H)" = "11" ]; then
+    timeout 20m mmscan vacuum || rc=1
+fi
+
 rm -rf "$report_dir"
 exit "$rc"

@@ -102,7 +102,7 @@ def enrich(
         stats.called += 1
         raw = body.get("data") if isinstance(body, dict) else body
         trips = [parse_trip(t) for t in raw or []]
-        store.save_trips(avail_id, updated[avail_id], trips, _primary_link(body), body)
+        store.save_trips(avail_id, updated[avail_id], trips, _primary_link(body))
         stats.priced += 1
     return stats
 

@@ -297,6 +297,52 @@ def report(
     _do_report(store, cfg, run_id)
 
 
+def _check_storage(store: Store, cfg: Config) -> None:
+    """Warn on stderr, and in Slack when it is on, if the database is filling the volume."""
+    from mmscan.notify import (
+        NotifyError,
+        send_slack,
+        storage_usage,
+        storage_warning,
+        webhook_from_env,
+    )
+
+    try:
+        usage = storage_usage(store.size_report(), cfg)
+    except Exception as e:  # a size check must never fail the scan
+        typer.echo(f"storage check failed: {type(e).__name__}", err=True)
+        return
+    typer.echo(f"Database: {usage['used_bytes'] / 1024**2:.0f} MB, {usage['pct']}% of the volume.")
+    text = storage_warning(usage, cfg)
+    if not text:
+        return
+    typer.echo(text, err=True)
+    if cfg.notify.slack:
+        try:
+            send_slack(webhook_from_env(), {"text": text})
+        except NotifyError as e:
+            typer.echo(f"storage alert failed: {e}", err=True)
+
+
+@app.command()
+def vacuum(
+    table: Annotated[
+        list[str] | None, typer.Option("--table", help="Only this table (repeatable).")
+    ] = None,
+    verbose: VerboseOpt = False,
+) -> None:
+    """Give disk space freed by the purge back to the volume (Postgres VACUUM FULL, one table at
+    a time, each locked while it runs). Run it between scans; cron.sh does so monthly."""
+    _setup_logging(verbose)
+    store = _store()
+    before = store.size_report()["total_bytes"]
+    done = store.vacuum(table or ())
+    after = store.size_report()["total_bytes"]
+    typer.echo(
+        f"Vacuumed {len(done)} table(s): {before / 1024**2:.0f} MB -> {after / 1024**2:.0f} MB."
+    )
+
+
 def _slack_test(dry_run: bool) -> None:
     """Send a hello world through the same webhook loading and sending the alerts use."""
     from mmscan.notify import NotifyError, send_slack, webhook_from_env
@@ -392,6 +438,7 @@ def run(
     _do_report(store, cfg, run_id)
     if cfg.notify.slack:
         _do_notify(store, cfg, run_id)
+    _check_storage(store, cfg)
     if not complete:
         typer.echo("Run is partial: the daily call cap stopped it early.", err=True)
         raise typer.Exit(1)

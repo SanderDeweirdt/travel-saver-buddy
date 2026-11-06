@@ -48,6 +48,7 @@ Every command takes `--config PATH` (default `config.yaml`), `--dry-run`
 | `mmscan notify` | Posts the latest run's alerts to Slack (new deals, plus any older-style alerts that are switched on); nothing when there are none. `--dry-run` prints the message. `--test` posts a "Hello world" to check the webhook (reads no data) | 0 |
 | `mmscan trips` | Best round trips per trip profile, from stored results (`--top N`) | 0 |
 | `mmscan verify-add` | Records one hand check of a cached price against the live one (carrier, cached miles, live miles); feeds the dashboard's trust table | 0 |
+| `mmscan vacuum` | Rewrites the tables so space freed by the purge goes back to the volume (Postgres `VACUUM FULL`; SQLite `VACUUM`). Locks each table while it runs; `cron.sh` does it monthly | 0 |
 | `mmscan quota` | Calls left today (last `X-RateLimit-Remaining`) and calls made by mmscan today | 0 |
 
 `enrich` and `score` work on the latest `scan` or `run`; `watch` runs are left
@@ -62,7 +63,7 @@ keeps what it stored, is marked `partial`, and exits non-zero.
 
 Reports go to `reports/mmscan_YYYY-MM-DD_HHMM.xlsx` (sheets Shortlist, All
 results, Route stats, Run log) and `..._shortlist.csv`. The database is
-`data/mmscan.db`; runs, calls and prices not seen for 180 days are deleted (per-run availabilities and results after 14 days) at the start of each
+`data/mmscan.db`; runs, calls and prices not seen for 180 days are deleted (per-run availabilities and results after 14 days, trip details after 30) at the start of each
 scan.
 
 ## Tuning `config.yaml`

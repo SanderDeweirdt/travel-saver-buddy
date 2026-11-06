@@ -48,8 +48,8 @@ def test_save_availability_and_trips_replace(backend_store):
         "watchlist_trips": 0,
     }
     u = "2026-10-10T08:00:00Z"
-    s.save_trips("a", u, [trip("t1", taxes=100)], "https://x.test", {"k": 1}, now=NOW)
-    s.save_trips("a", u, [trip("t1", taxes=200)], "https://x.test", {"k": 2}, now=NOW)
+    s.save_trips("a", u, [trip("t1", taxes=100)], "https://x.test", now=NOW)
+    s.save_trips("a", u, [trip("t1", taxes=200)], "https://x.test", now=NOW)
     assert s.has_fetch("a", u) and not s.has_fetch("a", "other")
     rows = s.conn.execute("SELECT total_taxes FROM trips").fetchall()
     assert [r["total_taxes"] for r in rows] == [200]
@@ -79,7 +79,7 @@ def test_purge_removes_old_rows(backend_store):
     for r in (old, new):
         s.save_availability(r, avail(f"a{r}", business=60000), "region")
         s.record_call(r, "/x", {}, 200, 1, 1, 1, now=NOW - timedelta(days=181 if r == old else 0))
-    s.save_trips("a1", "u", [trip("t1", avail_id="a1")], None, {}, now=NOW - timedelta(days=181))
+    s.save_trips("a1", "u", [trip("t1", avail_id="a1")], None, now=NOW - timedelta(days=181))
     s.purge_older_than(180, now=NOW)
     assert [r[0] for r in s.conn.execute("SELECT id FROM runs")] == [new]
     assert s.conn.execute("SELECT count(*) FROM availabilities").fetchone()[0] == 1
@@ -99,7 +99,6 @@ def test_score_run_round_trips_with_history(backend_store, default_config_dict):
             "2026-10-10T08:00:00Z",
             [trip(f"t{days}", avail_id=f"a{days}", miles=60000 - days * 1000, taxes=30000)],
             "https://x.test",
-            {},
         )
         rows, _ = score_run(s, cfg, run, NOW - timedelta(days=days))
     (row,) = [r for r in rows if r.cabin == "business"]
@@ -146,3 +145,38 @@ def test_price_checks_on_both_backends(backend_store):
     backend_store.add_price_check("LX", 10000, 11000)
     rows = backend_store.price_checks()
     assert [r["carrier"] for r in rows] == ["LH", "LX"] and rows[1]["route"] is None
+
+
+def test_save_trips_keeps_no_raw_json(backend_store):
+    s = backend_store
+    s.save_trips("a", "u", [trip("t1")], "https://x.test")
+    assert s.conn.execute("SELECT raw_json FROM trip_fetches").fetchone()[0] is None
+    assert s.conn.execute("SELECT raw_json FROM trips").fetchone()[0] == "{}"
+
+
+def test_trip_details_purge_after_30_days_but_not_before(backend_store):
+    s = backend_store
+    s.save_trips("old", "u", [trip("t1", avail_id="old")], None, now=NOW - timedelta(days=31))
+    s.save_trips("new", "u", [trip("t2", avail_id="new")], None, now=NOW - timedelta(days=20))
+    s.purge_older_than(180, now=NOW)
+    left = {r[0] for r in s.conn.execute("SELECT availability_id FROM trips")}
+    assert left == {"new"}
+    assert s.conn.execute("SELECT count(*) FROM trip_fetches").fetchone()[0] == 1
+
+
+def test_size_report_and_vacuum(backend_store):
+    s = backend_store
+    s.save_trips("a", "u", [trip("t1")], None, now=NOW)
+    report = s.size_report()
+    assert report["total_bytes"] > 0
+    if s.postgres:
+        assert report["tables"] and report["tables"][0]["bytes"] > 0
+    assert s.vacuum(["trips"] if s.postgres else [])
+    assert s.conn.execute("SELECT count(*) FROM trips").fetchone()[0] == 1  # data survives
+
+
+def test_vacuum_refuses_unknown_table_names(backend_store):
+    if not backend_store.postgres:
+        pytest.skip("table names are only used in Postgres SQL")
+    with pytest.raises(ValueError):
+        backend_store.vacuum(["trips; DROP TABLE runs"])

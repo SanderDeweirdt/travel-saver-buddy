@@ -21,7 +21,7 @@ def test_migrate_sqlite_to_postgres_is_idempotent(tmp_path, backend_store, defau
         run = src.start_run("watch", "{}", now=NOW)
         src.record_call(run, "/x", {}, 200, 1, 1, 900, now=NOW)
         src.save_availability(run, avail("a", business=60000), "watchlist")
-        src.save_trips("a", "2026-10-10T08:00:00Z", [trip("t1", avail_id="a")], None, {})
+        src.save_trips("a", "2026-10-10T08:00:00Z", [trip("t1", avail_id="a")], None)
         score_run(src, cfg, run, NOW)
     src.close()
 

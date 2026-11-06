@@ -275,3 +275,15 @@ def test_cli_notify_test_posts_hello_world_and_reports_problems(monkeypatch, tmp
     bad = CliRunner().invoke(app, ["notify", "--test"])
     assert bad.exit_code == 1 and "must start with https://" in bad.output
     assert "SECRET" not in bad.output
+
+
+def test_storage_warning_only_past_the_threshold(default_config_dict):
+    from mmscan.notify import storage_usage, storage_warning
+    from tests.helpers import config
+
+    cfg = config(default_config_dict, storage={"limit_gb": 5, "warn_pct": 70})
+    gb = 1024**3
+    low = storage_usage({"total_bytes": 3 * gb, "tables": []}, cfg)
+    assert low["pct"] == 60 and storage_warning(low, cfg) is None
+    high = storage_usage({"total_bytes": int(4.5 * gb), "tables": []}, cfg)
+    assert "90%" in storage_warning(high, cfg) and "4.5 of 5 GB" in storage_warning(high, cfg)

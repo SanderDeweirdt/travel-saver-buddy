@@ -85,6 +85,15 @@ DATABASE_URL='postgresql://…public url…' uv run mmscan verify-add --carrier 
 
 The new `price_checks` table is created automatically the next time either service starts.
 
+## 4c. Keeping the database small
+
+Per-run copies (`availabilities`, `results`) are purged after 14 days, trip details after 30 days and
+price history after 180. Postgres does not hand the freed space back to the volume by itself, so
+`deploy/cron.sh` runs `mmscan vacuum` (VACUUM FULL, one table at a time) on the 1st of each month
+after the scan. Set `storage.limit_gb` in `config.yaml` to the volume size: the Data page shows the
+database against it and Slack warns after a scan once it passes `storage.warn_pct`. To reclaim space
+after a cleanup, or when the volume is nearly full, use [`cleanup-db.sql`](cleanup-db.sql).
+
 ## 5. Changing `config.yaml`
 
 `config.yaml` is baked into the image. Edit it, commit, push; Railway redeploys both services.

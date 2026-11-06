@@ -66,7 +66,7 @@ def _scored_run(store, cfg, kind, ids_taxes):
             run, avail(avail_id, date=f"2026-12-{i + 1:02d}", business=60000), "watchlist"
         )
         store.save_trips(
-            avail_id, "2026-10-10T08:00:00Z", [trip(f"t{avail_id}{run}", taxes=taxes)], None, {}
+            avail_id, "2026-10-10T08:00:00Z", [trip(f"t{avail_id}{run}", taxes=taxes)], None
         )
     rows, _ = score_run(store, cfg, run, NOW)
     # The flights this run saw; the others stay on offer at their last price, unchanged.

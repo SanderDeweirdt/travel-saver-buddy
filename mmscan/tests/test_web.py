@@ -33,7 +33,6 @@ def db(tmp_path, default_config_dict):
             "2026-10-10T08:00:00Z",
             [trip(f"t{days}", avail_id=f"a{days}", miles=miles, taxes=30000)],
             "https://example.test/book",
-            {},
         )
         score_run(store, cfg, run, at)
         store.record_call(run, "/search", {}, 200, 5, 1, 880 + days, now=at)
@@ -212,7 +211,6 @@ def test_shortlist_labels_dynamic_prices(tmp_path, default_config_dict):
             "2026-10-10T08:00:00Z",
             [trip(f"t{aid}", avail_id=aid, miles=60000, taxes=30000, carriers=airlines)],
             None,
-            {},
         )
     score_run(store, cfg, run, NOW)
     store.close()
@@ -258,7 +256,6 @@ def deals_client(tmp_path, default_config_dict, write_config):
             at.isoformat(),
             [trip(f"t{i}", avail_id=aid, miles=miles, taxes=30000)],
             "https://example.test/book",
-            {},
         )
     score_run(store, cfg, run, at)
     store.finish_run(run, "ok", {}, [], now=at)
@@ -381,6 +378,7 @@ def test_data_page(deals_client):
     assert "How far to trust cached miles" in text and "not checked yet" in text  # LH etc.
     assert "Slack alerts" in text and "not sent" in text  # dynamic prices off by default
     assert "Healthy" in text or "Late" in text
+    assert "Database size" in text and "/ 5<" not in text and "GB" in text
 
 
 def test_data_page_shows_manual_price_checks(db, default_config_dict):

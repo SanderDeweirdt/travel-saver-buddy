@@ -42,3 +42,16 @@ def test_verify_add_records_a_check(tmp_path, monkeypatch):
     store = Store(tmp_path / "data" / "mmscan.db")
     assert len(store.price_checks()) == 1
     store.close()
+
+
+def test_vacuum_command_runs_on_sqlite(tmp_path, monkeypatch):
+    from typer.testing import CliRunner
+
+    from mmscan.cli import app
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    (tmp_path / "data").mkdir()
+    result = CliRunner().invoke(app, ["vacuum"])
+    assert result.exit_code == 0, result.output
+    assert "Vacuumed 1 table(s)" in result.output

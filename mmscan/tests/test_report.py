@@ -32,7 +32,6 @@ def build(tmp_path, default_config_dict, n=12):
             updated,
             [trip(f"t{i}", taxes=1000 if i % 3 == 0 else 40000 + i)],
             "https://book.test",
-            {},
         )
     # One unpriced result on the same route gets an estimated fee.
     store.save_availability(run, avail("est", date="2026-12-30", business=40000), "region")

@@ -58,7 +58,7 @@ def test_same_run_scored_twice_replaces_its_own_row(tmp_path, cfg):
     run = store.start_run("run", "{}", now=NOW)
     store.save_availability(run, avail("a", taxes={"economy": 12900}, economy=35000), "region")
     score_run(store, cfg, run, NOW)
-    store.save_trips("a", "2026-10-10T08:00:00Z", [_trip(taxes=20000)], "https://b.test", {})
+    store.save_trips("a", "2026-10-10T08:00:00Z", [_trip(taxes=20000)], "https://b.test")
     score_run(store, cfg, run, NOW + timedelta(minutes=5))
     (row,) = _obs(store)
     assert row["fees_minor"] == 20000  # replaced in place, not appended
