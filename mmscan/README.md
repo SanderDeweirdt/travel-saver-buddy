@@ -40,7 +40,7 @@ Every command takes `--config PATH` (default `config.yaml`), `--dry-run`
 | --- | --- | --- |
 | `mmscan check` | Four small calls; saves the raw responses to `tests/fixtures/live/` | 4 |
 | `mmscan scan` | Region pairs (Bulk Availability) and the watchlist (Cached Search, trips included) | One per page; 4 first pages with the default config |
-| `mmscan enrich` | By hand: picks the cheapest 30% of region results (by miles) and fetches their trip details | Up to `enrich.max_calls` (150) |
+| `mmscan enrich` | By hand: picks the cheapest 30% of region results (by miles) and fetches their trip details | Up to `enrich.max_calls` (50) |
 | `mmscan score` | Total cost, baselines, flags and verdicts | 0 |
 | `mmscan report` | Spreadsheet, Shortlist CSV and the terminal top 10 | 0 |
 | `mmscan run` | Scan, score, fetch trip details for Shortlist results only, score again, report, notify; prints the planned calls first | Scan plus at most `enrich.max_calls` |
@@ -177,7 +177,7 @@ route's usual price. It covers every route, including Asia to Asia, not just the
   the report".
 - A route's usual price comes from stored results, so the first scan of a brand-new route (for example
   the first Asia to Asia run) compares flights with each other and can post a large batch.
-- The 330-day window gains one new day a day on every route; those new dates count as new.
+- The 180-day window gains one new day a day on every route; those new dates count as new.
 
 **Older Shortlist alerts** (`verdicts`, `changes`, `on_drop`) still exist but are switched off in the
 shipped `config.yaml` (`verdicts: []`, `on_drop: false`). Turn them on to also get Deals and Cheaper

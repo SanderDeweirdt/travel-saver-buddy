@@ -33,7 +33,7 @@ usd_to_eur_date: "2026-10-12"   # update this whenever you update the rate; the 
 
 date_window:
   start_offset_days: 0
-  end_offset_days: 330
+  end_offset_days: 180
 
 region_pairs:
   - {origin: Europe, destination: Asia}
@@ -82,7 +82,7 @@ prescreen:
   percentile: 30
 
 enrich:
-  max_calls: 150
+  max_calls: 50
 
 # Deals page verdict: % below the route's usual price (median over the dates currently on offer).
 savings:

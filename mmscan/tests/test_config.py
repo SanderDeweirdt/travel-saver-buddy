@@ -52,4 +52,4 @@ def test_benchmark_matches_both_directions():
 
 def test_date_range():
     cfg = load_config(ROOT / "config.yaml")
-    assert cfg.date_range(date(2026, 10, 11)) == (date(2026, 10, 11), date(2027, 9, 6))
+    assert cfg.date_range(date(2026, 10, 11)) == (date(2026, 10, 11), date(2027, 4, 9))

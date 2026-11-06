@@ -8,7 +8,9 @@ rc=0
 report_dir="$(mktemp -d)"
 export MMSCAN_REPORT_DIR="$report_dir"   # reports are built on demand by the dashboard instead
 
-if [ "$(date -u +%H)" = "11" ]; then
+# Also scan on the first tick after every deployment: `deploy-pending` succeeds when no full run has
+# started under this RAILWAY_DEPLOYMENT_ID yet. Needs the hourly schedule; a daily one waits for 11.
+if [ "$(date -u +%H)" = "11" ] || mmscan deploy-pending; then
     timeout 40m mmscan run || rc=1
 fi
 
