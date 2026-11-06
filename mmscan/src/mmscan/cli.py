@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import sys
@@ -324,6 +325,25 @@ def _check_storage(store: Store, cfg: Config) -> None:
             typer.echo(f"storage alert failed: {e}", err=True)
 
 
+def _run_config_json(cfg: Config) -> str:
+    """The run's stored config, tagged with the Railway deployment so `deploy-pending` can tell
+    that this deployment has scanned."""
+    data = json.loads(cfg.model_dump_json())
+    if deployment := os.environ.get("RAILWAY_DEPLOYMENT_ID"):
+        data["deployment_id"] = deployment
+    return json.dumps(data)
+
+
+@app.command("deploy-pending")
+def deploy_pending() -> None:
+    """Exit 0 when this Railway deployment has not run a full scan yet, 1 otherwise (or when not
+    on Railway). cron.sh uses it to scan on the first tick after every deployment."""
+    deployment = os.environ.get("RAILWAY_DEPLOYMENT_ID")
+    if not deployment or _store().deployment_scanned(deployment):
+        raise typer.Exit(1)
+    typer.echo(f"Deployment {deployment} has not scanned yet.")
+
+
 @app.command()
 def vacuum(
     table: Annotated[
@@ -413,7 +433,7 @@ def run(
         return
     store = _store()
     store.purge_older_than(180)
-    run_id = store.start_run("run", cfg.model_dump_json())
+    run_id = store.start_run("run", _run_config_json(cfg))
     client = _client(store, run_id, cfg)
     status, stats = run_scan(client, store, cfg, run_id, today)
     for w in stats["warnings"]:

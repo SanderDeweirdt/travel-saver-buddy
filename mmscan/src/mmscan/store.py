@@ -6,6 +6,7 @@ SQLite for local use; Postgres when the target is a `postgres://` URL (see `mmsc
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime, timedelta
@@ -341,6 +342,16 @@ class Store:
         ).fetchone()
         self.conn.commit()
         return int(row[0])
+
+    def deployment_scanned(self, deployment_id: str) -> bool:
+        """Did a full `run` already start under this deployment? The id is in the run's config."""
+        if not re.fullmatch(r"[\w-]+", deployment_id):  # goes into a LIKE pattern
+            raise ValueError("odd deployment id")
+        row = self.conn.execute(
+            "SELECT 1 FROM runs WHERE kind='run' AND config_json LIKE ? LIMIT 1",
+            (f'%"deployment_id": "{deployment_id}"%',),
+        ).fetchone()
+        return row is not None
 
     def finish_run(
         self,

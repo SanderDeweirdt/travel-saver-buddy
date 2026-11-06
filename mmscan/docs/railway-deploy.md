@@ -35,6 +35,9 @@ web service. Both services build the same image from `mmscan/Dockerfile`.
 Each run does `mmscan run` (the full daily scan: all `region_pairs`, including Asia to Asia, plus
 the watchlist). There is no hourly `mmscan watch`; `cron.sh` also checks the hour, so the full scan
 runs only at 11 UTC even if the schedule is ever set to hourly.
+The one exception is a new deployment: on the first tick after each deploy, `cron.sh` runs the full
+scan too (`mmscan deploy-pending` checks `RAILWAY_DEPLOYMENT_ID` against earlier runs). This needs
+the hourly schedule (`7 * * * *`, as in `railway.scanner.json`); with a daily one it waits for 11 UTC.
 
 ## 3. Dashboard service (web)
 

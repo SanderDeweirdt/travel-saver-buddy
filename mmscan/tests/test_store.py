@@ -114,3 +114,12 @@ def test_purge_drops_per_run_detail_after_two_weeks_but_keeps_the_run(tmp_path):
     store.purge_older_than(180, now=NOW)
     assert store.conn.execute("SELECT count(*) FROM runs").fetchone()[0] == 1
     assert store.conn.execute("SELECT count(*) FROM availabilities").fetchone()[0] == 0
+
+
+def test_deployment_scanned(tmp_path):
+    store = Store(tmp_path / "d.db")
+    assert not store.deployment_scanned("dep-1")
+    store.start_run("run", '{"deployment_id": "dep-1"}')
+    assert store.deployment_scanned("dep-1") and not store.deployment_scanned("dep-2")
+    store.start_run("scan", '{"deployment_id": "dep-2"}')  # only full runs count
+    assert not store.deployment_scanned("dep-2")
