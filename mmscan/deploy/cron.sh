@@ -8,7 +8,9 @@ rc=0
 report_dir="$(mktemp -d)"
 export MMSCAN_REPORT_DIR="$report_dir"   # reports are built on demand by the dashboard instead
 
-if [ "$(date -u +%H)" = "11" ]; then
+# FORCE_SCAN=1 (a Railway variable on the scanner service) runs the full scan on the next cron tick
+# whatever the hour, e.g. right after a deploy. Remove the variable afterwards, or every tick scans.
+if [ "$(date -u +%H)" = "11" ] || [ "${FORCE_SCAN:-}" = "1" ]; then
     timeout 40m mmscan run || rc=1
 fi
 

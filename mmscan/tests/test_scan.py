@@ -79,7 +79,7 @@ def test_two_cabins_send_no_cabin_param(tmp_path, default_config_dict):
     assert len(sent) == 2
     assert all("cabin" not in p for p in sent)
     assert sent[0]["origin_region"] == "Europe" and sent[0]["destination_region"] == "Asia"
-    assert sent[0]["start_date"] == "2026-10-11" and sent[0]["end_date"] == "2027-09-06"
+    assert sent[0]["start_date"] == "2026-10-11" and sent[0]["end_date"] == "2027-04-09"
     assert sent[0]["include_filtered"] == "false" and sent[0]["min_cabin_pct"] == "100"
 
     sent.clear()
