@@ -173,3 +173,9 @@ watch:
 #     open_jaw: false                 # true: return from another airport / to another origin
 #     alert_top: 3                    # Slack: new or cheaper among the best N options
 # trip_freshness_hours: 72            # ignore results from runs older than this
+
+# Disk. limit_gb is the size of the Railway volume (the app cannot see it): the Data page shows the
+# database against it and a Slack warning goes out after a scan once it passes warn_pct.
+storage:
+  limit_gb: 5
+  warn_pct: 70

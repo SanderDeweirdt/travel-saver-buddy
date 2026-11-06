@@ -28,7 +28,7 @@ def _scan(store, run, taxes_by_id):
             "region",
         )
         store.save_trips(
-            avail_id, updated, [trip(f"t{avail_id}{run}", avail_id=avail_id, taxes=taxes)], None, {}
+            avail_id, updated, [trip(f"t{avail_id}{run}", avail_id=avail_id, taxes=taxes)], None
         )
 
 

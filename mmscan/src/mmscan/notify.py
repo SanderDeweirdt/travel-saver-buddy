@@ -191,6 +191,31 @@ def build_message(
     return {"text": title, "blocks": blocks}
 
 
+def storage_usage(report: dict, cfg: Config) -> dict:
+    """Database size against the configured volume size."""
+    limit = int(cfg.storage.limit_gb * 1024**3)
+    used = report["total_bytes"]
+    pct = round(used / limit * 100) if limit else 0
+    return {
+        "used_bytes": used,
+        "limit_bytes": limit,
+        "pct": pct,
+        "warn": pct >= cfg.storage.warn_pct,
+        "tables": report["tables"],
+    }
+
+
+def storage_warning(usage: dict, cfg: Config) -> str | None:
+    """Slack text when the database has passed `storage.warn_pct` of the volume, else None."""
+    if not usage["warn"]:
+        return None
+    gb = usage["used_bytes"] / 1024**3
+    return (
+        f":warning: mmscan database is at {usage['pct']}% of the volume "
+        f"({gb:.1f} of {cfg.storage.limit_gb:g} GB). Run `mmscan vacuum` or grow the volume."
+    )
+
+
 def send_slack(url: str, payload: dict, transport: httpx.BaseTransport | None = None) -> None:
     try:
         with httpx.Client(transport=transport, timeout=15.0) as http:

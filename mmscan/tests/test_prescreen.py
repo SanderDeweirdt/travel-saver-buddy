@@ -49,6 +49,6 @@ def test_cached_availability_excluded(tmp_path, default_config_dict):
     store, run = _store_with(
         tmp_path, [avail("a", business=50000), avail("b", origin="FRA", business=60000)]
     )
-    store.save_trips("a", "2026-10-10T08:00:00Z", [trip("t1")], None, {})
+    store.save_trips("a", "2026-10-10T08:00:00Z", [trip("t1")], None)
     cfg = config(default_config_dict, cabins=["business"])
     assert select_candidates(store, cfg, run) == ["b"]

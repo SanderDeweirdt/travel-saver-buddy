@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -235,6 +235,12 @@ def _add_source_columns(store: Store) -> None:
         store.conn.execute(f"UPDATE {table} SET source = 'lufthansa' WHERE source IS NULL")
     store.conn.commit()
 
+
+# Tables `vacuum` may rewrite; names go into SQL, so they are checked against this list.
+VACUUM_TABLES = frozenset(
+    "runs api_calls availabilities trip_fetches trips results price_checks observations "
+    "current_offers schema_version".split()
+)
 
 VERSION_TABLE = "CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)"
 
@@ -467,17 +473,59 @@ class Store:
         ).fetchall()
         return [dict(zip(rows[0].keys(), tuple(r), strict=True)) for r in rows] if rows else []
 
+    # Size and maintenance
+
+    def size_report(self, top: int = 6) -> dict:
+        """Bytes used by the database and by its biggest tables (indexes included)."""
+        if self.postgres:
+            total = self.conn.execute("SELECT pg_database_size(current_database())").fetchone()[0]
+            rows = self.conn.execute(
+                "SELECT c.relname, pg_total_relation_size(c.oid) AS bytes, "
+                "COALESCE(s.n_dead_tup, 0) AS dead FROM pg_class c "
+                "LEFT JOIN pg_stat_user_tables s ON s.relid = c.oid "
+                "WHERE c.relkind = 'r' AND c.relnamespace = 'public'::regnamespace "
+                "ORDER BY bytes DESC LIMIT ?",
+                (top,),
+            ).fetchall()
+            tables = [{"name": r[0], "bytes": int(r[1]), "dead_rows": int(r[2])} for r in rows]
+        else:
+            total = self.path.stat().st_size if self.path and self.path.exists() else 0
+            tables = []
+        return {"total_bytes": int(total), "tables": tables}
+
+    def vacuum(self, tables: Sequence[str] = ()) -> list[str]:
+        """Give deleted rows' disk space back to the operating system. Postgres `DELETE` only
+        marks space reusable inside the file; `VACUUM FULL` rewrites the table smaller, and holds
+        a lock on it while it runs. Run it between scans. Returns what was vacuumed."""
+        if not self.postgres:
+            self.conn.commit()
+            self.conn.execute("VACUUM")
+            return ["(sqlite file)"]
+        names = list(tables) or [t["name"] for t in self.size_report(top=50)["tables"]]
+        for name in names:
+            if name not in VACUUM_TABLES:
+                raise ValueError(f"not a mmscan table: {name}")
+            self.conn.run_autocommit(f"VACUUM (FULL, ANALYZE) {name}")
+        return names
+
     # Retention
 
     def purge_older_than(
-        self, days: int = 180, now: datetime | None = None, detail_days: int = 14
+        self,
+        days: int = 180,
+        now: datetime | None = None,
+        detail_days: int = 14,
+        trip_days: int = 30,
     ) -> None:
         """Drop old history. The per-run copies (`availabilities` with their raw JSON, `results`)
         are only read for the latest run; the price history lives in `observations`. They go after
-        `detail_days` so the database does not fill up; the rest goes after `days`."""
+        `detail_days` so the database does not fill up. Trip details (`trips`, `trip_fetches`) are
+        only read for those same availabilities, plus `has_fetch` to skip a paid re-fetch, so they
+        go after `trip_days`. The rest goes after `days`."""
         now = now or utcnow()
         cutoff = (now - timedelta(days=days)).isoformat()
         detail_cutoff = (now - timedelta(days=min(days, detail_days))).isoformat()
+        trip_cutoff = (now - timedelta(days=min(days, trip_days))).isoformat()
         stale_runs = "SELECT id FROM runs WHERE started_at < ?"
         for table in ("availabilities", "results"):
             self.conn.execute(
@@ -489,9 +537,9 @@ class Store:
         self.conn.execute(
             "DELETE FROM trips WHERE (availability_id, updated_at) IN "
             "(SELECT availability_id, updated_at FROM trip_fetches WHERE fetched_at < ?)",
-            (cutoff,),
+            (trip_cutoff,),
         )
-        self.conn.execute("DELETE FROM trip_fetches WHERE fetched_at < ?", (cutoff,))
+        self.conn.execute("DELETE FROM trip_fetches WHERE fetched_at < ?", (trip_cutoff,))
         self.conn.commit()
 
     # Scan results
@@ -555,10 +603,10 @@ class Store:
         updated_at: str,
         trips: list[Trip],
         booking_link: str | None,
-        raw: object,
         now: datetime | None = None,
     ) -> None:
-        """Store one availability's trips and its fetch row in one transaction."""
+        """Store one availability's trips and its fetch row in one transaction. The raw API JSON
+        is not kept: nothing reads it back, and it doubled the size of both tables."""
         with self.conn:
             self.conn.execute(
                 "INSERT OR REPLACE INTO trip_fetches(availability_id, updated_at, fetched_at, "
@@ -569,7 +617,7 @@ class Store:
                     (now or utcnow()).isoformat(),
                     "ok",
                     booking_link,
-                    json.dumps(raw, sort_keys=True),
+                    None,
                 ),
             )
             self.conn.executemany(
@@ -593,7 +641,7 @@ class Store:
                         t.departs_at,
                         t.arrives_at,
                         t.total_duration,
-                        json.dumps(t.raw, sort_keys=True),
+                        "{}",  # raw_json is NOT NULL in databases created before it was dropped
                     )
                     for t in trips
                 ],

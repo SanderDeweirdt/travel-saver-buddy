@@ -95,6 +95,15 @@ class PgConnection:
                 if statement.strip():
                     self._conn.execute(statement)
 
+    def run_autocommit(self, sql: str) -> None:
+        """Run one statement outside a transaction (VACUUM refuses to run inside one)."""
+        self._conn.commit()
+        self._conn.autocommit = True
+        try:
+            self._conn.execute(sql)
+        finally:
+            self._conn.autocommit = False
+
     def commit(self) -> None:
         self._conn.commit()
 

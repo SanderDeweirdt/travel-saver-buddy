@@ -157,7 +157,7 @@ def test_a_flight_seen_in_several_runs_counts_once(tmp_path, cfg):
     store.save_availability(current, avail("c1", business=60000), "region")
     for avail_id in ("o1", "r1", "c1"):
         store.save_trips(
-            avail_id, "2026-10-10T08:00:00Z", [trip(f"t{avail_id}", avail_id=avail_id)], None, {}
+            avail_id, "2026-10-10T08:00:00Z", [trip(f"t{avail_id}", avail_id=avail_id)], None
         )
     for run in (old, recent):
         score_run(store, cfg, run, NOW)
@@ -198,7 +198,6 @@ def test_score_run_prices_from_stored_trips(tmp_path, cfg):
             trip("ty", cabin="economy", miles=35000, taxes=12900, currency=""),
         ],
         "https://example.test/book",
-        {},
     )
     rows, warnings = score_run(store, cfg, run, NOW)
     by_cabin = {r.cabin: r for r in rows}

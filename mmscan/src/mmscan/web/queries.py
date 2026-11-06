@@ -216,9 +216,19 @@ def data_view(store: Store, cfg: Config, now: datetime) -> dict:
         "failed_week": sum(
             1 for r in runs if r["status"] in ("failed", "partial") and r["started_at"] >= week
         ),
+        "storage": _storage_view(store, cfg),
         "fx": {"rate": cfg.usd_to_eur, "age_days": age, "stale": age is None or age > 30},
         "trust": carrier_trust(store.price_checks(), cfg),
     }
+
+
+def _storage_view(store: Store, cfg: Config) -> dict | None:
+    from mmscan.notify import storage_usage
+
+    try:
+        return storage_usage(store.size_report(), cfg)
+    except Exception:  # the page must load even if the size query is refused
+        return None
 
 
 def quota_view(store: Store, cap: int, now: datetime) -> dict:

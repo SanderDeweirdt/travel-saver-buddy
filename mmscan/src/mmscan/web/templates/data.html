@@ -20,6 +20,13 @@
   <div class="tile"><div class="k">Routes tracked</div><div class="v">{{ "{:,}".format(cv.routes) }}</div>
     <div class="d">{{ cv.on_watchlist }} of {{ cv.watchlist_pairs }} watchlist pairs have a price; the rest come from the region scans</div>
     <div class="d">{{ "{:,}".format(cv.flights) }} flights on offer (route, date, cabin)</div></div>
+  {% set st = d.storage %}
+  {% if st %}
+  <div class="tile {{ 'bad' if st.pct >= 90 else 'warn' if st.warn }}"><div class="k">Database size</div>
+    <div class="v">{{ "%.2f"|format(st.used_bytes / 1073741824) }}<span class="muted"> / {{ "%g"|format(st.limit_bytes / 1073741824) }} GB</span></div>
+    <div class="meter {{ 'bad' if st.pct >= 90 else 'warn' if st.warn }}" role="img" aria-label="{{ st.pct }} percent of the volume used" style="margin-top:6px"><div style="width: {{ [st.pct, 100]|min }}%"></div></div>
+    <div class="d">{% for t in st.tables[:3] %}{{ t.name }} {{ "%.0f"|format(t.bytes / 1048576) }} MB{% if not loop.last %} · {% endif %}{% endfor %}</div></div>
+  {% endif %}
   <div class="tile {{ 'warn' if d.fx.stale }}"><div class="k">USD → EUR rate</div><div class="v">{{ d.fx.rate if d.fx.rate else "not set" }}</div>
     <div class="d">{% if d.fx.age_days is none %}No date recorded. Set <code>usd_to_eur_date</code>.{% elif d.fx.stale %}Last checked {{ d.fx.age_days }} days ago: update it.{% else %}Checked {{ d.fx.age_days }} days ago{% endif %}</div></div>
 </div>

@@ -179,9 +179,7 @@ def scan_watchlist(
                 if not raw_trips:
                     continue
                 trips = [parse_trip(t) for t in raw_trips]
-                store.save_trips(
-                    str(avail["ID"]), avail.get("UpdatedAt") or "", trips, None, raw_trips
-                )
+                store.save_trips(str(avail["ID"]), avail.get("UpdatedAt") or "", trips, None)
                 stats["trips"] += len(trips)
 
         items, warns = paginate(

@@ -72,7 +72,6 @@ def test_route_baselines_from_the_store(tmp_path, default_config_dict):
             "2026-10-10T08:00:00Z",
             [trip(f"t{days}", avail_id=f"a{days}", miles=miles, taxes=30000)],
             "x",
-            {},
         )
         score_run(store, c, run, at)
         store.finish_run(run, "ok", {}, [], now=at)

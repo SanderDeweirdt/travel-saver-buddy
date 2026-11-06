@@ -72,7 +72,6 @@ def test_stored_trips_take_precedence_over_summary(tmp_path, default_config_dict
         "2026-10-10T08:00:00Z",
         [trip("t", avail_id="a", miles=55000, taxes=30000, currency="USD")],
         None,
-        {},
     )
     [r], _ = score_run(store, config(default_config_dict), run, NOW)
     assert r.fees_eur == 276.0  # 300 USD x 0.92, from the trip
@@ -101,7 +100,7 @@ def test_shortlist_candidates_skip_fetched_and_skipped(tmp_path, default_config_
     pricey = avail("pricey", origin="FRA", business=90000, taxes={"business": 90000})
     fetched = avail("fetched", origin="ZRH", business=52000, taxes={"business": 15000})
     store, run = _store(tmp_path, cheap, pricey, fetched)
-    store.save_trips("fetched", fetched["UpdatedAt"], [trip("t", avail_id="fetched")], None, {})
+    store.save_trips("fetched", fetched["UpdatedAt"], [trip("t", avail_id="fetched")], None)
     score_run(store, config(default_config_dict), run, NOW)
     assert shortlist_candidates(store, config(default_config_dict), run) == ["cheap"]
 
