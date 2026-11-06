@@ -195,7 +195,7 @@ seats.aero has no webhooks, so scanning is polling. One daily schedule covers ev
 7 11 * * * cd /path/to/mmscan && uv run mmscan run >> data/run.log 2>&1
 ```
 
-That is roughly 50 calls a day, inside the 300 `api.daily_call_cap` and the 1,000-call Pro
+That is roughly 50 calls a day, inside the 800 `api.daily_call_cap` and the 1,000-call Pro
 allowance. `mmscan watch` (watchlist only, 2 calls) still exists if you want an extra scan between
 runs, but nothing schedules it.
 

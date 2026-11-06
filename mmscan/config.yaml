@@ -98,7 +98,7 @@ api:
   take: 1000
   min_cabin_pct: 100
   include_filtered: false
-  daily_call_cap: 300
+  daily_call_cap: 800   # seats.aero Pro allows 1000/day; the full scan with Asia-Asia needs well over 300
 
 output:
   dir: ./reports
