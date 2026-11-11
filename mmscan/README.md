@@ -192,7 +192,7 @@ seats.aero has no webhooks, so scanning is polling. One daily schedule covers ev
 
 ```cron
 # Daily: all region pairs, fees for candidates, full report (about 50 calls).
-7 11 * * * cd /path/to/mmscan && uv run mmscan run >> data/run.log 2>&1
+7 0 * * * cd /path/to/mmscan && uv run mmscan run >> data/run.log 2>&1
 ```
 
 That is roughly 330 calls a day with Asia to Asia, inside the 1,000 `api.daily_call_cap` and the 1,000-call Pro
