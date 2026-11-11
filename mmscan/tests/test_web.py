@@ -293,6 +293,21 @@ def test_all_routes_lists_every_flight_not_one_per_route(deals_client):
     )
 
 
+def test_overview_filters_by_region_or_airport(deals_client):
+    base = "/overview?cabin=all&fresh=0&pax=1"
+    assert deals_client.get(base + "&origin=MUC&destination=SIN").text.count("MUC→SIN") == 8
+    assert deals_client.get(base + "&origin=Europe&destination=Asia").text.count("MUC→SIN") == 8
+    assert (
+        deals_client.get(base + "&origin=Europe&destination=southeast_asia").text.count("MUC→SIN")
+        == 8
+    )
+    for q in ("origin=FRA", "destination=KUL", "origin=Asia", "destination=Europe"):
+        assert "Nothing matches" in deals_client.get(f"{base}&{q}").text
+    page = deals_client.get(base).text
+    assert 'name="origin"' in page and 'name="destination"' in page and "combo-list" in page
+    assert 'name="direction"' not in page and 'name="route"' not in page
+
+
 def test_hide_chart_deals_toggle(deals_client):
     assert "Nothing matches" in deals_client.get("/overview?cabin=all&fresh=0&nochart=1").text
     assert "MUC→SIN" in deals_client.get("/overview?cabin=all&fresh=0&chart=1").text
@@ -540,6 +555,20 @@ def test_watchlist_detail_only_shows_flights_inside_the_filters(client, db):
     for i in items:
         text = client.get(f"/watchlist/{i['id']}").text
         assert "58,000" not in text and "No flights fit yet" in text
+
+
+def test_watchlist_filters(client, db):
+    login(client)
+    _add(client)
+    _add(client, destination="KUL")
+    page = client.get("/watchlist").text
+    assert "MUC→SIN" in page and "MUC→KUL" in page and 'name="origin"' in page
+    only = client.get("/watchlist?destination=SIN").text
+    assert "MUC→SIN" in only and "MUC→KUL" not in only
+    assert "Nothing matches" in client.get("/watchlist?origin=FRA").text
+    assert "MUC→SIN" in client.get("/watchlist?origin=Europe&destination=Asia&sort=total").text
+    assert "58,000" not in client.get("/watchlist?cabin=economy").text  # business flight only
+    assert client.get("/watchlist?sort=bogus&pax=99").status_code == 200
 
 
 def test_watchlist_rejects_bad_items(client, db):

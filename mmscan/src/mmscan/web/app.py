@@ -272,6 +272,8 @@ def create_app(settings: WebSettings) -> FastAPI:
             "cabin": cabin,
             "direction": q["direction"],
             "route": q["route"],
+            "origin": q["origin"],
+            "destination": q["destination"],
             "pax": pax,
             "sort": q["sort"],
             "chart": int(bool(q["chart"]) and not hide_chart),
@@ -290,6 +292,8 @@ def create_app(settings: WebSettings) -> FastAPI:
                 direction=q["direction"],
                 cabin=cabin,
                 route=q["route"],
+                origin=q["origin"],
+                destination=q["destination"],
                 pax=pax,
                 sort=q["sort"],
                 chart_only=bool(f["chart"]),
@@ -319,6 +323,8 @@ def create_app(settings: WebSettings) -> FastAPI:
         cabin: str | None = None,
         direction: str = "",
         route: str = "",
+        origin: str = "",
+        destination: str = "",
         pax: int | None = None,
         sort: str = "pct",
         chart: int = 0,
@@ -327,7 +333,8 @@ def create_app(settings: WebSettings) -> FastAPI:
         limit: int = ROW_LIMIT,
     ):
         q = dict(
-            cabin=cabin, direction=direction, route=route, pax=pax, sort=sort,
+            cabin=cabin, direction=direction, route=route, origin=origin.strip(),
+            destination=destination.strip(), pax=pax, sort=sort,
             chart=chart, nochart=nochart, fresh=fresh, limit=limit,
         )  # fmt: skip
         ctx = deals_context(store, q, min_pct=None, inline=True)
@@ -335,10 +342,30 @@ def create_app(settings: WebSettings) -> FastAPI:
 
     MAX_WATCH_ITEMS = 50  # each one costs API calls on every scan
 
-    def watchlist_ctx(store: Store, **extra) -> dict:
+    def watchlist_ctx(store: Store, q: dict | None = None, **extra) -> dict:
         today = datetime.now(UTC).date().isoformat()
+        q = q or {}
+        cabin = q.get("cabin")
+        cabin = "" if cabin in (None, "all") else cabin
+        pax = max(1, min(q.get("pax") or 1, 9))
+        sort = q.get("sort") if q.get("sort") in queries.WATCH_SORTS else "date"
+        f = {
+            "cabin": cabin,
+            "origin": (q.get("origin") or "").strip(),
+            "destination": (q.get("destination") or "").strip(),
+            "pax": pax,
+            "sort": sort,
+        }
+        view = queries.watch_items_view(
+            store, cfg, store.watch_items(), today,
+            cabin=cabin, origin=f["origin"], destination=f["destination"], pax=pax, sort=sort,
+        )  # fmt: skip
         return {
-            "items": queries.watch_items_view(store, store.watch_items(), today),
+            "items": view["items"],
+            "places": view["places"],
+            "cabins": cfg.cabins,
+            "sorts": queries.WATCH_SORTS,
+            "f": f,
             "updated": queries.last_update(store),
             "today": today,
             "max_items": MAX_WATCH_ITEMS,
@@ -349,8 +376,18 @@ def create_app(settings: WebSettings) -> FastAPI:
 
     @app.get("/watchlist", response_class=HTMLResponse, dependencies=[Depends(require_login)])
     @app.get("/shortlist", response_class=HTMLResponse, dependencies=[Depends(require_login)])
-    def watchlist_page(request: Request, store: Store = Depends(open_store), added: int = 0):
-        return render(request, "watchlist.html", **watchlist_ctx(store, added=bool(added)))
+    def watchlist_page(
+        request: Request,
+        store: Store = Depends(open_store),
+        added: int = 0,
+        cabin: str | None = None,
+        origin: str = "",
+        destination: str = "",
+        pax: int | None = None,
+        sort: str = "date",
+    ):
+        q = dict(cabin=cabin, origin=origin, destination=destination, pax=pax, sort=sort)
+        return render(request, "watchlist.html", **watchlist_ctx(store, q, added=bool(added)))
 
     def _airport(raw: str | None, label: str, errors: list[str]) -> str:
         code = (raw or "").strip().upper()

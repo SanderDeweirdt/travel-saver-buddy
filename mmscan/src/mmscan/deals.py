@@ -7,6 +7,7 @@ from datetime import datetime
 
 from mmscan.baseline import Baseline, Key, baseline_for, baseline_key
 from mmscan.config import Config
+from mmscan.overview import matches_place
 from mmscan.report import _age_hours
 from mmscan.scoring import Scored
 
@@ -79,6 +80,8 @@ def rank_deals(
     *,
     cabin: str = "",
     route: str = "",
+    origin: str = "",
+    destination: str = "",
     chart_only: bool = False,
     hide_chart: bool = False,
     min_pct: float | None = None,
@@ -99,6 +102,10 @@ def rank_deals(
         if cabin and s.cabin != cabin:
             continue
         if route and not _matches_route(s, route):
+            continue
+        if not matches_place(origin, s.origin, s.origin_region, cfg):
+            continue
+        if not matches_place(destination, s.destination, s.destination_region, cfg):
             continue
         pricing = cfg.pricing_model(s.carriers)
         if chart_only and not hide_chart and pricing != "fixed":
