@@ -56,6 +56,27 @@
   </div>
   {% endfor %}
 
+  <h2>Benchmarks</h2>
+  <p class="note">Fallback prices for a route when there is too little history. <em>From</em> and <em>to</em> are a region (Europe, Asia) or a subregion from <code>config.yaml</code> (southeast_asia). Clear a row or tick Remove to delete it; fill the last row to add one.</p>
+  <div class="panel"><div class="scroll"><table>
+    <thead><tr><th>Name</th><th>Cabin</th><th>From</th><th>To</th><th class="n">Good miles max</th><th class="n">Chart miles</th><th class="n">Fees max (EUR)</th><th>Remove</th></tr></thead>
+    <tbody>
+    {% for b in benchmarks %}{% set i = loop.index0 %}
+      <tr>
+        <td><input name="bm__{{ i }}__name" value="{{ b.name }}" aria-label="Benchmark name" style="width:190px"></td>
+        <td><input name="bm__{{ i }}__cabin" value="{{ b.cabin }}" aria-label="Cabin" style="width:90px"></td>
+        <td><input name="bm__{{ i }}__from" value="{{ b['from'] }}" aria-label="From" style="width:110px"></td>
+        <td><input name="bm__{{ i }}__to" value="{{ b.to }}" aria-label="To" style="width:110px"></td>
+        <td class="n"><input name="bm__{{ i }}__good_miles_max" inputmode="numeric" value="{{ b.good_miles_max }}" aria-label="Good miles max" style="width:90px;text-align:right"></td>
+        <td class="n"><input name="bm__{{ i }}__chart_rate_miles" inputmode="numeric" value="{{ b.chart_rate_miles }}" aria-label="Chart miles" style="width:90px;text-align:right"></td>
+        <td class="n"><input name="bm__{{ i }}__fees_max_eur" inputmode="decimal" value="{{ b.fees_max_eur }}" aria-label="Fees max in euro" style="width:80px;text-align:right"></td>
+        <td><input type="checkbox" name="bm__{{ i }}__remove" {{ 'checked' if b.remove }} aria-label="Remove benchmark" style="min-height:auto"></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div></div>
+  <input type="hidden" name="bm_seen" value="1">
+
   <p style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
     <button type="submit" class="primary btn">Save</button>
   </p>

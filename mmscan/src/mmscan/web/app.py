@@ -24,7 +24,12 @@ from mmscan.web import queries
 from mmscan.web.auth import LoginLimiter, password_ok
 from mmscan.web.charts import price_chart
 from mmscan.web.settings import WebSettings
-from mmscan.web.settings_form import parse_fields, render_fields
+from mmscan.web.settings_form import (
+    benchmark_rows,
+    parse_benchmarks,
+    parse_fields,
+    render_fields,
+)
 
 HERE = Path(__file__).parent
 SORT_LABELS = {
@@ -166,6 +171,7 @@ def create_app(settings: WebSettings) -> FastAPI:
             else f"{cfg.mr_point_value_eur_cents:g}",
             "rows": settings_rows(),
             "fields": render_fields(cfg),
+            "benchmarks": benchmark_rows(cfg),
             "errors": [],
             "saved": False,
             **extra,
@@ -199,6 +205,9 @@ def create_app(settings: WebSettings) -> FastAPI:
             "programs": programs,
             **parse_fields(form, errors),
         }
+        benchmarks = parse_benchmarks(form, errors)
+        if benchmarks is not None:
+            overrides["benchmarks"] = benchmarks
         new_cfg = None
         if not errors:
             try:
@@ -225,6 +234,7 @@ def create_app(settings: WebSettings) -> FastAPI:
                     errors=errors,
                     rows=rows,
                     fields=render_fields(cfg, form),
+                    benchmarks=benchmark_rows(cfg, form),
                     mm_cost=form.get("mile_cost_eur_cents", ""),
                     mr_value=form.get("mr_point_value_eur_cents", ""),
                 ),

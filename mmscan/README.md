@@ -278,4 +278,4 @@ mmscan tables are dropped) to run the store tests on Postgres as well; without i
 
 ## Settings page
 
-The Settings page edits the programs (bookable, also within Asia, costs) and the main config values: cabins, region pairs, date window, seats, API cap, watchlist, currency rates and the deal thresholds. Saved values live in the database and win over `config.yaml`; scan settings reach the API requests at the next scan.
+The Settings page edits the programs (bookable, also within Asia, costs) and the main config values: cabins, region pairs, date window, seats, API cap, watchlist, currency rates, the deal thresholds, the benchmarks and the Slack alerts. Saved values live in the database and win over `config.yaml`; scan settings reach the API requests at the next scan.

@@ -501,9 +501,18 @@ SCALAR_KEYS = (
     "usd_to_eur",
     "usd_to_eur_date",
 )
-SECTION_KEYS = ("date_window", "api", "relative", "savings", "deals", "watchlist")
-REPLACE_KEYS = ("fx_to_eur", "region_pairs", "cabins")
+SECTION_KEYS = ("date_window", "api", "relative", "savings", "deals", "watchlist", "notify")
+REPLACE_KEYS = ("fx_to_eur", "region_pairs", "cabins", "benchmarks")
 SETTING_KEYS = SCALAR_KEYS + REPLACE_KEYS  # kept for older callers
+
+
+def _deep_merge(base: dict, top: dict) -> dict:
+    out = dict(base)
+    for k, v in top.items():
+        out[k] = (
+            _deep_merge(out[k], v) if isinstance(v, dict) and isinstance(out.get(k), dict) else v
+        )
+    return out
 
 
 def apply_overrides(data: dict, overrides: dict | None) -> dict:
@@ -517,7 +526,7 @@ def apply_overrides(data: dict, overrides: dict | None) -> dict:
             merged[key] = overrides[key]
     for key in SECTION_KEYS:
         if isinstance(overrides.get(key), dict):
-            merged[key] = {**(data.get(key) or {}), **overrides[key]}
+            merged[key] = _deep_merge(data.get(key) or {}, overrides[key])
     saved = overrides.get("programs")
     legacy = overrides.get("bookable_programs")  # saved before `enabled` moved into each program
     if isinstance(saved, dict) or isinstance(legacy, list):

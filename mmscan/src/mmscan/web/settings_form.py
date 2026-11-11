@@ -66,6 +66,53 @@ FIELDS: tuple[Field, ...] = (
         "Deals", "deals.default_cabin", "Best deals: default cabin", "text", "Empty = all cabins."
     ),
     Field("Deals", "deals.by_ceiling", "Also a deal when under the benchmark ceiling", "bool"),
+    Field(
+        "Slack alerts",
+        "notify.slack",
+        "Post to Slack after each run",
+        "bool",
+        "The webhook URL stays a secret in SLACK_WEBHOOK_URL, never here.",
+    ),
+    Field(
+        "Slack alerts",
+        "notify.new_deals.enabled",
+        "New-deal alert",
+        "bool",
+        "Post each flight the first time it is seen well below its usual price.",
+    ),
+    Field(
+        "Slack alerts", "notify.new_deals.min_pct", "New deal: at least this % below usual", "float"
+    ),
+    Field("Slack alerts", "notify.new_deals.cabins", "New deal: cabins", "cabins"),
+    Field(
+        "Slack alerts",
+        "notify.new_deals.unverified",
+        "New deal: include dynamic-carrier prices",
+        "bool",
+        "Marked unverified in the message.",
+    ),
+    Field("Slack alerts", "notify.max_items", "Flights per message", "int", "1 to 40."),
+    Field(
+        "Slack alerts",
+        "notify.on_drop",
+        "Older alert: Cheaper results",
+        "bool",
+        "Inside the shortlist scope.",
+    ),
+    Field(
+        "Slack alerts",
+        "notify.verdicts",
+        "Older alert: verdicts",
+        "list",
+        "Comma separated: Deal, Worth a look. Empty = none.",
+    ),
+    Field(
+        "Slack alerts",
+        "notify.changes",
+        "Older alert: changes",
+        "list",
+        "Comma separated: New, Cheaper.",
+    ),
     Field("Deals", "savings.great_pct", "Great: at least this % below usual", "float"),
     Field("Deals", "savings.good_pct", "Good: at least this % below usual", "float"),
     Field("Deals", "relative.percentile_good", "Good = cheapest percentile", "float"),
@@ -86,7 +133,7 @@ def display(cfg: Config, f: Field) -> Any:
     v = _dig(cfg, f.path)
     if f.kind == "bool":
         return bool(v)
-    if f.kind in ("cabins", "codes"):
+    if f.kind in ("cabins", "codes", "list"):
         return ", ".join(v)
     if f.kind == "pairs":
         return "\n".join(f"{p.origin} > {p.destination}" for p in v)
@@ -153,6 +200,8 @@ def parse_fields(form, errors: list[str]) -> dict:
                 value = text
             elif f.kind == "codes":
                 value = [w.upper() for w in _words(text)]
+            elif f.kind == "list":
+                value = [w.strip() for w in text.split(",") if w.strip()]
             elif f.kind == "cabins":
                 value = [w.lower() for w in _words(text)]
             elif f.kind == "pairs":
@@ -174,9 +223,70 @@ def parse_fields(form, errors: list[str]) -> dict:
                     value[cur.strip().upper()] = num
         if isinstance(value, date):
             value = value.isoformat()
-        parent, _, leaf = f.path.rpartition(".")
-        if parent:
-            out.setdefault(parent, {})[leaf] = value
-        else:
-            out[leaf] = value
+        *parents, leaf = f.path.split(".")
+        node = out
+        for part in parents:
+            node = node.setdefault(part, {})
+        node[leaf] = value
+    return out
+
+
+BENCH_COLS = ("name", "cabin", "from", "to", "good_miles_max", "chart_rate_miles", "fees_max_eur")
+
+
+def benchmark_rows(cfg: Config, form=None) -> list[dict]:
+    """Table rows (plus one empty row to add a benchmark); a failed save's form wins."""
+    if form is not None and "bm_seen" in form:
+        rows, i = [], 0
+        while f"bm__{i}__name" in form:
+            rows.append(
+                {c: form.get(f"bm__{i}__{c}", "") for c in BENCH_COLS}
+                | {"remove": bool(form.get(f"bm__{i}__remove"))}
+            )
+            i += 1
+        return rows
+    rows = [
+        {
+            "name": b.name,
+            "cabin": b.cabin,
+            "from": b.between[0],
+            "to": b.between[1],
+            "good_miles_max": b.good_miles_max,
+            "chart_rate_miles": b.chart_rate_miles,
+            "fees_max_eur": f"{b.fees_max_eur:g}",
+            "remove": False,
+        }
+        for b in cfg.benchmarks
+    ]
+    return [*rows, {c: "" for c in BENCH_COLS} | {"remove": False}]
+
+
+def parse_benchmarks(form, errors: list[str]) -> list[dict] | None:
+    """The benchmark list from the table, or None when the form has no table."""
+    if "bm_seen" not in form:
+        return None
+    out, i = [], 0
+    while f"bm__{i}__name" in form:
+        row = {c: str(form.get(f"bm__{i}__{c}") or "").strip() for c in BENCH_COLS}
+        i += 1
+        if form.get(f"bm__{i - 1}__remove") or not any(row.values()):
+            continue
+        if not all(row.values()):
+            errors.append(f"Benchmark {row['name'] or i}: fill in every column or clear the row")
+            continue
+        label = f"Benchmark {row['name']}"
+        nums = {
+            c: _num(row[c], "float" if c == "fees_max_eur" else "int", f"{label} {c}", errors)
+            for c in ("good_miles_max", "chart_rate_miles", "fees_max_eur")
+        }
+        if any(v is None for v in nums.values()):
+            continue
+        out.append(
+            {
+                "name": row["name"],
+                "cabin": row["cabin"].lower(),
+                "between": [row["from"], row["to"]],
+                **nums,
+            }
+        )
     return out
