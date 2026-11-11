@@ -4,10 +4,10 @@ costs the whole party. Pure over stored results; no API calls."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 
 from mmscan.config import Config, TripProfile
-from mmscan.offers import legs_as_of, legs_history
+from mmscan.offers import legs_as_of
 from mmscan.report import _age_hours
 from mmscan.scoring import Scored
 from mmscan.store import Store
@@ -166,39 +166,6 @@ def _note(v: TripView) -> str:
         f"{v.n_out} outbound and {v.n_back} return option(s) found, but none fit the stay length "
         "or airports together."
     )
-
-
-def calendar_cells(view: TripView) -> dict:
-    """Cheapest whole-party price per departure day over the trip's departure window, as a grid
-    that starts on a Monday. `level` runs from 0 (cheapest fifth) to 4; None means no seats."""
-    w = view.profile.depart
-    days = [w.start + timedelta(days=i) for i in range((w.end - w.start).days + 1)]
-    prices = [view.by_day[d.isoformat()] for d in days if d.isoformat() in view.by_day]
-    lo, hi = (min(prices), max(prices)) if prices else (0.0, 0.0)
-    cells = []
-    for d in days:
-        total = view.by_day.get(d.isoformat())
-        level = None if total is None else min(4, int((total - lo) / (hi - lo + 0.01) * 5))
-        cells.append({"date": d, "total": total, "level": level, "best": total == lo and prices})
-    return {"cells": cells, "lead": w.start.weekday(), "low": lo, "high": hi}
-
-
-def trip_trend(store: Store, cfg: Config, trip: TripProfile, now: datetime, days: int = 30):
-    """Best whole-party price of a trip as it stood at the end of each day, from the stored
-    observations. One point per day, oldest first; days with no option are left out."""
-    day = (now - timedelta(days=days)).date()
-    ends = []
-    while day <= now.date():
-        ends.append(min(datetime.combine(day, datetime.max.time(), tzinfo=now.tzinfo), now))
-        day += timedelta(days=1)
-    out = []
-    for end, legs in zip(
-        ends, legs_history(store, cfg, ends, cfg.trip_freshness_hours), strict=True
-    ):
-        best = build_trip(legs, trip, cfg).best
-        if best:
-            out.append({"day": end.date().isoformat(), "total": best.party_total})
-    return out
 
 
 def trip_views(store: Store, cfg: Config, now: datetime) -> list[TripView]:
