@@ -11,10 +11,9 @@
   <ul style="margin:4px 0 0 18px;padding:0">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul></div>{% endif %}
 
 <form class="filters" method="post" action="/watchlist">
-  <label>From
-    <input name="origin" value="{{ form.origin }}" placeholder="FRA" maxlength="3" required pattern="[A-Za-z]{3}" autocapitalize="characters"></label>
-  <label>To
-    <input name="destination" value="{{ form.destination }}" placeholder="SIN" maxlength="3" required pattern="[A-Za-z]{3}" autocapitalize="characters"></label>
+  {% set airports = places|selectattr("kind", "equalto", "Airport")|list %}
+  {{ filters.place("origin", "From", form.origin, airports, "FRA") }}
+  {{ filters.place("destination", "To", form.destination, airports, "SIN") }}
   <label>Departure (earliest)
     <input type="date" name="date_from" value="{{ form.date_from }}" min="{{ today }}" required></label>
   <label>Departure (latest, optional)

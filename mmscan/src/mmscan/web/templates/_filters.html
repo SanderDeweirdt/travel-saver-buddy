@@ -1,10 +1,10 @@
 {# Shared filter fields: Cabin, Origin, Destination, Travellers, Sort. #}
-{% macro place(name, label, value, places) %}
+{% macro place(name, label, value, places, placeholder="Any region or airport") %}
 <label>{{ label }}
   <span class="combo" data-places='{{ places|tojson|forceescape }}'>
     <input type="hidden" name="{{ name }}" value="{{ value }}">
     <input type="text" class="combo-input" role="combobox" aria-expanded="false" aria-autocomplete="list"
-           autocomplete="off" placeholder="Any region or airport" value="{{ value }}">
+           autocomplete="off" placeholder="{{ placeholder }}" value="{{ value }}">
     <ul class="combo-list" role="listbox" hidden></ul>
   </span></label>
 {% endmacro %}

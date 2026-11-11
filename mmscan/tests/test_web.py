@@ -571,6 +571,16 @@ def test_watchlist_filters(client, db):
     assert client.get("/watchlist?sort=bogus&pax=99").status_code == 200
 
 
+def test_watchlist_add_form_uses_airport_pickers(client, db):
+    login(client)
+    page = client.get("/watchlist").text
+    assert page.count('class="combo"') == 4  # two in the add form, two filters
+    assert 'placeholder="FRA"' in page and 'placeholder="SIN"' in page
+    r = _add(client, origin="nrt")  # an airport not yet in the data is still accepted
+    assert r.status_code == 303
+    assert Store(db, readonly=True).watch_items()[0]["origin"] == "NRT"
+
+
 def test_watchlist_rejects_bad_items(client, db):
     login(client)
     for bad in (
