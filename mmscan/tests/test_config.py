@@ -53,3 +53,22 @@ def test_benchmark_matches_both_directions():
 def test_date_range():
     cfg = load_config(ROOT / "config.yaml")
     assert cfg.date_range(date(2026, 10, 11)) == (date(2026, 10, 11), date(2027, 4, 9))
+
+
+def test_amex_points_are_priced_through_the_transfer_ratio(default_config_dict):
+    from mmscan.config import Config
+
+    data = {
+        **default_config_dict,
+        "mr_point_value_eur_cents": 1.2,
+        "programs": {
+            "singapore": {"mr_per_mile": 1.5},  # 3 points = 2 miles
+            "aeroplan": {"mile_cost_eur_cents": 1.4},
+        },
+    }
+    cfg = Config.model_validate(data)
+    assert cfg.mile_cents("singapore") == pytest.approx(1.8)
+    assert cfg.mile_cents("aeroplan") == 1.4  # no ratio: its own cents per mile
+    assert cfg.mile_cents(None) == cfg.mile_cost_eur_cents
+    with pytest.raises(Exception, match="mr_point_value_eur_cents"):
+        Config.model_validate({**data, "mr_point_value_eur_cents": None})

@@ -245,6 +245,9 @@ class Program(_Model):
 
     # What one mile of this program costs you, in euro cents. Unset = the top-level value.
     mile_cost_eur_cents: float | None = Field(None, gt=0)
+    # Amex Membership Rewards points that buy one mile of this program (3 points = 2 miles is 1.5).
+    # Set, it replaces mile_cost_eur_cents: a mile costs mr_per_mile x `mr_point_value_eur_cents`.
+    mr_per_mile: float | None = Field(None, gt=0)
     # Prefilled award-search URL, same placeholders as miles_and_more.link_template.
     link_template: str = ""
     label: str = ""  # short name on the Book button; empty = the source id
@@ -268,6 +271,9 @@ class Config(_Model):
     # (Miles & More) plus any program your points transfer to. Anything else is neither scanned
     # nor shown. None = no filter.
     bookable_programs: list[str] | None = None
+    # What one Amex Membership Rewards point is worth to you, in euro cents. Turns points sent to a
+    # transfer partner into euros, so those awards compare with Miles & More on one total.
+    mr_point_value_eur_cents: float | None = Field(None, gt=0)
     # IATA codes of Miles & More carriers that price awards dynamically (no chart). Everything
     # else on the program is a fixed partner chart. The list has grown before: keep it current.
     dynamic_airlines: list[str] = ["LH", "LX", "OS", "CL", "4Y", "EN", "WK"]
@@ -302,6 +308,15 @@ class Config(_Model):
     warnings: list[str] = Field(default_factory=list, exclude=True)
 
     @model_validator(mode="after")
+    def _check_amex(self) -> Config:
+        needs = sorted(k for k, p in self.programs.items() if p.mr_per_mile)
+        if needs and self.mr_point_value_eur_cents is None:
+            raise ValueError(
+                f"programs {needs} use mr_per_mile, so mr_point_value_eur_cents must be set"
+            )
+        return self
+
+    @model_validator(mode="after")
     def _check_places(self) -> Config:
         known = set(REGIONS) | set(self.subregions)
         for i, b in enumerate(self.benchmarks):
@@ -323,6 +338,8 @@ class Config(_Model):
     def mile_cents(self, source: str | None) -> float:
         """Euro cents one mile of `source` costs you. No source means the default program."""
         program = self.programs.get(source or self.source)
+        if program and program.mr_per_mile and self.mr_point_value_eur_cents:
+            return program.mr_per_mile * self.mr_point_value_eur_cents
         return (program.mile_cost_eur_cents if program else None) or self.mile_cost_eur_cents
 
     def link_template_for(self, source: str | None) -> str:

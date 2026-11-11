@@ -206,10 +206,11 @@ def create_app(settings: WebSettings) -> FastAPI:
             cfg_great=f"{cfg.savings.great_pct:g}",
             mile_ct=cfg.mile_cost_eur_cents,
             program_cents={
-                cfg.program_label(k): v.mile_cost_eur_cents
+                cfg.program_label(k): round(cfg.mile_cents(k), 3)
                 for k, v in cfg.programs.items()
-                if v.mile_cost_eur_cents
+                if v.mile_cost_eur_cents or v.mr_per_mile
             },
+            mr_ct=cfg.mr_point_value_eur_cents,
         )
 
     @app.get("/overview", response_class=HTMLResponse, dependencies=[Depends(require_login)])
