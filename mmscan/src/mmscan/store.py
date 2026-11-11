@@ -253,6 +253,18 @@ CREATE TABLE IF NOT EXISTS settings (
 );
 """
 
+# Flights the user asked to follow on the Watchlist page: one airport pair and a departure window.
+WATCH_SCHEMA = """
+CREATE TABLE IF NOT EXISTS watch_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    origin TEXT NOT NULL,
+    destination TEXT NOT NULL,
+    date_from TEXT NOT NULL,
+    date_to TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+"""
+
 VERSION_TABLE = "CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)"
 
 # (version, DDL script or a function(store) for data migrations). Append only; never edit one that
@@ -263,6 +275,7 @@ MIGRATIONS: list[tuple[int, str | Callable[[Store], object]]] = [
     (3, _backfill_observations),
     (4, _add_source_columns),
     (5, SETTINGS_SCHEMA),
+    (6, WATCH_SCHEMA),
 ]
 
 
@@ -275,7 +288,7 @@ def pg_ddl(sql: str) -> str:
 
 def pg_schema() -> str:
     """The whole schema in Postgres types."""
-    return pg_ddl(SCHEMA + OBSERVATIONS_SCHEMA + SOURCE_COLUMNS + SETTINGS_SCHEMA)
+    return pg_ddl(SCHEMA + OBSERVATIONS_SCHEMA + SOURCE_COLUMNS + SETTINGS_SCHEMA + WATCH_SCHEMA)
 
 
 def read_overrides(target: Path | str) -> dict:
@@ -533,6 +546,44 @@ class Store:
                 "updated_at = EXCLUDED.updated_at",
                 (json.dumps(overrides, sort_keys=True), (now or utcnow()).isoformat()),
             )
+        self.conn.commit()
+
+    # Watchlist items
+
+    def watch_items(self) -> list[dict]:
+        """Every watchlist item, oldest first; [] before the table exists."""
+        try:
+            rows = self.conn.execute(
+                "SELECT id, origin, destination, date_from, date_to, created_at "
+                "FROM watch_items ORDER BY id"
+            ).fetchall()
+        except Exception:  # an older database a read-only process has not seen migrated yet
+            if self.postgres:
+                self.conn.rollback()
+            return []
+        return [dict(zip(r.keys(), tuple(r), strict=True)) for r in rows]
+
+    def watch_item(self, item_id: int) -> dict | None:
+        return next((i for i in self.watch_items() if i["id"] == item_id), None)
+
+    def add_watch_item(
+        self,
+        origin: str,
+        destination: str,
+        date_from: str,
+        date_to: str,
+        now: datetime | None = None,
+    ) -> int:
+        row = self.conn.execute(
+            "INSERT INTO watch_items(origin, destination, date_from, date_to, created_at) "
+            "VALUES (?,?,?,?,?) RETURNING id",
+            (origin, destination, date_from, date_to, (now or utcnow()).isoformat()),
+        ).fetchone()
+        self.conn.commit()
+        return int(row[0])
+
+    def delete_watch_item(self, item_id: int) -> None:
+        self.conn.execute("DELETE FROM watch_items WHERE id = ?", (item_id,))
         self.conn.commit()
 
     # Size and maintenance

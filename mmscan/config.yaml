@@ -67,11 +67,6 @@ region_pairs:
   - {origin: Asia, destination: Europe}
   - {origin: Asia, destination: Asia}
 
-watchlist:
-  origins: [MUC, FRA, ZRH, VIE, BRU, DUS, HAM, BER, GVA, AMS, CDG]
-  destinations: [SIN, KUL, BKK, MNL, CEB, CGK, DPS, HKT, SGN, HAN]
-  both_directions: true
-
 # The API's regions are continents. Subregions refine them by airport list.
 subregions:
   southeast_asia: [SIN, KUL, BKK, MNL, CGK, SGN, HAN, DPS, HKT, PEN, CEB]
@@ -148,11 +143,10 @@ drops:
   min_pct: 5
 
 # What reaches the Shortlist, the shortlist CSV and Slack. focus = results that match a
-# benchmark above (Europe <-> southeast_asia) or a watchlist airport pair; all = everything
+# benchmark above (Europe <-> southeast_asia); all = everything
 # scored a Deal or Worth a look. "All results" always has every result either way.
 shortlist:
   scope: focus
-  focus_watchlist: true
 
 # Slack alerts after `mmscan run` or `mmscan notify`. The webhook URL is a
 # secret: put it in .env as SLACK_WEBHOOK_URL, never here. Only results that
@@ -173,9 +167,9 @@ notify:
   changes: [New, Cheaper]
   max_items: 10
 
-# `mmscan watch`: watchlist only, for frequent runs. Results come cheapest
-# first, so one page (api.take results) per direction holds the deals.
-# Calls per watch run: 2 x max_pages.
+# `mmscan watch`: watchlist items and trips only, for frequent runs. Results come cheapest
+# first, so one page (api.take results) per search holds the deals.
+# Calls per watch run: one per watchlist item and trip leg, times max_pages.
 watch:
   max_pages: 1
 

@@ -10,6 +10,7 @@ from mmscan.cli import app
 from mmscan.client import Client
 from mmscan.config import Config, Program
 from mmscan.scan import (
+    item_requests,
     paginate,
     planned_requests,
     region_requests,
@@ -106,12 +107,14 @@ def test_watchlist_stores_trips_with_fees(tmp_path, default_config_dict):
     client, store = make(tmp_path, handler)
     run = store.start_run("scan", "{}")
     cfg = cfg_from(default_config_dict)
+    assert scan_watchlist(client, store, cfg, run, TODAY)["watchlist_results"] == 0  # no items
+    assert sent == []
+    store.add_watch_item("MUC", "SIN", "2026-12-01", "2026-12-31")
     stats = scan_watchlist(client, store, cfg, run, TODAY)
-    assert len(sent) == 2  # both directions
-    assert sent[0]["origin_airport"] == ",".join(cfg.watchlist.origins)
-    assert sent[1]["origin_airport"] == ",".join(cfg.watchlist.destinations)
+    assert len(sent) == 1
+    assert (sent[0]["origin_airport"], sent[0]["destination_airport"]) == ("MUC", "SIN")
     assert sent[0]["order_by"] == "lowest_mileage" and sent[0]["include_trips"] == "true"
-    assert stats["watchlist_results"] == 2  # same ID per call, deduped within each call
+    assert stats["watchlist_results"] == 1
     rows = store.conn.execute(
         "SELECT cabin, mileage_cost, total_taxes, taxes_currency FROM trips ORDER BY id"
     ).fetchall()
@@ -127,14 +130,14 @@ def test_watchlist_stores_trips_with_fees(tmp_path, default_config_dict):
 
 def test_dry_run_sends_nothing_and_lists_requests(tmp_path, monkeypatch, default_config_dict):
     reqs = planned_requests(cfg_from(default_config_dict), TODAY)
-    assert [p for p, _ in reqs] == ["availability", "availability", "search", "search"]
+    assert [p for p, _ in reqs] == ["availability", "availability"]
     assert all(params["take"] == 1000 for _, params in reqs)
 
     monkeypatch.chdir(tmp_path)
     (tmp_path / "config.yaml").write_text(json.dumps(default_config_dict))
     result = CliRunner().invoke(app, ["scan", "--dry-run"])
     assert result.exit_code == 0, result.output
-    assert "Would start with 4 requests" in result.output
+    assert "Would start with 2 requests" in result.output
     assert not (tmp_path / "data").exists()
 
 
@@ -209,7 +212,6 @@ def test_bad_source_is_skipped_not_fatal(tmp_path, default_config_dict):
         default_config_dict,
         region_pairs=[{"origin": "Europe", "destination": "Asia"}],
         programs={"united": {"enabled": True}},
-        watchlist={"origins": [], "destinations": [], "both_directions": False},
     )
     # Config loading rejects unknown sources, so slip one in afterwards: the API can still answer
     # 400 for a source the docs list (for example one it has retired).
@@ -240,3 +242,19 @@ def test_only_enabled_programs_are_requested(default_config_dict):
     assert cfg.sources_for(asia) == ["singapore"]  # flyingblue is not within_region
     assert cfg.is_bookable(None) and cfg.is_bookable("flyingblue") and not cfg.is_bookable("united")
     assert not cfg.is_bookable("not-a-program")
+
+
+def test_watchlist_items_become_narrow_searches(default_config_dict):
+    cfg = cfg_from(default_config_dict)
+    items = [
+        {"origin": "FRA", "destination": "SIN", "date_from": "2026-12-01", "date_to": "2026-12-20"},
+        {"origin": "MUC", "destination": "BKK", "date_from": "2026-01-01", "date_to": "2026-01-05"},
+    ]
+    reqs = item_requests(cfg, TODAY, items)
+    assert len(reqs) == 1  # the second window has passed
+    path, params = reqs[0]
+    assert path == "search"
+    assert params["origin_airport"] == "FRA" and params["destination_airport"] == "SIN"
+    assert params["start_date"] == max(date(2026, 12, 1), TODAY).isoformat()
+    assert params["end_date"] == "2026-12-20"
+    assert params["sources"].split(",")[0] == cfg.source

@@ -53,6 +53,6 @@ def test_run_dry_run_makes_no_calls(tmp_path, monkeypatch, default_config_dict):
     (tmp_path / "config.yaml").write_text(json.dumps(default_config_dict))
     result = CliRunner().invoke(app, ["run", "--dry-run"])
     assert result.exit_code == 0, result.output
-    assert "Planned calls: 4 scan requests" in result.output
-    assert "GET /availability" in result.output and "GET /search" in result.output
+    assert "Planned calls: 2 scan requests" in result.output
+    assert "GET /availability" in result.output
     assert not (tmp_path / "data").exists()

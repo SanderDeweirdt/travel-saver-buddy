@@ -11,7 +11,7 @@ from mmscan.config import Config
 from mmscan.deals import rank_deals, saving_verdict
 from mmscan.offers import load_current, route_points
 from mmscan.overview import directions, in_regions
-from mmscan.report import _age_hours, shortlist
+from mmscan.report import _age_hours
 from mmscan.scoring import rank_key
 from mmscan.store import Store
 
@@ -52,49 +52,48 @@ def last_update(store: Store) -> str | None:
     return row[0]
 
 
-def shortlist_view(
-    store: Store,
-    cfg: Config,
-    now: datetime,
-    route: str = "",
-    cabin: str = "",
-    verdict: str = "",
-    sort: str = "verdict",
-    show_all: bool = False,
-) -> dict:
+def _item_matches(item: dict, s) -> bool:
+    return (
+        s.origin == item["origin"]
+        and s.destination == item["destination"]
+        and s.date is not None
+        and item["date_from"] <= s.date <= item["date_to"]
+        and not s.expired
+        and s.total_eur is not None
+    )
+
+
+def watch_items_view(store: Store, items: list[dict], today: str) -> list[dict]:
+    """Each watchlist item with how many flights fit it now and the cheapest of them."""
     results = load_current(store)
-    rows = results if show_all else shortlist(results, cfg)
-    routes = sorted({f"{s.origin}-{s.destination}" for s in rows})
-    if route:
-        rows = [s for s in rows if f"{s.origin}-{s.destination}" == route]
-    if cabin:
-        rows = [s for s in rows if s.cabin == cabin]
-    if verdict:
-        rows = [s for s in rows if s.verdict == verdict]
-    rows = sorted(rows, key=SORTS.get(sort, rank_key))
-    baselines = build_baselines(results, cfg)
     out = []
-    for s in rows:
-        b = baseline_for(baselines, cfg, s)
+    for item in items:
+        fits = [s for s in results if _item_matches(item, s)]
+        cheapest = min(fits, key=lambda s: s.total_eur, default=None)
         out.append(
             {
-                "s": s,
-                "baseline": b.median if b else None,
-                "samples": b.n if b else 0,
-                "age_h": _age_hours(s.updated_at, now),
-                "pricing": cfg.pricing_model(s.carriers),
-                "why": cfg.focus_reasons(
-                    s.origin, s.origin_region, s.destination, s.destination_region, s.cabin
-                ),
+                **item,
+                "flights": len(fits),
+                "cheapest": cheapest,
+                "past": item["date_to"] < today,
             }
         )
-    return {
-        "rows": out,
-        "routes": routes,
-        "cabins": sorted({s.cabin for s in results}),
-        "verdicts": sorted({s.verdict for s in results}),
-        "total": len(results),
-    }
+    return out
+
+
+def watch_item_view(store: Store, cfg: Config, item: dict, now: datetime) -> dict:
+    """The flights that fit one watchlist item: its airports, any cabin, inside its dates."""
+    fits = [s for s in load_current(store) if _item_matches(item, s)]
+    fits.sort(key=lambda s: (s.date or "", s.total_eur))
+    rows = [
+        {
+            "s": s,
+            "age_h": _age_hours(s.updated_at, now),
+            "pricing": cfg.pricing_model(s.carriers),
+        }
+        for s in fits
+    ]
+    return {"rows": rows, "updated": last_update(store)}
 
 
 def deals_view(store: Store, cfg: Config, now: datetime, direction: str = "", **filters) -> dict:
@@ -171,28 +170,15 @@ def carrier_trust(checks: list[dict], cfg: Config) -> list[dict]:
     return out
 
 
-def routes_view(store: Store, cfg: Config) -> dict:
-    """How much the pages cover: airport-to-airport routes with a current price, how many of them
-    are watchlist pairs, and the flights (route, date, cabin) on offer."""
-    pairs = store.conn.execute(
-        "SELECT DISTINCT origin, destination FROM current_offers WHERE origin IS NOT NULL"
-    ).fetchall()
-    wl = cfg.watchlist
-    on_watchlist = sum(
-        1
-        for o, d in (tuple(p) for p in pairs)
-        if (o in wl.origins and d in wl.destinations)
-        or (wl.both_directions and o in wl.destinations and d in wl.origins)
-    )
+def routes_view(store: Store) -> dict:
+    """How much the pages cover: airport-to-airport routes with a current price, and the flights
+    (route, date, cabin) on offer."""
+    routes = store.conn.execute(
+        "SELECT count(*) FROM (SELECT DISTINCT origin, destination FROM current_offers "
+        "WHERE origin IS NOT NULL) AS pairs"
+    ).fetchone()[0]
     flights = store.conn.execute("SELECT count(*) FROM current_offers").fetchone()[0]
-    return {
-        "routes": len(pairs),
-        "on_watchlist": on_watchlist,
-        "watchlist_pairs": len(wl.origins)
-        * len(wl.destinations)
-        * (2 if wl.both_directions else 1),
-        "flights": flights,
-    }
+    return {"routes": routes, "flights": flights}
 
 
 def data_view(store: Store, cfg: Config, now: datetime) -> dict:
@@ -208,7 +194,7 @@ def data_view(store: Store, cfg: Config, now: datetime) -> dict:
     )
     return {
         "quota": quota_view(store, cfg.api.daily_call_cap, now),
-        "coverage": routes_view(store, cfg),
+        "coverage": routes_view(store),
         "runs": runs[:10],
         "last_watch": last_watch,
         "last_full": last_full,

@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}{{ item.origin }}→{{ item.destination }} · mmscan{% endblock %}
+{% block body %}
+<p class="sub" style="margin:0 0 6px"><a href="/watchlist">← Flight watchlist</a></p>
+<div class="page-head">
+  <h1>{{ item.origin }}→{{ item.destination }}</h1>
+  <span class="sub">Departing {{ item.date_from }}{% if item.date_to != item.date_from %} to {{ item.date_to }}{% endif %}
+    · {{ view.rows|length }} flight{{ "s" if view.rows|length != 1 }}{% if view.updated %} · prices as of {{ view.updated|when }} UTC{% endif %}</span>
+</div>
+<div class="banner" role="note">{{ disclaimer }}</div>
+
+<div class="panel"><div class="scroll"><table class="cards">
+<thead><tr>
+  <th>Date</th><th>Cabin</th><th class="n">Miles</th><th class="n">Fees €</th><th class="n">With miles €</th>
+  <th class="n">Seats</th><th>Flights</th><th>Flags</th><th>Book</th>
+</tr></thead>
+<tbody>
+{% for r in view.rows %}{% set s = r.s %}
+<tr>
+  <td data-label="Date" class="nowrap">{{ s.date }}</td>
+  <td data-label="Cabin">{{ s.cabin }}</td>
+  <td data-label="Miles" class="n">{{ "{:,}".format(s.miles) if s.miles is not none else "–" }} <span class="muted">{{ program_label(s.source) }}</span></td>
+  <td data-label="Fees €" class="n">{{ s.fees_eur|money }}</td>
+  <td data-label="With miles €" class="n"><b>{{ s.total_eur|money }}</b></td>
+  <td data-label="Seats" class="n">{{ s.seats if s.seats is not none else "?" }}</td>
+  <td data-label="Flights"><span>{% if s.carriers %}{{ s.carriers }}{% endif %}{% if s.stops is not none %} <span class="muted">{{ "direct" if s.stops == 0 else s.stops ~ " stop" ~ ("s" if s.stops != 1) }}</span>{% endif %}</span></td>
+  <td data-label="Flags"><span class="flags">
+    {% if r.pricing == "fixed" %}<span class="chip good">Chart</span>{% else %}<span class="chip warn" data-tip="Dynamic Miles &amp; More price: the cached miles can be far off. Check before you rely on it.">⚠ Unverified</span>{% endif %}
+    {% if s.change == "New" %}<span class="chip">New</span>{% elif s.change == "Cheaper" %}<span class="chip good">▼ Cheaper</span>{% endif %}
+    {% if r.age_h is not none and r.age_h > 48 %}<span class="chip bad" data-tip="Data older than 48 hours">Stale</span>{% endif %}
+  </span></td>
+  <td data-label="Book">{% set link = mm_link(s) %}{% if link %}<a class="btn sm" href="{{ link }}" rel="noopener noreferrer" target="_blank">{{ program_label(s.source) }} ↗</a>{% endif %}</td>
+</tr>
+{% else %}<tr><td class="empty" colspan="9">No flights fit yet. The next scan fetches this route; seats.aero may also have nothing for these dates.</td></tr>{% endfor %}
+</tbody></table></div></div>
+<form method="post" action="/watchlist/{{ item.id }}/delete" style="margin-top:16px"><button class="btn" type="submit">Remove from watchlist</button></form>
+{% endblock %}

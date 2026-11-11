@@ -194,7 +194,7 @@ td small { color: var(--ink-2); }
   </a>
   <nav aria-label="Main">
     <a href="/overview" class="{{ 'on' if page in ('overview', 'route', 'deals') }}">All flights</a>
-    <a href="/watchlist" class="{{ 'on' if page == 'shortlist' }}">Flight watchlist</a>
+    <a href="/watchlist" class="{{ 'on' if page in ('watchlist', 'watchlist_item') }}">Flight watchlist</a>
     <a href="/settings" class="{{ 'on' if page in ('settings', 'runs', 'quota') }}">Settings</a>
     <span class="sep"></span>
     <a href="/reports/latest.xlsx" title="Download the latest report as Excel">Excel ↓</a>
