@@ -189,7 +189,10 @@ def test_repo_config_asks_star_alliance_programs_for_flights_within_asia():
     assert "singapore" in sources and "lufthansa" not in sources
     assert len(reqs) == len(sources)
     europe = [p["source"] for p in all_reqs if p["origin_region"] != p["destination_region"]]
-    assert set(europe) == {"lufthansa"}
+    # Europe and Asia are asked for Miles & More and the Amex Germany partners switched on; the
+    # ones left off (Emirates, Delta) are not requested until the Settings page enables them.
+    assert set(europe) == set(cfg.bookable_programs) and "emirates" not in europe
+    assert "flyingblue" in europe and len(europe) == 2 * len(set(europe))
 
 
 def test_bad_source_is_skipped_not_fatal(tmp_path, default_config_dict):

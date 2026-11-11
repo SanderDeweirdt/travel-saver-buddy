@@ -17,7 +17,16 @@ mile_cost_eur_cents: 1.16
 # really cost you. link_template is optional (same placeholders as miles_and_more); without one a
 # row links only when seats.aero stored a booking link for it. label is the Book button's text.
 programs:
-  singapore:    {label: KrisFlyer,   mr_per_mile: 1.5}   # Amex DE: 3 points = 2 miles
+  # Amex Germany transfer partners. mr_per_mile = Membership Rewards points per mile after the ratio
+  # (ratios from meilenoptimieren.com, 18 Jul 2026; check them on the Amex Germany transfer page).
+  singapore:    {label: KrisFlyer,   mr_per_mile: 1.5}    # 3 points = 2 miles
+  flyingblue:   {label: Flying Blue, mr_per_mile: 1.25}   # 5 = 4
+  eurobonus:    {label: EuroBonus,   mr_per_mile: 1.25}   # 5 = 4
+  qatar:        {label: Qatar,       mr_per_mile: 1.25}   # 3 = 2 direct; 5 = 4 via British Airways Avios, which is cheaper
+  finnair:      {label: Finnair,     mr_per_mile: 1.25}   # no direct transfer: via British Airways Avios, 5 = 4
+  emirates:     {label: Emirates,    mr_per_mile: 2.0}    # 2 = 1
+  delta:        {label: Delta,       mr_per_mile: 1.5}    # 3 = 2
+  # Not Amex partners: only useful if you hold their miles.
   aeroplan:     {label: Aeroplan,    mile_cost_eur_cents: 1.4}
   united:       {label: United,      mile_cost_eur_cents: 1.3}
   lifemiles:    {label: LifeMiles,   mile_cost_eur_cents: 1.3}
@@ -32,12 +41,12 @@ programs:
 mr_point_value_eur_cents: 1.0
 
 # The programs you can book with, by seats.aero source id. Anything else is not scanned and not
-# shown. Yours: Miles & More (lufthansa), plus what Amex Membership Rewards Germany transfers to.
-# Of the programs scanned here that is only KrisFlyer (singapore, 3 MR = 2 miles). Amex Germany also
-# transfers to Flying Blue, BA/Iberia Avios, Qatar, SAS, Asia Miles, Emirates and Delta (checked
-# July 2026, see the Amex Germany transfer page); add their seats.aero ids here and under
-# region_pairs when you want those flights too. Amex to Miles & More only goes via Payback (3 MR = 1 mile).
-bookable_programs: [lufthansa, singapore]
+# shown. Yours: Miles & More (lufthansa) plus Amex Membership Rewards Germany's transfer partners.
+# Amex has no direct transfer to Miles & More (only via Payback, 3 points = 1 mile). British Airways
+# Club, Iberia Club and Cathay Asia Miles are Amex partners too, but seats.aero has no source for
+# them. Emirates (2 points per mile) and Delta stay off until you want them: each program adds
+# calls (every one is paged through all of Europe-Asia), and the Settings page switches them on.
+bookable_programs: [lufthansa, singapore, flyingblue, eurobonus, qatar, finnair]
 
 # seats.aero reports Miles & More fees in USD. Fixed rate, euro per dollar; update it now and
 # then. Fees run 30-700 EUR, so a few percent of drift barely moves a total. Without it, USD
@@ -50,8 +59,13 @@ date_window:
   end_offset_days: 180
 
 region_pairs:
-  - {origin: Europe, destination: Asia}
-  - {origin: Asia, destination: Europe}
+  # One request per program, paged through everything; programs not in bookable_programs are skipped.
+  - origin: Europe
+    destination: Asia
+    sources: [lufthansa, singapore, flyingblue, eurobonus, qatar, finnair, emirates, delta]
+  - origin: Asia
+    destination: Europe
+    sources: [lufthansa, singapore, flyingblue, eurobonus, qatar, finnair, emirates, delta]
   # Flights within Asia; daily full run only, the hourly watch skips it. Miles & More returns
   # nothing here, so ask the Star Alliance partners' own programs (one call per source).
   - origin: Asia
