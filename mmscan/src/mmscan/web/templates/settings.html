@@ -1,7 +1,10 @@
 {% extends "base.html" %}
-{% block title %}Settings · mmscan{% endblock %}
+{% block title %}Settings · mmscan
+<h2 style="margin-top:40px">Data &amp; alerts</h2>
+{% include "_health.html" %}
+{% endblock %}
 {% block body %}
-<div class="page-head"><h1>Settings</h1><span class="sub">what a mile is worth to you, and which programs you can book</span></div>
+<div class="page-head"><h1>Settings</h1><span class="sub">what a mile is worth to you, which programs you can book, and whether the tool is healthy</span></div>
 
 {% if saved %}<div class="banner" style="background:var(--good-bg);color:var(--good)" role="status">Saved. Prices on every page were recalculated; a change to the bookable programs reaches the API requests at the next scan.</div>{% endif %}
 {% if errors %}<div class="banner" style="background:var(--bad-bg);color:var(--bad)" role="alert"><strong>Not saved.</strong>
@@ -40,4 +43,7 @@
   </p>
   <p class="note">Saved in the database and used by both this dashboard and the scanner; <code>config.yaml</code> only lists the programs and their starting values. Saving recalculates every total, which takes a few seconds.</p>
 </form>
+
+<h2 style="margin-top:40px">Data &amp; alerts</h2>
+{% include "_health.html" %}
 {% endblock %}

@@ -1,8 +1,8 @@
 {% extends "base.html" %}
-{% block title %}Watchlist · mmscan{% endblock %}
+{% block title %}Flight watchlist · mmscan{% endblock %}
 {% block body %}
 <div class="page-head">
-  <h1>Watchlist</h1>
+  <h1>Flight watchlist</h1>
   {% if view %}<span class="sub">Prices as of {{ updated|when }} UTC</span>{% endif %}
 </div>
 {% if not view %}
@@ -19,7 +19,7 @@
   <b>What is on this page.</b>
   Flights rated <i>Deal</i> or <i>Worth a look</i>
   {% if scope == "focus" %}that are on your watchlist or match a benchmark{% else %}on every route{% endif %}.
-  Best deals and All routes show every flight on every route; this page is the short list you asked us to keep an eye on.
+  All flights shows every flight on every route; this page is the short list you asked us to keep an eye on.
   {% if scope == "focus" %}
   <ul style="margin:8px 0 0;padding-left:18px">
     {% if focus_watchlist %}<li><b>Watchlist airports</b>: {{ wl.origins|join(", ") }}

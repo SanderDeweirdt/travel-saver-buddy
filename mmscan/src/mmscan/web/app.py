@@ -20,10 +20,9 @@ from mmscan.links import mm_link
 from mmscan.offers import ensure_current, rebuild_current
 from mmscan.report import DISCLAIMER, SHORTLIST_COLUMNS, row_values, shortlist, write_report
 from mmscan.store import FULL_RUNS, Store, read_overrides
-from mmscan.trips import age_hours, calendar_cells, trip_trend, trip_views
 from mmscan.web import queries
 from mmscan.web.auth import LoginLimiter, password_ok
-from mmscan.web.charts import price_chart, sparkline
+from mmscan.web.charts import price_chart
 from mmscan.web.settings import WebSettings
 
 HERE = Path(__file__).parent
@@ -150,7 +149,14 @@ def create_app(settings: WebSettings) -> FastAPI:
         ]
 
     def settings_ctx(**extra) -> dict:
+        store = Store(settings.database, readonly=True)
+        try:
+            health = queries.data_view(store, cfg, datetime.now(UTC))
+        finally:
+            store.close()
         return {
+            "d": health,
+            "cfg": cfg,
             "main_label": cfg.program_label(cfg.source),
             "mm_cost": f"{cfg.mile_cost_eur_cents:g}",
             "mr_value": ""
@@ -284,42 +290,9 @@ def create_app(settings: WebSettings) -> FastAPI:
             "f": f,
         }
 
-    @app.get("/", response_class=HTMLResponse, dependencies=[Depends(require_login)])
-    def deals_page(
-        request: Request,
-        store: Store = Depends(open_store),
-        cabin: str | None = None,
-        direction: str = "",
-        route: str = "",
-        pax: int | None = None,
-        sort: str = "pct",
-        chart: int = 0,
-        nochart: int = 0,
-        fresh: int = 1,
-        min_pct: float | None = None,
-        limit: int = ROW_LIMIT,
-    ):
-        big = cfg.deals.min_saving_pct if min_pct is None else max(min_pct, 0.0)
-        q = dict(
-            cabin=cabin, direction=direction, route=route, pax=pax, sort=sort,
-            chart=chart, nochart=nochart, fresh=fresh, limit=limit,
-        )  # fmt: skip
-        ctx = deals_context(store, q, min_pct=big, inline=False)
-        return render(
-            request,
-            "deals.html",
-            **ctx,
-            cfg_min=cfg.relative.min_samples,
-            cfg_good=f"{cfg.savings.good_pct:g}",
-            cfg_great=f"{cfg.savings.great_pct:g}",
-            mile_ct=cfg.mile_cost_eur_cents,
-            program_cents={
-                cfg.program_label(k): round(cfg.mile_cents(k), 3)
-                for k, v in cfg.programs.items()
-                if v.mile_cost_eur_cents or v.mr_per_mile
-            },
-            mr_ct=cfg.mr_point_value_eur_cents,
-        )
+    @app.get("/", dependencies=[Depends(require_login)])
+    def home():
+        return RedirectResponse("/overview", status_code=303)
 
     @app.get("/overview", response_class=HTMLResponse, dependencies=[Depends(require_login)])
     def overview_page(
@@ -371,38 +344,6 @@ def create_app(settings: WebSettings) -> FastAPI:
             sorts=list(queries.SORTS),
         )
 
-    @app.get("/trips", response_class=HTMLResponse, dependencies=[Depends(require_login)])
-    def trips_page(request: Request, store: Store = Depends(open_store), show: int = 12):
-        now = datetime.now(UTC)
-        views = trip_views(store, cfg, now)
-        extras = {}
-        for v in views:
-            trend = trip_trend(store, cfg, v.profile, now)
-            totals = [p["total"] for p in trend]
-            extras[v.profile.name] = {
-                "spark": sparkline(
-                    totals,
-                    f"Best price for {v.seats} travellers over the last 30 days: "
-                    f"{totals[0]:,.0f} to {totals[-1]:,.0f} euro"
-                    if totals
-                    else "",
-                ),
-                "trend": trend,
-                "calendar": calendar_cells(v) if v.pairs else None,
-            }
-        return render(
-            request,
-            "trips.html",
-            views=views,
-            extras=extras,
-            cfg_unverified=cfg.notify.unverified,
-            pricing_model=cfg.pricing_model,
-            now=now,
-            age_hours=age_hours,
-            show=max(1, min(show, 200)),
-            freshness=cfg.trip_freshness_hours,
-        )
-
     @app.get(
         "/route/{origin}/{destination}/{cabin}",
         response_class=HTMLResponse,
@@ -426,11 +367,9 @@ def create_app(settings: WebSettings) -> FastAPI:
             **data,
         )
 
-    @app.get("/data", response_class=HTMLResponse, dependencies=[Depends(require_login)])
-    def data_page(request: Request, store: Store = Depends(open_store)):
-        return render(
-            request, "data.html", d=queries.data_view(store, cfg, datetime.now(UTC)), cfg=cfg
-        )
+    @app.get("/data", dependencies=[Depends(require_login)])
+    def data_page():
+        return RedirectResponse("/settings", status_code=303)
 
     @app.get("/runs", response_class=HTMLResponse, dependencies=[Depends(require_login)])
     def runs_page(request: Request, store: Store = Depends(open_store)):

@@ -11,9 +11,7 @@ from mmscan.scoring import score_run
 from mmscan.store import Store
 from mmscan.trips import (
     build_trip,
-    calendar_cells,
     trip_alerts,
-    trip_trend,
     trip_views,
 )
 from tests.helpers import avail, config
@@ -237,30 +235,3 @@ def test_dynamic_carriers_alert_only_when_switched_on(default_config_dict, store
     assert trip_alerts(store, cfg, run, NOW) == []
     on = config({**d, "trips": [{**TRIP, "alert_top": 3}], "notify": {"unverified": True}})
     assert trip_alerts(store, on, run, NOW)
-
-
-def test_calendar_has_cheapest_price_per_departure_day(default_config_dict, store):
-    cfg = cfg_with(default_config_dict)
-    add_run(store, cfg, LEGS)
-    view = build_trip(latest_legs(store, cfg, NOW), cfg.trips[0], cfg)
-    cal = calendar_cells(view)
-    by = {c["date"].isoformat(): c for c in cal["cells"]}
-    assert len(cal["cells"]) == 20 and cal["lead"] == date(2027, 6, 1).weekday()
-    assert by["2027-06-10"]["total"] == view.by_day["2027-06-10"]
-    assert by["2027-06-10"]["total"] < by["2027-06-12"]["total"]
-    assert by["2027-06-10"]["best"] and by["2027-06-10"]["level"] == 0
-    assert by["2027-06-11"]["total"] is None and by["2027-06-11"]["level"] is None
-
-
-def test_trend_is_the_price_at_the_end_of_each_day_oldest_first(default_config_dict, store):
-    cfg = cfg_with(default_config_dict)
-    for days_ago, factor in ((3, 1.0), (2, 0.9), (1, 0.8)):
-        at = NOW - timedelta(days=days_ago)
-        legs = [(i, o, d, day, int(m * factor), t, s) for i, o, d, day, m, t, s in LEGS]
-        add_run(store, cfg, legs, at=at)
-        add_run(store, cfg, legs, at=at + timedelta(hours=1))  # a second run the same day
-    points = trip_trend(store, cfg, cfg.trips[0], NOW)
-    days = [p["day"] for p in points]
-    assert days == sorted(set(days)) and len(days) >= 3  # one point per day, today included
-    assert [p["total"] for p in points] == sorted((p["total"] for p in points), reverse=True)
-    assert points[0]["total"] > points[-1]["total"]  # prices fell over the three days

@@ -3,11 +3,12 @@ from datetime import date
 from pathlib import Path
 
 import httpx
+import pytest
 from typer.testing import CliRunner
 
 from mmscan.cli import app
 from mmscan.client import Client
-from mmscan.config import Config
+from mmscan.config import Config, Program
 from mmscan.scan import (
     paginate,
     planned_requests,
@@ -192,6 +193,11 @@ def test_repo_config_scans_the_enabled_programs():
     assert "flyingblue" in between and "emirates" not in between  # Emirates is switched off
 
 
+def test_config_rejects_a_source_the_docs_do_not_list(default_config_dict):
+    with pytest.raises(ValueError, match="unknown seats.aero source"):
+        cfg_from(default_config_dict, programs={"lifemiles": {"enabled": True}})
+
+
 def test_bad_source_is_skipped_not_fatal(tmp_path, default_config_dict):
     def handler(req):
         if req.url.params["source"] == "nope":
@@ -202,9 +208,12 @@ def test_bad_source_is_skipped_not_fatal(tmp_path, default_config_dict):
     cfg = cfg_from(
         default_config_dict,
         region_pairs=[{"origin": "Europe", "destination": "Asia"}],
-        programs={"nope": {"enabled": True}, "united": {"enabled": True}},
+        programs={"united": {"enabled": True}},
         watchlist={"origins": [], "destinations": [], "both_directions": False},
     )
+    # Config loading rejects unknown sources, so slip one in afterwards: the API can still answer
+    # 400 for a source the docs list (for example one it has retired).
+    cfg.programs["nope"] = Program(enabled=True)
     client, store = make(tmp_path, handler)
     run = store.start_run("scan", "{}")
     status, stats = run_scan(client, store, cfg, run, TODAY)

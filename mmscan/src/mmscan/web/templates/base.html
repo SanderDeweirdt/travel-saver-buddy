@@ -48,7 +48,7 @@ a { color: var(--accent); text-underline-offset: 2px; }
 main { padding: 20px 16px 48px; max-width: 1280px; margin: 0 auto; }
 .page-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 16px; margin-bottom: 16px; }
 h1 { font-size: 24px; letter-spacing: -.02em; margin: 0; line-height: 1.2; }
-h2 { font-size: 16px; margin: 28px 0 10px; letter-spacing: -.01em; }
+h2, h3.sec { font-size: 16px; margin: 28px 0 10px; letter-spacing: -.01em; }
 .sub { color: var(--ink-2); font-size: 13px; }
 .note { color: var(--ink-2); font-size: 13px; margin: 10px 0 14px; max-width: 80ch; }
 .banner { background: var(--warn-bg); color: var(--warn); border: 1px solid color-mix(in srgb, var(--warn) 30%, transparent);
@@ -110,44 +110,12 @@ td.empty { text-align: center; color: var(--ink-2); padding: 32px 12px; }
 
 /* deals */
 .pos { color: var(--good); } .neg { color: var(--bad); }
-.hero { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px 24px; align-items: center;
-  background: var(--good-bg); border: 1px solid color-mix(in srgb, var(--good) 35%, transparent);
-  border-radius: var(--radius); padding: 14px 18px; margin-bottom: 16px; }
-.hero .k { font-size: 12px; color: var(--ink-2); font-weight: 600; }
-.hero .v { font-size: 30px; font-weight: 700; letter-spacing: -.02em; line-height: 1.15; color: var(--good); }
-.hero .stats { display: flex; gap: 28px; } .hero .stats b { font-size: 22px; display: block; }
 .dealtab th, .dealtab td { padding: 7px 8px; font-size: 13px; }
 .dealtab .verdict .tag { font-size: 11px; }
-.mini { width: 64px; height: 8px; background: var(--mute-bg); border-radius: 4px; overflow: hidden; display: block; }
-.mini i { display: block; height: 100%; background: var(--accent); border-radius: 4px; }
-.mini.neg i { background: var(--bad); }
 .checks { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
 .checks label { flex-direction: row; align-items: center; gap: 6px; font-weight: 500; font-size: 13px; color: var(--ink); }
 .checks input { min-height: 0; }
 .flags { display: flex; gap: 4px; flex-wrap: wrap; }
-/* trips: sparkline, calendar, budget */
-.spark { width: 100%; height: auto; max-width: 420px; display: block; }
-.spark .area { fill: color-mix(in srgb, var(--series-1) 14%, transparent); }
-.spark .line { fill: none; stroke-width: 2.25; stroke-linejoin: round; } .spark .s1 { stroke: var(--series-1); }
-.spark .end { fill: var(--series-1); stroke: var(--surface); stroke-width: 2; }
-.triprow { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 0 0 16px; }
-@media (max-width: 760px) { .triprow { grid-template-columns: 1fr; } }
-.card2 { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; box-shadow: var(--shadow); }
-.card2 h3 { margin: 0 0 6px; font-size: 14px; }
-.budget { position: relative; margin: 14px 0 6px; }
-.budget .mark { position: absolute; top: -4px; width: 2px; height: 20px; background: var(--ink); }
-.cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
-.cal .dow { font-size: 11px; color: var(--ink-2); text-align: center; }
-.cal .cell { min-height: 46px; border-radius: 6px; padding: 3px 2px; display: flex; flex-direction: column; align-items: center;
-  justify-content: center; font-size: 12px; line-height: 1.2; border: 1px solid transparent; font-variant-numeric: tabular-nums; }
-.cal .cell small { font-size: 10px; color: var(--ink-2); }
-.cal .none { background: var(--surface-2); color: var(--ink-2); opacity: .7; }
-.cal .l0 { background: color-mix(in srgb, var(--good) 45%, var(--surface)); } .cal .l1 { background: color-mix(in srgb, var(--good) 22%, var(--surface)); }
-.cal .l2 { background: color-mix(in srgb, var(--warn) 18%, var(--surface)); } .cal .l3 { background: color-mix(in srgb, var(--bad) 14%, var(--surface)); }
-.cal .l4 { background: color-mix(in srgb, var(--bad) 26%, var(--surface)); }
-.cal .best { outline: 2px solid var(--ink); }
-.calkey { display: flex; gap: 6px; align-items: center; font-size: 12px; color: var(--ink-2); margin-top: 8px; }
-.calkey i { width: 18px; height: 10px; border-radius: 3px; display: inline-block; }
 /* percentile bar: left = cheaper than most of this route's history */
 .pct { display: flex; align-items: center; gap: 8px; min-width: 96px; }
 .pct .bar { flex: 1; height: 6px; background: var(--mute-bg); border-radius: 3px; overflow: hidden; }
@@ -214,29 +182,20 @@ details[open] summary { border-bottom: 1px solid var(--line); }
 }
 .tag.ok { color: var(--good); border-color: var(--good); }
 .tag.over { color: var(--bad); border-color: var(--bad); }
-.trip { margin: 0 0 28px; }
-.trip h2 { font-size: 17px; margin: 0 0 2px; }
-.trip .meta { color: var(--ink-2); font-size: 13px; margin: 0 0 8px; }
-.trip .best { background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
-  padding: 10px 14px; margin: 0 0 10px; }
-.trip .best b { font-size: 18px; }
 td small { color: var(--ink-2); }
 </style>
 </head>
 <body>
 {% if page != "login" %}
 <div class="topbar"><div class="topbar-in">
-  <a class="brand" href="/">
+  <a class="brand" href="/overview">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/></svg>
     mmscan
   </a>
   <nav aria-label="Main">
-    <a href="/" class="{{ 'on' if page in ('deals', 'route') }}">Best deals</a>
-    <a href="/overview" class="{{ 'on' if page == 'overview' }}">All routes</a>
-    <a href="/trips" class="{{ 'on' if page == 'trips' }}">My trips</a>
-    <a href="/watchlist" class="{{ 'on' if page == 'shortlist' }}">Watchlist</a>
-    <a href="/data" class="{{ 'on' if page in ('data', 'runs', 'quota') }}">Data &amp; alerts</a>
-    <a href="/settings" class="{{ 'on' if page == 'settings' }}">Settings</a>
+    <a href="/overview" class="{{ 'on' if page in ('overview', 'route', 'deals') }}">All flights</a>
+    <a href="/watchlist" class="{{ 'on' if page == 'shortlist' }}">Flight watchlist</a>
+    <a href="/settings" class="{{ 'on' if page in ('settings', 'runs', 'quota') }}">Settings</a>
     <span class="sep"></span>
     <a href="/reports/latest.xlsx" title="Download the latest report as Excel">Excel ↓</a>
     <a href="/reports/latest-shortlist.csv" title="Download the watchlist as CSV">CSV ↓</a>

@@ -57,9 +57,9 @@ The dashboard has no seats.aero key: it cannot call the API.
 ### Where it lives
 
 The dashboard is at **https://travel-saver-buddy-production.up.railway.app** (the `dashboard` service's
-Railway domain). Everything except `/healthz` asks for `DASHBOARD_PASSWORD`. Paths: `/` Best deals,
-`/overview` All routes, `/trips`, `/shortlist` (old bookmarks with `?run=…&verdict=…&sort=verdict` belong
-here, not on `/`), `/data` Data & alerts, `/route/<from>/<to>/<cabin>`, and `/healthz` (`ok`, no login).
+Railway domain). Everything except `/healthz` asks for `DASHBOARD_PASSWORD`. Paths: `/` and `/overview` All flights,
+`/watchlist`, `/settings`, `/shortlist` (old bookmarks with `?run=…&verdict=…&sort=verdict` belong
+here, not on `/`), `/route/<from>/<to>/<cabin>`, and `/healthz` (`ok`, no login).
 
 Last checked 16 Oct 2026 from outside, without the password: `/healthz` returned 200 and `/shortlist` and
 `/data` redirected to the login page, so the v2 build was running. Pages behind the login were not checked.
@@ -116,7 +116,7 @@ Secrets never go in it.
 - [ ] The dashboard shows the run under **Runs** and rows on the **Shortlist** (a watch run only
       covers the watchlist; the daily 11 UTC run is the full picture).
 - [ ] **Quota** shows calls today below the cap.
-- [ ] **Data & alerts** shows the scanner as Healthy and the USD rate as checked within 30 days (`usd_to_eur_date`).
+- [ ] **Settings** shows the scanner as Healthy and the USD rate as checked within 30 days (`usd_to_eur_date`).
 
 ## Risks
 

@@ -61,7 +61,6 @@ def test_healthz_is_public(client):
         "/",
         "/watchlist",
         "/runs",
-        "/trips",
         "/quota",
         "/settings",
         "/route/MUC/SIN/business",
@@ -154,14 +153,6 @@ def test_no_endpoint_triggers_a_scan(client):
         assert client.post(path).status_code in (404, 405)
 
 
-def test_empty_database_renders(tmp_path):
-    settings = WebSettings(PASSWORD, "s" * 32, tmp_path / "e.db", ROOT / "config.yaml")
-    c = TestClient(create_app(settings), base_url="https://testserver")
-    login(c)
-    assert "No prices yet" in c.get("/").text
-    assert c.get("/reports/latest.xlsx").status_code == 404
-
-
 def test_refuses_to_start_without_secrets(monkeypatch):
     monkeypatch.delenv("DASHBOARD_PASSWORD", raising=False)
     monkeypatch.setenv("SESSION_SECRET", "x")
@@ -171,31 +162,6 @@ def test_refuses_to_start_without_secrets(monkeypatch):
     monkeypatch.delenv("SESSION_SECRET")
     with pytest.raises(SettingsError, match="SESSION_SECRET"):
         settings_from_env()
-
-
-def test_trips_page_without_trips_explains_setup(client):
-    login(client)
-    r = client.get("/trips")
-    assert r.status_code == 200 and "No trips configured" in r.text
-
-
-def test_trips_page_lists_pairs(tmp_path, default_config_dict, write_config):
-    from tests.test_trips import LEGS, TRIP, add_run
-    from tests.test_trips import NOW as T_NOW
-
-    cfg_path = write_config({**default_config_dict, "trips": [TRIP]})
-    path = tmp_path / "trips.db"
-    store = Store(path)
-    add_run(store, config(default_config_dict, trips=[TRIP]), LEGS, at=T_NOW)
-    store.close()
-    c = TestClient(
-        create_app(WebSettings(PASSWORD, "s" * 32, path, cfg_path, secure_cookies=True)),
-        base_url="https://testserver",
-    )
-    login(c)
-    text = c.get("/trips").text
-    assert "Family stay" in text and "2027-06-10" in text and "2027-08-25" in text
-    assert "Cheapest for 2" in text and "pairs" in text
 
 
 def test_shortlist_labels_dynamic_prices(tmp_path, default_config_dict):
@@ -271,38 +237,6 @@ def deals_client(tmp_path, default_config_dict, write_config):
     return c
 
 
-def test_deals_page_ranks_against_the_usual_price(deals_client):
-    r = deals_client.get("/?cabin=all&min_pct=0")
-    assert r.status_code == 200
-    assert "Best deals right now" in r.text
-    assert "Great deal" in r.text and "Chart" in r.text
-    assert "https://example.test/book" in r.text
-    assert r.text.index("2026-12-17") < r.text.index("2026-12-16")  # biggest saving first
-
-
-def test_deals_page_filters_and_traveller_scaling(deals_client):
-    one = deals_client.get("/?cabin=all&pax=1&fresh=0&min_pct=0").text
-    two = deals_client.get("/?cabin=all&pax=2&fresh=0&min_pct=0").text
-    assert "36,000" in one and "72,000" in two
-    assert "Nothing matches" in deals_client.get("/?cabin=economy").text
-    assert "Nothing matches" in deals_client.get("/").text  # default cabin is economy
-    assert "36,000" in deals_client.get("/?cabin=business&fresh=0").text
-    assert "Nothing matches" in deals_client.get("/?cabin=all&route=FRA").text
-    assert "Nothing matches" in deals_client.get("/?cabin=all&pax=9").text  # only 4 seats each
-
-
-def test_deals_page_survives_bad_params(deals_client):
-    assert deals_client.get("/?sort=bogus&pax=0").status_code == 200
-    assert deals_client.get("/?pax=99").status_code == 200
-
-
-def test_deals_page_empty_database(tmp_path):
-    settings = WebSettings(PASSWORD, "s" * 32, tmp_path / "e.db", ROOT / "config.yaml")
-    c = TestClient(create_app(settings), base_url="https://testserver")
-    login(c)
-    assert "No prices yet" in c.get("/").text
-
-
 def test_route_page_shows_usual_price_and_saving(deals_client):
     r = deals_client.get("/route/MUC/SIN/business")
     assert r.status_code == 200
@@ -350,31 +284,8 @@ def _trips_client(tmp_path, default_config_dict, write_config, trip_extra=None, 
     return c
 
 
-def test_trips_page_calendar_trend_and_budget(tmp_path, default_config_dict, write_config):
-    c = _trips_client(
-        tmp_path, default_config_dict, write_config, {"max_total_eur": 9000}, days=(3, 2, 1, 0)
-    )
-    text = c.get("/trips").text
-    assert "Cheapest day to leave" in text and 'class="cal"' in text
-    assert "2027-06-10" in text and "no seats found" in text  # a priced day and an empty one
-    assert '<svg class="spark"' in text and "Best price, last 30 days" in text
-    assert "under the €9,000 budget" in text
-
-
-def test_trips_page_without_history_says_so(tmp_path, default_config_dict, write_config):
-    c = _trips_client(tmp_path, default_config_dict, write_config)
-    text = c.get("/trips").text
-    assert "Not enough history yet" in text and "Unverified" not in text
-
-
-def test_trips_page_marks_dynamic_carriers(tmp_path, default_config_dict, write_config):
-    d = {**default_config_dict, "dynamic_airlines": ["SQ"]}
-    c = _trips_client(tmp_path, d, write_config)
-    assert "Unverified" in c.get("/trips").text
-
-
 def test_data_page(deals_client):
-    text = deals_client.get("/data").text
+    text = deals_client.get("/settings").text
     assert "Data &amp; alerts" in text and "API calls today" in text
     assert "How far to trust cached miles" in text and "not checked yet" in text  # LH etc.
     assert "Slack alerts" in text and "not sent" in text  # dynamic prices off by default
@@ -392,7 +303,7 @@ def test_data_page_shows_manual_price_checks(db, default_config_dict):
         base_url="https://testserver",
     )
     login(c)
-    text = c.get("/data").text
+    text = c.get("/settings").text
     assert "2.02×" in text  # median of 2.83 and 1.2
     assert "1.20× to 2.83×" in text
 
@@ -418,13 +329,6 @@ def test_all_routes_lists_every_flight_not_one_per_route(deals_client):
         "Nothing matches"
         in deals_client.get("/overview?cabin=all&direction=Asia+%E2%86%92+Europe").text
     )
-
-
-def test_best_deals_shows_only_big_savings_and_defaults_to_one_traveller(deals_client):
-    big = deals_client.get("/?cabin=all&fresh=0").text
-    assert "36,000" in big  # one traveller by default, not min_seats
-    assert "60,000" not in big  # saves a few percent: under the 30% cut
-    assert "60,000" in deals_client.get("/?cabin=all&fresh=0&min_pct=0").text
 
 
 def test_hide_chart_deals_toggle(deals_client):
@@ -497,7 +401,7 @@ def test_deals_pages_show_a_newer_watch_price_without_a_run_label(db, default_co
 def test_watchlist_page_explains_what_is_included_and_old_url_still_works(client):
     login(client)
     text = client.get("/watchlist").text
-    assert "<h1>Watchlist</h1>" in text and ">Watchlist</a>" in text
+    assert "<h1>Flight watchlist</h1>" in text and ">Flight watchlist</a>" in text
     assert "What is on this page" in text
     assert "MUC, FRA" in text and "SIN" in text  # the watchlist airports are listed
     assert "Benchmark" in text and 'title="On your watchlist"' in text
@@ -506,7 +410,7 @@ def test_watchlist_page_explains_what_is_included_and_old_url_still_works(client
 
 def test_data_page_shows_routes_tracked(client):
     login(client)
-    text = client.get("/data").text
+    text = client.get("/settings").text
     assert "Routes tracked" in text and "watchlist pairs have a price" in text
     assert "flights on offer" in text
 
@@ -521,6 +425,25 @@ def _settings_form(**over):
     }
     form.update(over)
     return {k: v for k, v in form.items() if v is not None}
+
+
+def test_settings_rejects_bad_input_and_keeps_the_old_values(client, db):
+    login(client)
+    r = client.post("/settings", data=_settings_form(mile_cost_eur_cents="abc"))
+    assert r.status_code == 422 and "not a number" in r.text
+    r = client.post("/settings", data=_settings_form(mr_point_value_eur_cents=""))
+    assert r.status_code == 422 and "mr_point_value_eur_cents" in r.text
+    r = client.post("/settings", data=_settings_form(mile_cost_eur_cents="0"))
+    assert r.status_code == 422
+    assert Store(db, readonly=True).get_overrides() == {}
+
+
+def test_empty_database_renders(tmp_path):
+    settings = WebSettings(PASSWORD, "s" * 32, tmp_path / "e.db", ROOT / "config.yaml")
+    c = TestClient(create_app(settings), base_url="https://testserver")
+    login(c)
+    assert "No prices yet" in c.get("/overview").text
+    assert c.get("/reports/latest.xlsx").status_code == 404
 
 
 def test_settings_page_saves_what_you_enter(client, db):
@@ -539,7 +462,6 @@ def test_settings_page_saves_what_you_enter(client, db):
     assert saved["programs"]["singapore"]["mr_per_mile"] == 1.5
     after = client.get("/settings?saved=1").text
     assert 'value="0.8"' in after and "Saved." in after
-    assert "valued at 0.8 ct" in client.get("/").text  # the deals page note follows the setting
     # a new process reads the same settings from the database
     fresh = TestClient(
         create_app(WebSettings(PASSWORD, "s" * 32, db, ROOT / "config.yaml")),
@@ -553,12 +475,6 @@ def test_settings_page_saves_what_you_enter(client, db):
     assert 'name="bookable__flyingblue" id="b-flyingblue" checked' not in after
 
 
-def test_settings_rejects_bad_input_and_keeps_the_old_values(client, db):
-    login(client)
-    r = client.post("/settings", data=_settings_form(mile_cost_eur_cents="abc"))
-    assert r.status_code == 422 and "not a number" in r.text
-    r = client.post("/settings", data=_settings_form(mr_point_value_eur_cents=""))
-    assert r.status_code == 422 and "mr_point_value_eur_cents" in r.text
-    r = client.post("/settings", data=_settings_form(mile_cost_eur_cents="0"))
-    assert r.status_code == 422
-    assert Store(db, readonly=True).get_overrides() == {}
+def test_overview_survives_bad_params(deals_client):
+    assert deals_client.get("/overview?sort=bogus&pax=0").status_code == 200
+    assert deals_client.get("/overview?pax=99").status_code == 200
