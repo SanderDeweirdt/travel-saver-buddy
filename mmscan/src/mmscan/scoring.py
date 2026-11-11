@@ -171,10 +171,10 @@ def _offer_row(avail: dict, row, cabin: str, offer, trips, link, cfg: Config) ->
         source=row["source"] or avail.get("Source"),
     )
     cents = cfg.mile_cents(base["source"])
-    picked = pick_trip(trips, cabin, cfg.min_seats, cents, cfg.usd_to_eur)
+    picked = pick_trip(trips, cabin, cfg.min_seats, cents, cfg.fx_rates)
     if picked:
         trip, seats_ok = picked
-        fees = fees_eur(trip.taxes_minor, trip.currency, cfg.usd_to_eur)
+        fees = fees_eur(trip.taxes_minor, trip.currency, cfg.fx_rates)
         return Scored(
             **base,
             miles=trip.miles,
@@ -198,7 +198,7 @@ def _offer_row(avail: dict, row, cabin: str, offer, trips, link, cfg: Config) ->
     minor, currency = None, None
     if isinstance(taxes, int) and not isinstance(taxes, bool) and taxes > 0:
         minor, currency = taxes, avail.get("TaxesCurrency") or ""
-        fees = fees_eur(taxes, currency, cfg.usd_to_eur)
+        fees = fees_eur(taxes, currency, cfg.fx_rates)
     priced = fees is not None
     return Scored(
         **base,
@@ -260,8 +260,15 @@ def _currency_warnings(currencies: dict[str, int], cfg: Config) -> list[str]:
                 f"they are unpriced"
             )
     for cur, n in sorted(currencies.items()):
-        if cur not in ("", "EUR", "USD"):
-            out.append(f"{n} objects report fees in {cur}; they are unpriced")
+        if cur in ("", "EUR", "USD"):
+            continue
+        if cur in cfg.fx_to_eur:
+            out.append(f"{n} objects report fees in {cur}; converted at {cfg.fx_to_eur[cur]}")
+        else:
+            out.append(
+                f"{n} objects report fees in {cur}; they are unpriced "
+                f"(add {cur} to fx_to_eur in config.yaml)"
+            )
     return out
 
 

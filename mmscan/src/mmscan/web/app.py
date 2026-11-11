@@ -24,6 +24,12 @@ from mmscan.web import queries
 from mmscan.web.auth import LoginLimiter, password_ok
 from mmscan.web.charts import price_chart
 from mmscan.web.settings import WebSettings
+from mmscan.web.settings_form import (
+    benchmark_rows,
+    parse_benchmarks,
+    parse_fields,
+    render_fields,
+)
 
 HERE = Path(__file__).parent
 SORT_LABELS = {
@@ -143,6 +149,7 @@ def create_app(settings: WebSettings) -> FastAPI:
                 "bookable": p.enabled,
                 "cost": "" if p.mile_cost_eur_cents is None else f"{p.mile_cost_eur_cents:g}",
                 "mr": "" if p.mr_per_mile is None else f"{p.mr_per_mile:g}",
+                "within": p.within_region,
                 "effective": cfg.mile_cents(key),
             }
             for key, p in sorted(cfg.programs.items())
@@ -163,6 +170,8 @@ def create_app(settings: WebSettings) -> FastAPI:
             if cfg.mr_point_value_eur_cents is None
             else f"{cfg.mr_point_value_eur_cents:g}",
             "rows": settings_rows(),
+            "fields": render_fields(cfg),
+            "benchmarks": benchmark_rows(cfg),
             "errors": [],
             "saved": False,
             **extra,
@@ -186,13 +195,19 @@ def create_app(settings: WebSettings) -> FastAPI:
                 "mile_cost_eur_cents": _number(form.get(f"cost__{key}"), f"{key} cost", errors),
                 "mr_per_mile": _number(form.get(f"mr__{key}"), f"{key} points per mile", errors),
             }
+            if f"withinseen__{key}" in form:
+                programs[key]["within_region"] = bool(form.get(f"within__{key}"))
         if mm_cost is None:
             errors.append("Miles & More mile value is required")
         overrides = {
             "mile_cost_eur_cents": mm_cost,
             "mr_point_value_eur_cents": mr_value,
             "programs": programs,
+            **parse_fields(form, errors),
         }
+        benchmarks = parse_benchmarks(form, errors)
+        if benchmarks is not None:
+            overrides["benchmarks"] = benchmarks
         new_cfg = None
         if not errors:
             try:
@@ -207,6 +222,7 @@ def create_app(settings: WebSettings) -> FastAPI:
                     "bookable": bool(form.get(f"bookable__{k}")),
                     "cost": form.get(f"cost__{k}", ""),
                     "mr": form.get(f"mr__{k}", ""),
+                    "within": bool(form.get(f"within__{k}")),
                     "effective": None,
                 }
                 for k in sorted(cfg.programs)
@@ -217,6 +233,8 @@ def create_app(settings: WebSettings) -> FastAPI:
                 **settings_ctx(
                     errors=errors,
                     rows=rows,
+                    fields=render_fields(cfg, form),
+                    benchmarks=benchmark_rows(cfg, form),
                     mm_cost=form.get("mile_cost_eur_cents", ""),
                     mr_value=form.get("mr_point_value_eur_cents", ""),
                 ),

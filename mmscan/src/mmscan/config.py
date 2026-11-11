@@ -281,6 +281,9 @@ class Config(_Model):
     mile_cost_eur_cents: float = Field(gt=0)
     usd_to_eur: float | None = Field(None, gt=0)
     usd_to_eur_date: date | None = None  # when the rate above was last checked
+    # Euro per unit of other fee currencies (Asia to Asia awards quote taxes in SGD, THB, ...).
+    # A currency listed nowhere is unpriced, and its flights stay off the pages.
+    fx_to_eur: dict[str, float] = {}
     date_window: DateWindow = DateWindow()
     region_pairs: list[RegionPair] = []
     subregions: dict[str, list[str]] = {}
@@ -405,6 +408,14 @@ class Config(_Model):
             return True
         return airport in self.subregions.get(place, [])
 
+    @property
+    def fx_rates(self) -> dict[str, float]:
+        """Euro per unit of each priced fee currency: `fx_to_eur` plus USD from `usd_to_eur`."""
+        rates = dict(self.fx_to_eur)
+        if self.usd_to_eur:
+            rates["USD"] = self.usd_to_eur
+        return rates
+
     def usd_rate_age_days(self, today: date) -> int | None:
         return None if self.usd_to_eur_date is None else (today - self.usd_to_eur_date).days
 
@@ -461,8 +472,28 @@ def _airport_warnings(cfg: Config) -> list[str]:
     return out
 
 
-# What the dashboard's Settings page may change. Everything else stays in config.yaml.
-SETTING_KEYS = ("mr_point_value_eur_cents", "mile_cost_eur_cents")
+# What the dashboard's Settings page may change; everything else stays in config.yaml.
+# SCALAR_KEYS replace the yaml value, SECTION_KEYS merge field by field into the yaml section,
+# REPLACE_KEYS (lists and rate tables) replace it wholesale.
+SCALAR_KEYS = (
+    "mr_point_value_eur_cents",
+    "mile_cost_eur_cents",
+    "min_seats",
+    "usd_to_eur",
+    "usd_to_eur_date",
+)
+SECTION_KEYS = ("date_window", "api", "relative", "savings", "deals", "notify")
+REPLACE_KEYS = ("fx_to_eur", "region_pairs", "cabins", "benchmarks")
+SETTING_KEYS = SCALAR_KEYS + REPLACE_KEYS  # kept for older callers
+
+
+def _deep_merge(base: dict, top: dict) -> dict:
+    out = dict(base)
+    for k, v in top.items():
+        out[k] = (
+            _deep_merge(out[k], v) if isinstance(v, dict) and isinstance(out.get(k), dict) else v
+        )
+    return out
 
 
 def apply_overrides(data: dict, overrides: dict | None) -> dict:
@@ -471,9 +502,12 @@ def apply_overrides(data: dict, overrides: dict | None) -> dict:
     if not overrides:
         return data
     merged = dict(data)
-    for key in SETTING_KEYS:
+    for key in (*SCALAR_KEYS, *REPLACE_KEYS):
         if key in overrides:
             merged[key] = overrides[key]
+    for key in SECTION_KEYS:
+        if isinstance(overrides.get(key), dict):
+            merged[key] = _deep_merge(data.get(key) or {}, overrides[key])
     saved = overrides.get("programs")
     legacy = overrides.get("bookable_programs")  # saved before `enabled` moved into each program
     if isinstance(saved, dict) or isinstance(legacy, list):

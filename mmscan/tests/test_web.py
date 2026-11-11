@@ -432,6 +432,72 @@ def test_overview_survives_bad_params(deals_client):
     assert deals_client.get("/overview?pax=99").status_code == 200
 
 
+def test_settings_page_edits_within_asia_and_the_other_config_fields(client, db):
+    login(client)
+    page = client.get("/settings").text
+    assert 'name="within__aeroplan"' in page and 'name="f__fx_to_eur"' in page
+    assert "SGD = 0.67" in page and "Europe &gt; Asia" in page
+    form = _settings_form(
+        withinseen__singapore="1",  # unticked: off within Asia
+        withinseen__aeroplan="1",
+        within__aeroplan="on",
+        f__min_seats="3",
+        f__date_window__end_offset_days="120",
+        f__fx_to_eur="SGD = 0.7\nTHB = 0.03",
+        f__region_pairs="Europe > Asia\nAsia > Asia",
+    )
+    form["f__date_window.end_offset_days"] = form.pop("f__date_window__end_offset_days")
+    r = client.post("/settings", data=form, follow_redirects=False)
+    assert r.status_code == 303
+    saved = Store(db, readonly=True).get_overrides()
+    assert saved["programs"]["singapore"]["within_region"] is False
+    assert saved["programs"]["aeroplan"]["within_region"] is True
+    assert saved["min_seats"] == 3 and saved["date_window"] == {"end_offset_days": 120}
+    assert saved["fx_to_eur"] == {"SGD": 0.7, "THB": 0.03}
+    assert len(saved["region_pairs"]) == 2
+    bad = client.post("/settings", data=_settings_form(**{"f__fx_to_eur": "SGD 0.7"}))
+    assert bad.status_code == 422 and "should look like" in bad.text
+
+
+def test_settings_page_edits_benchmarks_and_slack_alerts(client, db):
+    login(client)
+    page = client.get("/settings").text
+    assert 'name="bm__0__name" value="economy_europe_southeast_asia"' in page
+    assert 'name="bm__2__name" value=""' in page  # the empty row to add one
+    assert 'name="f__notify.new_deals.min_pct"' in page
+    form = _settings_form(
+        bm_seen="1",
+        bm__0__name="economy_europe_southeast_asia",
+        bm__0__cabin="economy",
+        bm__0__from="Europe",
+        bm__0__to="southeast_asia",
+        bm__0__good_miles_max="30000",
+        bm__0__chart_rate_miles="42500",
+        bm__0__fees_max_eur="280",
+        bm__1__name="business_europe_southeast_asia",
+        bm__1__remove="on",
+        bm__2__name="eco_asia",
+        bm__2__cabin="economy",
+        bm__2__from="Asia",
+        bm__2__to="Asia",
+        bm__2__good_miles_max="9000",
+        bm__2__chart_rate_miles="15000",
+        bm__2__fees_max_eur="60",
+    )
+    form["f__notify.new_deals.min_pct"] = "25"
+    form["f__notify.new_deals.enabled__seen"] = "1"  # unticked: off
+    form["f__notify.slack"] = "on"
+    form["f__notify.slack__seen"] = "1"
+    r = client.post("/settings", data=form, follow_redirects=False)
+    assert r.status_code == 303, r.text
+    saved = Store(db, readonly=True).get_overrides()
+    assert [b["name"] for b in saved["benchmarks"]] == ["economy_europe_southeast_asia", "eco_asia"]
+    assert saved["benchmarks"][0]["good_miles_max"] == 30000
+    assert saved["notify"] == {"new_deals": {"min_pct": 25.0, "enabled": False}, "slack": True}
+    bad = client.post("/settings", data={**form, "bm__2__good_miles_max": "x"})
+    assert bad.status_code == 422 and "not a number" in bad.text
+
+
 def _add(client, **over):
     form = {
         "origin": "muc",

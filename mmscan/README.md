@@ -76,6 +76,7 @@ scan.
 | `programs` | The one list of mileage programs besides Miles & More, keyed by seats.aero source id. Per program: `enabled` (you can book it; off means not requested and not shown), `within_region` (also scanned within Asia, where Miles & More returns nothing), `mr_per_mile` or `mile_cost_eur_cents`, `label`, `link_template`. Nothing else names a program: the scan asks for every enabled one. |
 | `usd_to_eur` | Fixed rate for fees: seats.aero reports Miles & More fees in USD. Update it now and then. Without it the Shortlist stays empty. |
 | `date_window` | Days from today to scan, recalculated each run. |
+| `fx_to_eur` | Euro per unit of other fee currencies (SGD, THB, ...). Asia to Asia awards quote taxes in local currency; a currency missing here is unpriced and its flights are hidden. |
 | `region_pairs` | Continent-level pairs for Bulk Availability: Europe to Asia, Asia to Europe and Asia to Asia. They set what the All flights page covers; the programs asked for each pair come from `programs` (between regions: Miles & More and every enabled one; within a region: the enabled `within_region` ones). Asia to Asia is read by the daily `run` only. |
 | `subregions` | Airport lists that refine a continent, used by `benchmarks`. |
 | `benchmarks` | Fallback ceilings per cabin and place pair, used when a baseline is thin. `chart_rate_miles` sets the chart-rate flag at 95%. |
@@ -272,3 +273,8 @@ uv run pytest -q && uv run ruff check . && uv run ruff format --check .
 
 Tests never touch the network. Set `TEST_DATABASE_URL` to a scratch Postgres database (its
 mmscan tables are dropped) to run the store tests on Postgres as well; without it they skip.
+
+
+## Settings page
+
+The Settings page edits the programs (bookable, also within Asia, costs) and the main config values: cabins, region pairs, date window, seats, API cap, watchlist, currency rates, the deal thresholds, the benchmarks and the Slack alerts. Saved values live in the database and win over `config.yaml`; scan settings reach the API requests at the next scan.
