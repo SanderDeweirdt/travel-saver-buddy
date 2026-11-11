@@ -1,4 +1,4 @@
-"""Scoring knobs: relative.min_discount_pct and shortlist.scope / focus_watchlist."""
+"""Scoring knobs: relative.min_discount_pct and shortlist.scope."""
 
 import pytest
 
@@ -49,25 +49,14 @@ def _deal(**kw):
     return s
 
 
-def test_focus_scope_keeps_benchmark_and_watchlist_only(default_config_dict):
+def test_focus_scope_keeps_benchmarks_only(default_config_dict):
     sea = _deal(origin="MUC", dest="SIN", id="a")  # benchmark: Europe <-> southeast_asia
-    gulf = _deal(origin="MUC", dest="NRT", id="b")  # Asia, but no benchmark, not on the watchlist
+    gulf = _deal(origin="MUC", dest="NRT", id="b")  # Asia, but no benchmark
     cfg = config(default_config_dict)
     assert [s.availability_id for s in shortlist([sea, gulf], cfg)] == ["a"]
     cfg_all = config(default_config_dict, shortlist={"scope": "all"})
     assert [s.availability_id for s in shortlist([sea, gulf], cfg_all)] == ["a", "b"]
     assert [s.availability_id for s in shortlist([sea, gulf])] == ["a", "b"]  # no cfg: no filter
-
-
-def test_watchlist_pair_is_in_focus_even_without_a_benchmark(default_config_dict):
-    wl_only = {"origins": ["MUC"], "destinations": ["NRT"], "both_directions": True}
-    pair = _deal(origin="MUC", dest="NRT", id="a")
-    back = _deal(origin="NRT", dest="MUC", id="b")
-    other = _deal(origin="FRA", dest="NRT", id="c")
-    cfg = config(default_config_dict, watchlist=wl_only)
-    assert [s.availability_id for s in shortlist([pair, back, other], cfg)] == ["a", "b"]
-    off = config(default_config_dict, watchlist=wl_only, shortlist={"focus_watchlist": False})
-    assert shortlist([pair, back, other], off) == []
 
 
 def test_worth_a_look_rows_follow_the_same_scope(default_config_dict):

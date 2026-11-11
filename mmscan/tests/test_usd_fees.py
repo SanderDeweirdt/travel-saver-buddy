@@ -89,6 +89,7 @@ def test_empty_trip_list_is_not_stored_as_a_fetch(tmp_path, default_config_dict)
         sleep=lambda s: None,
     )
     store = client.store
+    store.add_watch_item("MUC", "SIN", "2026-12-01", "2026-12-31")
     run = store.start_run("watch", "{}")
     scan_watchlist(client, store, config(default_config_dict), run, NOW.date())
     assert store.conn.execute("SELECT count(*) FROM trip_fetches").fetchone()[0] == 0
@@ -150,10 +151,13 @@ def test_run_prices_from_summary_then_enriches_only_the_shortlist(
         )
 
     monkeypatch.setattr(Client, "from_env", classmethod(from_env))
+    seed = Store(tmp_path / "data" / "mmscan.db")
+    seed.add_watch_item("MUC", "SIN", "2026-12-01", "2026-12-31")
+    seed.close()
     result = CliRunner().invoke(app, ["run"])
     assert result.exit_code == 0, result.output
-    # 2 region pairs + 2 watchlist directions + one Get Trips for the single Shortlist result.
-    assert seen.count("/availability") == 2 and seen.count("/search") == 2
+    # 2 region pairs + 1 watchlist item + one Get Trips for the single Shortlist result.
+    assert seen.count("/availability") == 2 and seen.count("/search") == 1
     assert [p for p in seen if p.startswith("/trips/")] == ["/trips/good"]
     store = Store(tmp_path / "data" / "mmscan.db")
     rows = {r["availability_id"]: r for r in store.conn.execute("SELECT * FROM current_offers")}

@@ -14,6 +14,7 @@ import typer
 
 from mmscan.client import ApiError, Client
 from mmscan.config import Config, ConfigError, load_config
+from mmscan.db import is_postgres_url
 from mmscan.store import FULL_RUNS, Store, read_overrides
 
 DB_PATH = Path("data/mmscan.db")
@@ -29,6 +30,18 @@ def database_target() -> Path | str:
 
 def _store() -> Store:
     return Store(database_target())
+
+
+def _watch_items() -> list[dict]:
+    """The Watchlist page's items, for planning calls; none when there is no database yet."""
+    target = database_target()
+    if not is_postgres_url(target) and not Path(target).exists():
+        return []
+    store = Store(target, readonly=True)
+    try:
+        return store.watch_items()
+    finally:
+        store.close()
 
 
 ConfigOpt = Annotated[Path, typer.Option("--config", help="Path to config.yaml.")]
@@ -104,7 +117,7 @@ def scan(
     cfg = _load(config)
     today = date.today()
     if dry_run:
-        reqs = planned_requests(cfg, today)
+        reqs = planned_requests(cfg, today, _watch_items())
         typer.echo(f"Would start with {len(reqs)} requests (more pages as results require):")
         for path, params in reqs:
             typer.echo(f"  GET /{path} {params}")
@@ -421,7 +434,7 @@ def run(
     _setup_logging(verbose)
     cfg = _load(config)
     today = date.today()
-    reqs = planned_requests(cfg, today)
+    reqs = planned_requests(cfg, today, _watch_items())
     typer.echo(
         f"Planned calls: {len(reqs)} scan requests plus extra pages as results require, "
         f"then up to {cfg.enrich.max_calls} Get Trips calls for Shortlist results. "
@@ -477,7 +490,7 @@ def watch(
     _setup_logging(verbose)
     cfg = _load(config)
     today = date.today()
-    reqs = watchlist_requests(cfg, today)
+    reqs = watchlist_requests(cfg, today, _watch_items())
     if not reqs:
         typer.echo("The watchlist is empty; nothing to watch.", err=True)
         raise typer.Exit(1)

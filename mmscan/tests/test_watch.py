@@ -37,7 +37,7 @@ def test_paginate_stops_at_max_pages(tmp_path):
     assert len(calls) == 1 and [i["ID"] for i in items] == ["x1"] and warnings == []
 
 
-def test_watch_only_scans_watchlist_one_page_each(tmp_path, default_config_dict):
+def test_watch_only_scans_watchlist_items_one_page_each(tmp_path, default_config_dict):
     body = json.loads((SYN / "search.json").read_text())
     body["hasMore"] = True
     paths = []
@@ -47,6 +47,7 @@ def test_watch_only_scans_watchlist_one_page_each(tmp_path, default_config_dict)
         return httpx.Response(200, json=body)
 
     store = Store(tmp_path / "db.sqlite")
+    store.add_watch_item("MUC", "SIN", "2026-12-01", "2026-12-31")
     run = store.start_run("watch", "{}")
     client = Client(
         "k", store, run, 300, transport=httpx.MockTransport(handler), sleep=lambda s: None
@@ -55,7 +56,7 @@ def test_watch_only_scans_watchlist_one_page_each(tmp_path, default_config_dict)
         client, store, config(default_config_dict), run, date(2026, 10, 11), watch_only=True
     )
     assert status == "ok"
-    assert paths == ["/partnerapi/search", "/partnerapi/search"]
+    assert paths == ["/partnerapi/search"]  # one item, one page though more is available
     assert stats["region_results"] == 0 and stats["watchlist_trips"] == 2
 
 
@@ -104,8 +105,13 @@ def test_full_run_commands_ignore_watch_runs(tmp_path):
 def test_watch_dry_run(tmp_path, monkeypatch, default_config_dict):
     monkeypatch.chdir(tmp_path)
     (tmp_path / "config.yaml").write_text(json.dumps(default_config_dict))
+    empty = CliRunner().invoke(app, ["watch", "--dry-run"])
+    assert empty.exit_code == 1  # nothing on the watchlist: nothing to watch
+    assert not (tmp_path / "data").exists()
+    seed = Store(tmp_path / "data" / "mmscan.db")
+    seed.add_watch_item("MUC", "SIN", "2026-12-01", "2026-12-31")
+    seed.close()
     result = CliRunner().invoke(app, ["watch", "--dry-run"])
     assert result.exit_code == 0, result.output
-    assert "Planned calls: at most 2" in result.output
-    assert result.output.count("GET /search") == 2
-    assert not (tmp_path / "data").exists()
+    assert "Planned calls: at most 1" in result.output
+    assert result.output.count("GET /search") == 1

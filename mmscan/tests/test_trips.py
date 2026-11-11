@@ -114,7 +114,14 @@ def test_trip_requests_are_narrow_and_skip_past_windows(default_config_dict):
     assert trip_requests(cfg, date(2027, 6, 5))[0][1]["start_date"] == "2027-06-05"
     # A window in the past is not scanned.
     assert len(trip_requests(cfg, date(2027, 6, 25))) == 1
-    assert len(watchlist_requests(cfg, date(2027, 1, 1))) == 2 + 2  # wide watchlist + trip legs
+    assert len(watchlist_requests(cfg, date(2027, 1, 1))) == 2  # the trip legs
+    item = {
+        "origin": "FRA",
+        "destination": "SIN",
+        "date_from": "2027-02-01",
+        "date_to": "2027-02-03",
+    }
+    assert len(watchlist_requests(cfg, date(2027, 1, 1), [item])) == 3  # plus one watchlist item
 
 
 def test_pairs_respect_windows_and_rank_by_party_total(default_config_dict, store):

@@ -5,7 +5,7 @@ from __future__ import annotations
 import csv
 import io
 import tempfile
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from urllib.parse import quote
 
@@ -333,34 +333,106 @@ def create_app(settings: WebSettings) -> FastAPI:
         ctx = deals_context(store, q, min_pct=None, inline=True)
         return render(request, "overview.html", **ctx)
 
+    MAX_WATCH_ITEMS = 50  # each one costs API calls on every scan
+
+    def watchlist_ctx(store: Store, **extra) -> dict:
+        today = datetime.now(UTC).date().isoformat()
+        return {
+            "items": queries.watch_items_view(store, store.watch_items(), today),
+            "updated": queries.last_update(store),
+            "today": today,
+            "max_items": MAX_WATCH_ITEMS,
+            "errors": [],
+            "form": {},
+            **extra,
+        }
+
     @app.get("/watchlist", response_class=HTMLResponse, dependencies=[Depends(require_login)])
     @app.get("/shortlist", response_class=HTMLResponse, dependencies=[Depends(require_login)])
-    def watchlist_page(
-        request: Request,
-        store: Store = Depends(open_store),
-        route: str = "",
-        cabin: str = "",
-        verdict: str = "",
-        sort: str = "verdict",
-        all: int = 0,
-    ):
-        now = datetime.now(UTC)
-        updated = queries.last_update(store)
-        view = None
-        if updated is not None:
-            view = queries.shortlist_view(store, cfg, now, route, cabin, verdict, sort, bool(all))
-        return render(
-            request,
-            "shortlist.html",
-            view=view,
-            updated=updated,
-            wl=cfg.watchlist,
-            benchmarks=cfg.benchmarks,
-            scope=cfg.shortlist.scope,
-            focus_watchlist=cfg.shortlist.focus_watchlist,
-            f={"route": route, "cabin": cabin, "verdict": verdict, "sort": sort, "all": all},
-            sorts=list(queries.SORTS),
-        )
+    def watchlist_page(request: Request, store: Store = Depends(open_store), added: int = 0):
+        return render(request, "watchlist.html", **watchlist_ctx(store, added=bool(added)))
+
+    def _airport(raw: str | None, label: str, errors: list[str]) -> str:
+        code = (raw or "").strip().upper()
+        if not (len(code) == 3 and code.isalpha() and code.isascii()):
+            errors.append(f"{label} must be a three-letter airport code such as FRA")
+        return code
+
+    def _day(raw: str | None, label: str, errors: list[str]) -> str:
+        try:
+            return date.fromisoformat((raw or "").strip()).isoformat()
+        except ValueError:
+            errors.append(f"{label} must be a date")
+            return ""
+
+    @app.post("/watchlist", dependencies=[Depends(require_login)])
+    async def watchlist_add(request: Request):
+        form = await request.form()
+        errors: list[str] = []
+        origin = _airport(form.get("origin"), "From", errors)
+        destination = _airport(form.get("destination"), "To", errors)
+        first = _day(form.get("date_from"), "Departure date", errors)
+        last = _day(form.get("date_to") or form.get("date_from"), "Latest departure", errors)
+        today = datetime.now(UTC).date().isoformat()
+        if not errors:
+            if origin == destination:
+                errors.append("From and To must differ")
+            if last < first:
+                errors.append("The latest departure is before the earliest")
+            if last < today:
+                errors.append("That date has already passed")
+        store = Store(settings.database)
+        try:
+            items = store.watch_items()
+            if not errors and len(items) >= MAX_WATCH_ITEMS:
+                errors.append(f"The watchlist is full ({MAX_WATCH_ITEMS}); remove one first")
+            if not errors and any(
+                (i["origin"], i["destination"], i["date_from"], i["date_to"])
+                == (origin, destination, first, last)
+                for i in items
+            ):
+                errors.append("That flight is already on the watchlist")
+            if not errors:
+                store.add_watch_item(origin, destination, first, last)
+                return RedirectResponse("/watchlist?added=1", status_code=303)
+        finally:
+            store.close()
+        read = Store(settings.database, readonly=True)
+        try:
+            ctx = watchlist_ctx(
+                read,
+                errors=errors,
+                form={
+                    "origin": origin,
+                    "destination": destination,
+                    "date_from": form.get("date_from", ""),
+                    "date_to": form.get("date_to", ""),
+                },
+            )
+        finally:
+            read.close()
+        resp = render(request, "watchlist.html", **ctx)
+        resp.status_code = 422
+        return resp
+
+    @app.post("/watchlist/{item_id}/delete", dependencies=[Depends(require_login)])
+    def watchlist_delete(item_id: int):
+        store = Store(settings.database)
+        try:
+            store.delete_watch_item(item_id)
+        finally:
+            store.close()
+        return RedirectResponse("/watchlist", status_code=303)
+
+    @app.get(
+        "/watchlist/{item_id}", response_class=HTMLResponse, dependencies=[Depends(require_login)]
+    )
+    def watchlist_item_page(request: Request, item_id: int, store: Store = Depends(open_store)):
+        item = store.watch_item(item_id)
+        if item is None:
+            raise HTTPException(404, "That watchlist item does not exist.")
+        view = queries.watch_item_view(store, cfg, item, datetime.now(UTC))
+        return render(request, "watchlist_item.html", item=item, view=view)
 
     @app.get(
         "/route/{origin}/{destination}/{cabin}",

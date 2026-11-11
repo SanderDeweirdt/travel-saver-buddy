@@ -43,9 +43,6 @@ FIELDS: tuple[Field, ...] = (
         "int",
         "seats.aero Pro allows 1000 a day.",
     ),
-    Field("Watchlist", "watchlist.origins", "Origin airports", "codes", "IATA codes."),
-    Field("Watchlist", "watchlist.destinations", "Destination airports", "codes", "IATA codes."),
-    Field("Watchlist", "watchlist.both_directions", "Also search the return direction", "bool"),
     Field(
         "Currencies",
         "usd_to_eur",

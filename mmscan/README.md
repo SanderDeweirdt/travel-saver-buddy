@@ -39,12 +39,12 @@ Every command takes `--config PATH` (default `config.yaml`), `--dry-run`
 | Command | What it does | API calls |
 | --- | --- | --- |
 | `mmscan check` | Four small calls; saves the raw responses to `tests/fixtures/live/` | 4 |
-| `mmscan scan` | Region pairs (Bulk Availability) and the watchlist (Cached Search, trips included) | One per page; 4 first pages with the default config |
+| `mmscan scan` | Region pairs (Bulk Availability), then your watchlist items and trips (Cached Search, trips included) | One per page; 2 first pages plus 1 per watchlist item and trip leg |
 | `mmscan enrich` | By hand: picks the cheapest 30% of region results (by miles) and fetches their trip details | Up to `enrich.max_calls` (50) |
 | `mmscan score` | Total cost, baselines, flags and verdicts | 0 |
 | `mmscan report` | Spreadsheet, Shortlist CSV and the terminal top 10 | 0 |
 | `mmscan run` | Scan, score, fetch trip details for Shortlist results only, score again, report, notify; prints the planned calls first | Scan plus at most `enrich.max_calls` |
-| `mmscan watch` | Watchlist only: scan (first `watch.max_pages` page per direction), score against stored history, post new deals to Slack. For hourly runs | 2 with the default config |
+| `mmscan watch` | Watchlist items and trips only: scan (first `watch.max_pages` page per search), score against stored history, post new deals to Slack. For hourly runs | 1 per watchlist item and trip leg |
 | `mmscan notify` | Posts the latest run's alerts to Slack (new deals, plus any older-style alerts that are switched on); nothing when there are none. `--dry-run` prints the message. `--test` posts a "Hello world" to check the webhook (reads no data) | 0 |
 | `mmscan trips` | Best round trips per trip profile, from stored results (`--top N`) | 0 |
 | `mmscan verify-add` | Records one hand check of a cached price against the live one (carrier, cached miles, live miles); feeds the dashboard's trust table | 0 |
@@ -78,13 +78,12 @@ scan.
 | `date_window` | Days from today to scan, recalculated each run. |
 | `fx_to_eur` | Euro per unit of other fee currencies (SGD, THB, ...). Asia to Asia awards quote taxes in local currency; a currency missing here is unpriced and its flights are hidden. |
 | `region_pairs` | Continent-level pairs for Bulk Availability: Europe to Asia, Asia to Europe and Asia to Asia. They set what the All flights page covers; the programs asked for each pair come from `programs` (between regions: Miles & More and every enabled one; within a region: the enabled `within_region` ones). Asia to Asia is read by the daily `run` only. |
-| `watchlist` | Airports searched with trips included, so their fees are free (11 European origins, 10 Southeast Asian destinations by default). `both_directions` adds the return direction. More airports do not add calls: each direction is one search. |
 | `subregions` | Airport lists that refine a continent, used by `benchmarks`. |
 | `benchmarks` | Fallback ceilings per cabin and place pair, used when a baseline is thin. `chart_rate_miles` sets the chart-rate flag at 95%. |
 | `relative` | `percentile_good` (deal threshold), `min_samples` (below this a baseline is unknown), `history_days` (a flight not seen for this long stops counting as on offer), `min_discount_pct` (a route or destination only counts as good when the total is also this % below its median; 0 = plain percentile cut). Lufthansa-group fares barely move by date, so a high value leaves few Deals. |
 | `deals` | `min_saving_pct` (30): Best deals lists only flights at least this % below the usual price. `default_cabin` (`economy`): the cabin the All flights page opens on; `""` means all cabins. `by_ceiling: true` makes a result within its benchmark's `good_miles_max` and `fees_max_eur` a Deal even when the relative baselines say no. The right way to find deals on routes whose fare never moves. Check the ceilings against real fees: the PRD's 200 EUR economy limit is below almost every real fee. |
 | `drops` | `min_pct`: Change shows Cheaper when a total fell this much since it was last seen. |
-| `shortlist` | `scope: focus` limits the Shortlist, the CSV and Slack to results matching a benchmark or (`focus_watchlist`) a watchlist pair; `all` keeps everything scored Deal or Worth a look. "All results" always has every result. |
+| `shortlist` | `scope: focus` limits the Shortlist, the CSV and Slack to results matching a benchmark; `all` keeps everything scored Deal or Worth a look. "All results" always has every result. |
 | `prescreen.percentile` | Share of region results, cheapest first, that get their fees fetched. |
 | `enrich.max_calls` | Get Trips calls per run: for `run` it caps trip details for Shortlist results; for `enrich` it caps the pre-screened candidates. Set to 0 to skip. |
 | `value_per_mile_cents` | Bands for value per mile against a cash fare. |
@@ -104,7 +103,7 @@ with a warning naming the line.
 | Page | What it shows |
 | --- | --- |
 | **All flights** (`/`, `/overview`) | The same rows with no saving cut: every flight on every route, one row per flight, whatever its saving. Routes without a usual price yet sit in the same table, marked "Building history". Same filters and the same 300-row limit. |
-| **Flight watchlist** (`/watchlist`, was Shortlist) | Deal and Worth a look flights on your `watchlist` airports or matching a `benchmark` (`shortlist.scope: focus`), with the included airports and benchmarks listed at the top and a chip on each row saying why it is there. All flights is not limited to it: it covers every flight between the configured regions. `/shortlist` still works. |
+| **Flight watchlist** (`/watchlist`) | The flights you follow, added one by one: origin, destination and a departure date or range (stored in the database, up to 50). The page lists every item with how many flights fit it now and the cheapest; click one (`/watchlist/<id>`) to see the flights that fit its airports and dates, in any cabin. Every scan and `mmscan watch` also runs one Cached Search per item over the programs you can book, so a new item is filled at the next scan. `/shortlist` redirects here. |
 | **Route** (`/route/...`) | Price history with the usual price as a dashed line, and today's results against it. |
 | **Settings** (`/settings`) | The Miles & More mile value, the Amex point value, and per program: enabled or not, cost per mile, Amex points per mile. Saved in the database (table `settings`) and used by both the dashboard and the scanner, so a change needs no redeploy; `config.yaml` only lists the programs and their starting values. Saving recalculates every total; which programs are requested changes at the next scan. The only page that writes. Below that, a health section: quota, scanner health, the USD rate age, a table of live-to-cached mile ratios per carrier (from `mmscan verify-add`), Slack status and recent runs. |
 
@@ -123,7 +122,7 @@ you want to take: airports, departure and return windows, travellers, cabins, st
 optional budget. For each trip mmscan:
 
 - searches only that trip's dates, one call per leg (so `watch` and `run` cost 2 extra calls per
-  round trip), instead of hoping it shows up in the wide watchlist page;
+  round trip), instead of hoping it shows up in a broader search;
 - pairs every outbound with every return that fits the stay length (same airports unless
   `open_jaw: true`, same cabin) and ranks the pairs by what the whole party pays: miles at
   `mile_cost_eur_cents` plus fees, times the number of travellers;
@@ -197,7 +196,7 @@ seats.aero has no webhooks, so scanning is polling. One daily schedule covers ev
 ```
 
 That is roughly 50 calls a day, inside the 800 `api.daily_call_cap` and the 1,000-call Pro
-allowance. `mmscan watch` (watchlist only, 2 calls) still exists if you want an extra scan between
+allowance. `mmscan watch` (watchlist items only, 1 call each) still exists if you want an extra scan between
 runs, but nothing schedules it.
 
 New and Cheaper compare each route, date and cabin with the price it had

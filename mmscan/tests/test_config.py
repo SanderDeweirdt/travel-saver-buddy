@@ -37,7 +37,7 @@ def test_missing_file_is_config_error(tmp_path):
 
 
 def test_odd_airport_warns(default_config_dict, write_config):
-    default_config_dict["watchlist"]["origins"].append("MUNICH")
+    default_config_dict["subregions"]["southeast_asia"].append("MUNICH")
     cfg = load_config(write_config(default_config_dict))
     assert any("MUNICH" in w for w in cfg.warnings)
 
