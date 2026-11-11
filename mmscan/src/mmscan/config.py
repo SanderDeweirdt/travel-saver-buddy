@@ -491,8 +491,19 @@ def _airport_warnings(cfg: Config) -> list[str]:
     return out
 
 
-# What the dashboard's Settings page may change. Everything else stays in config.yaml.
-SETTING_KEYS = ("mr_point_value_eur_cents", "mile_cost_eur_cents")
+# What the dashboard's Settings page may change; everything else stays in config.yaml.
+# SCALAR_KEYS replace the yaml value, SECTION_KEYS merge field by field into the yaml section,
+# REPLACE_KEYS (lists and rate tables) replace it wholesale.
+SCALAR_KEYS = (
+    "mr_point_value_eur_cents",
+    "mile_cost_eur_cents",
+    "min_seats",
+    "usd_to_eur",
+    "usd_to_eur_date",
+)
+SECTION_KEYS = ("date_window", "api", "relative", "savings", "deals", "watchlist")
+REPLACE_KEYS = ("fx_to_eur", "region_pairs", "cabins")
+SETTING_KEYS = SCALAR_KEYS + REPLACE_KEYS  # kept for older callers
 
 
 def apply_overrides(data: dict, overrides: dict | None) -> dict:
@@ -501,9 +512,12 @@ def apply_overrides(data: dict, overrides: dict | None) -> dict:
     if not overrides:
         return data
     merged = dict(data)
-    for key in SETTING_KEYS:
+    for key in (*SCALAR_KEYS, *REPLACE_KEYS):
         if key in overrides:
             merged[key] = overrides[key]
+    for key in SECTION_KEYS:
+        if isinstance(overrides.get(key), dict):
+            merged[key] = {**(data.get(key) or {}), **overrides[key]}
     saved = overrides.get("programs")
     legacy = overrides.get("bookable_programs")  # saved before `enabled` moved into each program
     if isinstance(saved, dict) or isinstance(legacy, list):

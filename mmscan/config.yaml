@@ -37,13 +37,13 @@ mr_point_value_eur_cents: 1.0
 # Iberia Club and Cathay Asia Miles have no seats.aero source.
 programs:
   # Amex Germany transfer partners
-  singapore:  {label: KrisFlyer,   enabled: true,  within_region: true, mr_per_mile: 1.5}   # 3 points = 2 miles
-  flyingblue: {label: Flying Blue, enabled: true,  mr_per_mile: 1.25}   # 5 = 4
-  eurobonus:  {label: EuroBonus,   enabled: true,  mr_per_mile: 1.25}   # 5 = 4
-  qatar:      {label: Qatar,       enabled: true,  mr_per_mile: 1.25}   # 3 = 2 direct; 5 = 4 via British Airways Avios, cheaper
-  finnair:    {label: Finnair,     enabled: true,  mr_per_mile: 1.25}   # no direct transfer: via British Airways Avios, 5 = 4
-  emirates:   {label: Emirates,    enabled: false, mr_per_mile: 2.0}    # 2 = 1
-  delta:      {label: Delta,       enabled: false, mr_per_mile: 1.5}    # 3 = 2
+  singapore:  {label: KrisFlyer,   enabled: true, within_region: true, mr_per_mile: 1.5}   # 3 points = 2 miles
+  flyingblue: {label: Flying Blue, enabled: true, within_region: true,  mr_per_mile: 1.25}   # 5 = 4
+  eurobonus:  {label: EuroBonus,   enabled: true, within_region: true,  mr_per_mile: 1.25}   # 5 = 4
+  qatar:      {label: Qatar,       enabled: true, within_region: true,  mr_per_mile: 1.25}   # 3 = 2 direct; 5 = 4 via British Airways Avios, cheaper
+  finnair:    {label: Finnair,     enabled: true, within_region: true,  mr_per_mile: 1.25}   # no direct transfer: via British Airways Avios, 5 = 4
+  emirates:   {label: Emirates,    enabled: false, within_region: true, mr_per_mile: 2.0}    # 2 = 1
+  delta:      {label: Delta,       enabled: false, within_region: true, mr_per_mile: 1.5}    # 3 = 2
   # Not Amex partners: only useful if you hold their miles
   aeroplan:   {label: Aeroplan,    enabled: false, within_region: true, mile_cost_eur_cents: 1.4}
   united:     {label: United,      enabled: false, within_region: true, mile_cost_eur_cents: 1.3}

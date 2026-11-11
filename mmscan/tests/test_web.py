@@ -478,3 +478,33 @@ def test_settings_page_saves_what_you_enter(client, db):
 def test_overview_survives_bad_params(deals_client):
     assert deals_client.get("/overview?sort=bogus&pax=0").status_code == 200
     assert deals_client.get("/overview?pax=99").status_code == 200
+
+
+def test_settings_page_edits_within_asia_and_the_other_config_fields(client, db):
+    login(client)
+    page = client.get("/settings").text
+    assert 'name="within__aeroplan"' in page and 'name="f__fx_to_eur"' in page
+    assert "SGD = 0.67" in page and "Europe &gt; Asia" in page
+    form = _settings_form(
+        withinseen__singapore="1",  # unticked: off within Asia
+        withinseen__aeroplan="1",
+        within__aeroplan="on",
+        f__min_seats="3",
+        f__date_window__end_offset_days="120",
+        f__fx_to_eur="SGD = 0.7\nTHB = 0.03",
+        f__region_pairs="Europe > Asia\nAsia > Asia",
+        f__watchlist__both_directions__seen="1",
+    )
+    form["f__watchlist.both_directions__seen"] = form.pop("f__watchlist__both_directions__seen")
+    form["f__date_window.end_offset_days"] = form.pop("f__date_window__end_offset_days")
+    r = client.post("/settings", data=form, follow_redirects=False)
+    assert r.status_code == 303
+    saved = Store(db, readonly=True).get_overrides()
+    assert saved["programs"]["singapore"]["within_region"] is False
+    assert saved["programs"]["aeroplan"]["within_region"] is True
+    assert saved["min_seats"] == 3 and saved["date_window"] == {"end_offset_days": 120}
+    assert saved["fx_to_eur"] == {"SGD": 0.7, "THB": 0.03}
+    assert saved["watchlist"] == {"both_directions": False}
+    assert len(saved["region_pairs"]) == 2
+    bad = client.post("/settings", data=_settings_form(**{"f__fx_to_eur": "SGD 0.7"}))
+    assert bad.status_code == 422 and "should look like" in bad.text

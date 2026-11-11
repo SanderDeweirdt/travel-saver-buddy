@@ -24,12 +24,13 @@
   <h2>Programs</h2>
   <p class="note">Tick the programs you can book. Unticked programs are not requested from seats.aero and are hidden from every page. For a program you pay with Amex points, enter the points that buy one mile after the transfer ratio (3 points = 2 miles is 1.5); it then replaces the cost per mile. {{ main_label }} is always on.</p>
   <div class="panel"><div class="scroll"><table>
-    <thead><tr><th>Bookable</th><th>Program</th><th class="n">Cost per mile (ct)</th><th class="n">Amex points per mile</th><th class="n">Now costs (ct/mile)</th></tr></thead>
+    <thead><tr><th>Bookable</th><th>Program</th><th>Also within Asia</th><th class="n">Cost per mile (ct)</th><th class="n">Amex points per mile</th><th class="n">Now costs (ct/mile)</th></tr></thead>
     <tbody>
     {% for r in rows %}
       <tr>
         <td><input type="checkbox" name="bookable__{{ r.id }}" id="b-{{ r.id }}" {{ 'checked' if r.bookable }} aria-label="{{ r.label }} bookable" style="min-height:auto"></td>
         <td><label for="b-{{ r.id }}">{{ r.label }}</label> <span class="sub">{{ r.id }}</span></td>
+        <td><input type="checkbox" name="within__{{ r.id }}" {{ 'checked' if r.within }} aria-label="{{ r.label }} also scanned within Asia" style="min-height:auto"><input type="hidden" name="withinseen__{{ r.id }}" value="1"></td>
         <td class="n"><input name="cost__{{ r.id }}" inputmode="decimal" value="{{ r.cost }}" aria-label="{{ r.label }} cost per mile in cents" style="width:90px;text-align:right"></td>
         <td class="n"><input name="mr__{{ r.id }}" inputmode="decimal" value="{{ r.mr }}" aria-label="{{ r.label }} Amex points per mile" style="width:90px;text-align:right"></td>
         <td class="n">{{ "%.2f"|format(r.effective) if r.effective is not none else "–" }}</td>
@@ -38,10 +39,27 @@
     </tbody>
   </table></div></div>
 
+  {% for group in fields|map(attribute='f.group')|unique %}
+  <h2>{{ group }}</h2>
+  <div class="panel" style="padding:16px;display:grid;gap:14px;max-width:640px">
+    {% for x in fields if x.f.group == group %}
+    <label style="display:grid;gap:4px"><span><strong>{{ x.f.label }}</strong></span>
+      {% if x.f.kind == 'bool' %}
+        <span><input type="checkbox" name="{{ x.name }}" {{ 'checked' if x.value }} style="min-height:auto"><input type="hidden" name="{{ x.name }}__seen" value="1"></span>
+      {% elif x.f.kind in ('pairs', 'rates') %}
+        <textarea name="{{ x.name }}" rows="{{ 4 if x.f.kind == 'pairs' else 8 }}" style="max-width:360px">{{ x.value }}</textarea>
+      {% else %}
+        <input name="{{ x.name }}" value="{{ x.value }}" style="max-width:{{ 420 if x.f.kind in ('codes', 'cabins') else 160 }}px">
+      {% endif %}
+      {% if x.f.help %}<span class="sub">{{ x.f.help }}</span>{% endif %}</label>
+    {% endfor %}
+  </div>
+  {% endfor %}
+
   <p style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
     <button type="submit" class="primary btn">Save</button>
   </p>
-  <p class="note">Saved in the database and used by both this dashboard and the scanner; <code>config.yaml</code> only lists the programs and their starting values. Saving recalculates every total, which takes a few seconds.</p>
+  <p class="note">Saved in the database and used by both this dashboard and the scanner; <code>config.yaml</code> only holds the starting values. Changes to scan settings (cabins, region pairs, window, watchlist) reach the API requests at the next scan. Saving recalculates every total, which takes a few seconds.</p>
 </form>
 
 <h2 style="margin-top:40px">Data &amp; alerts</h2>
