@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import statistics
 from bisect import bisect_right
+from collections.abc import Iterable
 from datetime import datetime, timedelta
 
 from mmscan.config import Config
@@ -37,9 +38,17 @@ _CURRENT_BOOLS = (
 
 ALIVE_HOURS = 72  # a flight not seen for this long no longer counts as on offer in the history
 LATEST = "SELECT * FROM observations WHERE id IN (SELECT max(id) FROM observations GROUP BY key)"
+# Only the columns that decide whether a price changed: a full row of every observation is a lot
+# of memory once a run holds hundreds of thousands of flights.
+_STATE_COLUMNS = "id, key, run_id, miles, fees_minor, currency, fees_eur, fee_estimated, expired"
+LATEST_STATE = (
+    f"SELECT {_STATE_COLUMNS} FROM observations "
+    "WHERE id IN (SELECT max(id) FROM observations GROUP BY key)"
+)
 # The state before the latest one, for keys that have two or more.
 PREVIOUS = (
-    "SELECT * FROM observations WHERE id IN (SELECT max(id) FROM observations "
+    "SELECT key, miles, fees_minor, currency, fees_eur, fee_estimated, source FROM observations "
+    "WHERE id IN (SELECT max(id) FROM observations "
     "WHERE id NOT IN (SELECT max(id) FROM observations GROUP BY key) GROUP BY key)"
 )
 
@@ -89,13 +98,17 @@ def _detail_values(s: Scored) -> tuple:
 
 
 def record_observations(
-    store: Store, run_id: int, rows: list[Scored], now: datetime, default_source: str = "lufthansa"
+    store: Store,
+    run_id: int,
+    rows: Iterable[Scored],
+    now: datetime,
+    default_source: str = "lufthansa",
 ) -> dict[str, int]:
     """Fold a run's scored rows into `observations`. A flight whose price state is unchanged gets
     `last_seen` (and its details) refreshed; a changed one gets a new row, or, when the run itself
     created the newest row, has that row replaced. Returns counts of new, changed and unchanged."""
     stamp = now.isoformat()
-    latest = {r["key"]: r for r in store.conn.execute(LATEST).fetchall()}
+    latest = {r["key"]: r for r in store.conn.execute(LATEST_STATE)}
     insert, touch, replace = [], [], []
     counts = {"new": 0, "changed": 0, "unchanged": 0}
     for s in rows:
@@ -152,8 +165,9 @@ def record_observations(
     return counts
 
 
-def _to_scored(r, cfg: Config) -> Scored:
-    """An observation as an unscored row. Totals come from the raw fee and today's config."""
+def _fees_total(r, cfg: Config) -> tuple[float | None, bool, float | None]:
+    """(fees in euro, whether they are estimated, total) of an observation, from the raw fee and
+    today's config."""
     if r["fees_minor"] is not None:
         fees = fees_eur(r["fees_minor"], r["currency"] or "", cfg.fx_rates)
         estimated = fees is None
@@ -165,6 +179,13 @@ def _to_scored(r, cfg: Config) -> Scored:
         if fees is None or miles is None
         else total_cost_eur(miles, fees, cfg.mile_cents(r["source"]))
     )
+    return fees, estimated, total
+
+
+def _to_scored(r, cfg: Config) -> Scored:
+    """An observation as an unscored row. Totals come from the raw fee and today's config."""
+    fees, estimated, total = _fees_total(r, cfg)
+    miles = r["miles"]
     seats = r["seats"]
     return Scored(
         availability_id=r["availability_id"] or r["key"],
@@ -198,7 +219,7 @@ def _to_scored(r, cfg: Config) -> Scored:
 
 
 def _total(r, cfg: Config) -> float | None:
-    return _to_scored(r, cfg).total_eur
+    return _fees_total(r, cfg)[2]
 
 
 def fresh_observations(store: Store, cfg: Config, now: datetime) -> list:
@@ -206,11 +227,10 @@ def fresh_observations(store: Store, cfg: Config, now: datetime) -> list:
     program you can book (`bookable_programs`)."""
     cutoff = (now - timedelta(days=cfg.relative.history_days)).isoformat()
     today = now.date().isoformat()
-    return [
-        r
-        for r in store.conn.execute(LATEST).fetchall()
-        if r["last_seen"] >= cutoff and (r["date"] or "") >= today and cfg.is_bookable(r["source"])
-    ]
+    fresh = store.conn.execute(
+        f"{LATEST} AND last_seen >= ? AND COALESCE(date, '') >= ?", (cutoff, today)
+    )
+    return [r for r in fresh if cfg.is_bookable(r["source"])]
 
 
 def _previous_totals(

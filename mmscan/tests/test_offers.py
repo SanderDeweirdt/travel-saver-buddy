@@ -127,6 +127,39 @@ def test_new_fx_rate_does_not_reprice_history(tmp_path, cfg, default_config_dict
     assert cur.fees_eur == pytest.approx(129 * 0.92)  # still the rate in force when it was scored
 
 
+def test_current_rows_read_in_batches_match_one_read(tmp_path, cfg, monkeypatch):
+    """A run is read ROW_BATCH availabilities at a time, trips and fetches included."""
+    import mmscan.scoring as scoring
+    from tests.helpers import trip
+
+    store = Store(tmp_path / "db.sqlite")
+    run = store.start_run("watch", "{}", now=NOW)
+    for i in range(7):
+        id_ = f"a{i}"
+        store.save_availability(
+            run,
+            avail(id_, date=f"2026-12-{10 + i}", taxes={"economy": 12900}, economy=35000 + i),
+            "watchlist",
+        )
+    store.save_trips(
+        "a3",
+        "2026-10-10T08:00:00Z",
+        [trip("t3", avail_id="a3", cabin="economy", miles=35003, taxes=5000)],
+        "https://book/a3",
+    )
+    store.mark_expired("a5", "2026-10-10T08:00:00Z")
+    whole, whole_warns = current_rows(store, cfg, run)
+    monkeypatch.setattr(scoring, "ROW_BATCH", 2)
+    batched, batched_warns = current_rows(store, cfg, run)
+    assert [s.availability_id for s in whole] == [f"a{i}" for i in range(7)]
+    assert batched == whole and batched_warns == whole_warns
+    by_id = {s.availability_id: s for s in batched}
+    assert by_id["a3"].booking_link == "https://book/a3"
+    assert by_id["a3"].fees_eur == pytest.approx(50)  # the stored trip priced it, in EUR
+    assert by_id["a2"].fees_eur == pytest.approx(129 * 0.92)  # the summary fee, USD converted
+    assert by_id["a5"].expired and not by_id["a4"].expired
+
+
 def test_backfill_collapses_result_history_into_price_states(tmp_path):
     from mmscan.scoring import SCORED_COLUMNS, column_values
     from tests.helpers import scored

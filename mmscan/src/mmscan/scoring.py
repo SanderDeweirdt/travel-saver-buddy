@@ -6,6 +6,7 @@ import json
 import logging
 import statistics
 from bisect import bisect_left, bisect_right
+from collections.abc import Iterator
 from dataclasses import dataclass, fields
 from datetime import UTC, datetime
 
@@ -93,7 +94,7 @@ def verdict(route_good: bool, destination_good: bool, seats_ok: bool, capped: bo
     return SKIP
 
 
-@dataclass
+@dataclass(slots=True)
 class Scored:
     availability_id: str
     cabin: str
@@ -272,41 +273,68 @@ def _currency_warnings(currencies: dict[str, int], cfg: Config) -> list[str]:
     return out
 
 
+ROW_BATCH = 2000  # availabilities read at a time; a whole run of raw JSON is too much memory
+
+
+def _batched_trips(store: Store, batch: list) -> tuple[dict, dict]:
+    """Trip fetches and stored trips for one batch of availabilities, keyed by (id, updated_at).
+    Two queries per batch instead of two per availability."""
+    ids = [r["id"] for r in batch]
+    marks = ",".join("?" * len(ids))
+    fetches = {
+        (r["availability_id"], r["updated_at"]): r
+        for r in store.conn.execute(
+            "SELECT availability_id, updated_at, status, booking_link FROM trip_fetches "
+            f"WHERE availability_id IN ({marks})",
+            ids,
+        )
+    }
+    trips: dict[tuple, list[Trip]] = {}
+    for r in store.conn.execute(f"SELECT * FROM trips WHERE availability_id IN ({marks})", ids):
+        trips.setdefault((r["availability_id"], r["updated_at"]), []).append(_trip_from_row(r))
+    return fetches, trips
+
+
+def iter_current_rows(
+    store: Store, cfg: Config, run_id: int, currencies: dict[str, int]
+) -> Iterator[Scored]:
+    """One row per availability and configured cabin, priced from stored trips when present. Read in
+    batches and yielded one at a time, so a run of hundreds of thousands of flights is never in
+    memory at once. `currencies` is filled with the fee currencies seen, for the warnings."""
+    last_id = ""
+    while True:
+        batch = store.conn.execute(
+            "SELECT id, updated_at, source, raw_json FROM availabilities "
+            "WHERE run_id=? AND id>? ORDER BY id LIMIT ?",
+            (run_id, last_id, ROW_BATCH),
+        ).fetchall()
+        if not batch:
+            return
+        last_id = batch[-1]["id"]
+        all_fetches, all_trips = _batched_trips(store, batch)
+        for row in batch:
+            avail = json.loads(row["raw_json"])
+            if avail.get("TaxesCurrency") is not None:
+                cur = avail["TaxesCurrency"]
+                currencies[cur] = currencies.get(cur, 0) + 1
+            updated = row["updated_at"] or ""
+            fetch = all_fetches.get((row["id"], updated))
+            trips = all_trips.get((row["id"], updated), [])
+            for t in trips:
+                currencies[t.currency] = currencies.get(t.currency, 0) + 1
+            link = fetch["booking_link"] if fetch else None
+            for offer in parse_cabin_offers(avail, cfg.cabins):
+                s = _offer_row(avail, row, offer.cabin, offer, trips, link, cfg)
+                if fetch is not None and fetch["status"] == "expired":
+                    s.expired = True
+                yield s
+
+
 def current_rows(store: Store, cfg: Config, run_id: int) -> tuple[list[Scored], list[str]]:
-    """One row per availability and configured cabin, priced from stored trips when present."""
-    out: list[Scored] = []
-    warnings: list[str] = []
+    """`iter_current_rows` as a list, with the fee-currency warnings."""
     currencies: dict[str, int] = {}
-    for row in store.conn.execute(
-        "SELECT id, updated_at, source, raw_json FROM availabilities WHERE run_id=? ORDER BY id",
-        (run_id,),
-    ).fetchall():
-        avail = json.loads(row["raw_json"])
-        if avail.get("TaxesCurrency") is not None:
-            cur = avail["TaxesCurrency"]
-            currencies[cur] = currencies.get(cur, 0) + 1
-        updated = row["updated_at"] or ""
-        fetch = store.conn.execute(
-            "SELECT status, booking_link FROM trip_fetches "
-            "WHERE availability_id=? AND updated_at=?",
-            (row["id"], updated),
-        ).fetchone()
-        trips = [
-            _trip_from_row(r)
-            for r in store.conn.execute(
-                "SELECT * FROM trips WHERE availability_id=? AND updated_at=?", (row["id"], updated)
-            )
-        ]
-        for t in trips:
-            currencies[t.currency] = currencies.get(t.currency, 0) + 1
-        link = fetch["booking_link"] if fetch else None
-        for offer in parse_cabin_offers(avail, cfg.cabins):
-            s = _offer_row(avail, row, offer.cabin, offer, trips, link, cfg)
-            if fetch is not None and fetch["status"] == "expired":
-                s.expired = True
-            out.append(s)
-    warnings += _currency_warnings(currencies, cfg)
-    return out, warnings
+    out = list(iter_current_rows(store, cfg, run_id, currencies))
+    return out, _currency_warnings(currencies, cfg)
 
 
 def _group(samples: list[Scored], key) -> dict[tuple, list[float]]:
@@ -423,8 +451,10 @@ def score_run(
     `current_offers`. Returns (the current offers, warnings)."""
     from mmscan.offers import rebuild_current, record_observations
 
-    current, warnings = current_rows(store, cfg, run_id)
-    record_observations(store, run_id, current, now, cfg.source)
+    currencies: dict[str, int] = {}
+    rows = iter_current_rows(store, cfg, run_id, currencies)
+    record_observations(store, run_id, rows, now, cfg.source)
+    warnings = _currency_warnings(currencies, cfg)
     scored = rebuild_current(store, cfg, run_id, now, fares)
     warnings += list(getattr(fares, "warnings", []) or [])
     return scored, warnings
