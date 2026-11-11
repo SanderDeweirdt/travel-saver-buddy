@@ -599,7 +599,7 @@ def web(
     host: Annotated[str, typer.Option(help="Interface to bind.")] = "0.0.0.0",
     port: Annotated[int, typer.Option(envvar="PORT", help="Port; Railway sets PORT.")] = 8000,
 ) -> None:
-    """Private dashboard, read-only except its Settings page. Needs DASHBOARD_PASSWORD, SESSION_SECRET."""
+    """Private dashboard; only Settings writes. Needs DASHBOARD_PASSWORD and SESSION_SECRET."""
     import uvicorn
 
     from mmscan.web.app import create_app
