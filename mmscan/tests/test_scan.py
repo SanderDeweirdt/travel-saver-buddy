@@ -8,7 +8,14 @@ from typer.testing import CliRunner
 from mmscan.cli import app
 from mmscan.client import Client
 from mmscan.config import Config
-from mmscan.scan import paginate, planned_requests, run_scan, scan_regions, scan_watchlist
+from mmscan.scan import (
+    paginate,
+    planned_requests,
+    region_requests,
+    run_scan,
+    scan_regions,
+    scan_watchlist,
+)
 from mmscan.store import Store
 
 KEY = "pro_SECRETKEY123"
@@ -195,6 +202,7 @@ def test_bad_source_is_skipped_not_fatal(tmp_path, default_config_dict):
         default_config_dict,
         region_pairs=[{"origin": "Asia", "destination": "Asia", "sources": ["nope", "united"]}],
         watchlist={"origins": [], "destinations": [], "both_directions": False},
+        bookable_programs=None,
     )
     client, store = make(tmp_path, handler)
     run = store.start_run("scan", "{}")
@@ -202,3 +210,16 @@ def test_bad_source_is_skipped_not_fatal(tmp_path, default_config_dict):
     assert status == "ok"
     assert stats["region_results"] == 2  # the good source still ran
     assert any("skipped source nope" in w for w in stats["warnings"])
+
+
+def test_unbookable_sources_are_not_requested(default_config_dict):
+    cfg = cfg_from(
+        default_config_dict,
+        region_pairs=[
+            {"origin": "Asia", "destination": "Asia", "sources": ["singapore", "united"]}
+        ],
+        bookable_programs=["lufthansa", "singapore"],
+    )
+    assert [p["source"] for _, p in region_requests(cfg, TODAY)] == ["singapore"]
+    assert cfg.is_bookable(None) and cfg.is_bookable("lufthansa") and not cfg.is_bookable("united")
+    assert cfg_from(default_config_dict, bookable_programs=None).is_bookable("united")  # no filter

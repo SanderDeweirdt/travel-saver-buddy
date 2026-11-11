@@ -202,13 +202,14 @@ def _total(r, cfg: Config) -> float | None:
 
 
 def fresh_observations(store: Store, cfg: Config, now: datetime) -> list:
-    """Newest state of every flight seen within `relative.history_days`, not yet flown."""
+    """Newest state of every flight seen within `relative.history_days`, not yet flown, on a
+    program you can book (`bookable_programs`)."""
     cutoff = (now - timedelta(days=cfg.relative.history_days)).isoformat()
     today = now.date().isoformat()
     return [
         r
         for r in store.conn.execute(LATEST).fetchall()
-        if r["last_seen"] >= cutoff and (r["date"] or "") >= today
+        if r["last_seen"] >= cutoff and (r["date"] or "") >= today and cfg.is_bookable(r["source"])
     ]
 
 

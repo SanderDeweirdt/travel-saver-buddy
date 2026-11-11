@@ -24,6 +24,14 @@ programs:
   turkish:      {label: Turkish,     mile_cost_eur_cents: 1.2}
   ethiopian:    {label: Ethiopian,   mile_cost_eur_cents: 1.0}
 
+# The programs you can book with, by seats.aero source id. Anything else is not scanned and not
+# shown. Yours: Miles & More (lufthansa), plus what Amex Membership Rewards Germany transfers to.
+# Of the programs scanned here that is only KrisFlyer (singapore, 3 MR = 2 miles). Amex Germany also
+# transfers to Flying Blue, BA/Iberia Avios, Qatar, SAS, Asia Miles, Emirates and Delta (checked
+# July 2026, see the Amex Germany transfer page); add their seats.aero ids here and under
+# region_pairs when you want those flights too. Amex to Miles & More only goes via Payback (3 MR = 1 mile).
+bookable_programs: [lufthansa, singapore]
+
 # seats.aero reports Miles & More fees in USD. Fixed rate, euro per dollar; update it now and
 # then. Fees run 30-700 EUR, so a few percent of drift barely moves a total. Without it, USD
 # fees are unpriced and the Shortlist stays empty.

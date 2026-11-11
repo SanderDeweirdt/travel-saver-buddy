@@ -264,6 +264,10 @@ class Config(_Model):
     # Per-program overrides, keyed by seats.aero source id. The top-level `source` falls back to
     # mile_cost_eur_cents and miles_and_more.link_template when it has no entry here.
     programs: dict[str, Program] = {}
+    # seats.aero source ids of the programs you can actually book with: the top-level `source`
+    # (Miles & More) plus any program your points transfer to. Anything else is neither scanned
+    # nor shown. None = no filter.
+    bookable_programs: list[str] | None = None
     # IATA codes of Miles & More carriers that price awards dynamically (no chart). Everything
     # else on the program is a fixed partner chart. The list has grown before: keep it current.
     dynamic_airlines: list[str] = ["LH", "LX", "OS", "CL", "4Y", "EN", "WK"]
@@ -311,6 +315,10 @@ class Config(_Model):
         if len(set(names)) != len(names):
             raise ValueError("trips: names must be unique")
         return self
+
+    def is_bookable(self, source: str | None) -> bool:
+        """Can you book this program's awards? A flight with no stored source is the default one."""
+        return self.bookable_programs is None or (source or self.source) in self.bookable_programs
 
     def mile_cents(self, source: str | None) -> float:
         """Euro cents one mile of `source` costs you. No source means the default program."""
