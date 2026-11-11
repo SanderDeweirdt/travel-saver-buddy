@@ -115,18 +115,6 @@ def test_limiter_window_and_compare():
     assert password_ok("a", "a") and not password_ok("a", "b")
 
 
-def test_shortlist_page_shows_fixture_data(client):
-    login(client)
-    r = client.get("/watchlist")
-    assert r.status_code == 200
-    assert "Cached data. Confirm price and seats on miles-and-more.com" in r.text
-    assert "MUC→SIN" in r.text and "58,000" in r.text
-    assert "https://example.test/book" in r.text
-    # filters narrow the table
-    assert "58,000" not in client.get("/watchlist?cabin=economy").text
-    assert "Nothing matches" in client.get("/watchlist?route=FRA-KUL").text
-
-
 def test_route_runs_quota_pages(client):
     login(client)
     r = client.get("/route/MUC/SIN/business")
@@ -162,32 +150,6 @@ def test_refuses_to_start_without_secrets(monkeypatch):
     monkeypatch.delenv("SESSION_SECRET")
     with pytest.raises(SettingsError, match="SESSION_SECRET"):
         settings_from_env()
-
-
-def test_shortlist_labels_dynamic_prices(tmp_path, default_config_dict):
-    cfg = config(default_config_dict, relative={"percentile_good": 20, "min_samples": 3})
-    path = tmp_path / "mix.db"
-    store = Store(path)
-    run = store.start_run("scan", "{}", now=NOW)
-    for aid, airlines, day in (("fx", "SQ", "2026-12-10"), ("dyn", "LH", "2026-12-11")):
-        store.save_availability(
-            run, avail(aid, date=day, airlines=airlines, business=60000), "watchlist"
-        )
-        store.save_trips(
-            aid,
-            "2026-10-10T08:00:00Z",
-            [trip(f"t{aid}", avail_id=aid, miles=60000, taxes=30000, carriers=airlines)],
-            None,
-        )
-    score_run(store, cfg, run, NOW)
-    store.close()
-    settings = WebSettings(PASSWORD, "s" * 32, path, ROOT / "config.yaml")
-    c = TestClient(create_app(settings), base_url="https://testserver")
-    login(c)
-    page = c.get("/watchlist?all=1").text
-    assert "dynamic, verify" in page and ">chart<" in page
-    assert ">Unranked</span>" in page  # the dynamic fare has no history yet
-    assert ">Unranked</span>" not in c.get("/watchlist").text  # and never reaches the Shortlist
 
 
 def test_deals_view_reads_the_store(db, default_config_dict):
@@ -398,16 +360,6 @@ def test_deals_pages_show_a_newer_watch_price_without_a_run_label(db, default_co
     assert "MUC→SIN" in text and "50,000" in text and "58,000" not in text
 
 
-def test_watchlist_page_explains_what_is_included_and_old_url_still_works(client):
-    login(client)
-    text = client.get("/watchlist").text
-    assert "<h1>Flight watchlist</h1>" in text and ">Flight watchlist</a>" in text
-    assert "What is on this page" in text
-    assert "MUC, FRA" in text and "SIN" in text  # the watchlist airports are listed
-    assert "Benchmark" in text and 'title="On your watchlist"' in text
-    assert client.get("/shortlist").status_code == 200  # old bookmarks keep working
-
-
 def test_data_page_shows_routes_tracked(client):
     login(client)
     text = client.get("/settings").text
@@ -478,3 +430,72 @@ def test_settings_page_saves_what_you_enter(client, db):
 def test_overview_survives_bad_params(deals_client):
     assert deals_client.get("/overview?sort=bogus&pax=0").status_code == 200
     assert deals_client.get("/overview?pax=99").status_code == 200
+
+
+def _add(client, **over):
+    form = {
+        "origin": "muc",
+        "destination": "SIN",
+        "date_from": "2026-12-01",
+        "date_to": "2026-12-31",
+    }
+    return client.post("/watchlist", data={**form, **over}, follow_redirects=False)
+
+
+def test_watchlist_starts_empty_and_old_url_still_works(client):
+    login(client)
+    text = client.get("/watchlist").text
+    assert "<h1>Flight watchlist</h1>" in text and "Nothing on the watchlist yet" in text
+    assert client.get("/shortlist").status_code == 200
+
+
+def test_watchlist_item_can_be_added_listed_opened_and_removed(client, db):
+    login(client)
+    r = _add(client)
+    assert r.status_code == 303 and r.headers["location"] == "/watchlist?added=1"
+    item = Store(db, readonly=True).watch_items()[0]
+    assert (item["origin"], item["destination"]) == ("MUC", "SIN")  # codes are upper-cased
+    listing = client.get("/watchlist").text
+    assert "MUC→SIN" in listing and "2026-12-01 to 2026-12-31" in listing
+    assert f'href="/watchlist/{item["id"]}"' in listing
+    detail = client.get(f"/watchlist/{item['id']}")
+    assert detail.status_code == 200 and "58,000" in detail.text  # the fixture flight fits
+    r = client.post(f"/watchlist/{item['id']}/delete", follow_redirects=False)
+    assert r.status_code == 303
+    assert Store(db, readonly=True).watch_items() == []
+    assert client.get(f"/watchlist/{item['id']}").status_code == 404
+
+
+def test_watchlist_detail_only_shows_flights_inside_the_filters(client, db):
+    login(client)
+    _add(client, date_from="2027-01-01", date_to="")  # a single day with no flights
+    _add(client, destination="KUL")  # a different airport
+    items = Store(db, readonly=True).watch_items()
+    for i in items:
+        text = client.get(f"/watchlist/{i['id']}").text
+        assert "58,000" not in text and "No flights fit yet" in text
+
+
+def test_watchlist_rejects_bad_items(client, db):
+    login(client)
+    for bad in (
+        {"origin": "MU"},
+        {"destination": "MUC"},
+        {"date_from": "nope"},
+        {"date_from": "2026-12-31", "date_to": "2026-12-01"},
+        {"date_from": "2020-01-01", "date_to": "2020-01-02"},
+    ):
+        assert _add(client, **bad).status_code == 422
+    assert Store(db, readonly=True).watch_items() == []
+    _add(client)
+    assert _add(client).status_code == 422  # a duplicate
+
+
+def test_watchlist_requires_login(client):
+    for method, path in (
+        ("get", "/watchlist/1"),
+        ("post", "/watchlist"),
+        ("post", "/watchlist/1/delete"),
+    ):
+        r = getattr(client, method)(path, follow_redirects=False)
+        assert r.status_code == 303 and r.headers["location"].startswith("/login")

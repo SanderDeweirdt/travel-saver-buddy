@@ -85,8 +85,39 @@ def region_requests(cfg: Config, today: date) -> list[tuple[str, dict]]:
     return out
 
 
-def watchlist_requests(cfg: Config, today: date) -> list[tuple[str, dict]]:
-    return _wide_watchlist_requests(cfg, today) + trip_requests(cfg, today)
+def watchlist_requests(
+    cfg: Config, today: date, items: list[dict] | None = None
+) -> list[tuple[str, dict]]:
+    return (
+        _wide_watchlist_requests(cfg, today)
+        + trip_requests(cfg, today)
+        + item_requests(cfg, today, items or [])
+    )
+
+
+def item_requests(cfg: Config, today: date, items: list[dict]) -> list[tuple[str, dict]]:
+    """One narrow Cached Search per watchlist item (an airport pair and a departure window), over
+    every program you can book. Items whose window has passed are skipped."""
+    sources = ",".join([cfg.source, *(k for k, p in cfg.programs.items() if p.enabled)])
+    cabins = cfg.cabins[0] if len(cfg.cabins) == 1 else None
+    out = []
+    for item in items:
+        end = date.fromisoformat(item["date_to"])
+        if end < today:
+            continue
+        params = {
+            "origin_airport": item["origin"],
+            "destination_airport": item["destination"],
+            "sources": sources,
+            "cabins": cabins,
+            "order_by": "lowest_mileage",
+            "include_trips": True,
+            **_common(cfg, today),
+            "start_date": max(date.fromisoformat(item["date_from"]), today).isoformat(),
+            "end_date": end.isoformat(),
+        }
+        out.append(("search", {k: v for k, v in params.items() if v is not None}))
+    return out
 
 
 def _wide_watchlist_requests(cfg: Config, today: date) -> list[tuple[str, dict]]:
@@ -139,11 +170,13 @@ def trip_requests(cfg: Config, today: date) -> list[tuple[str, dict]]:
     return out
 
 
-def planned_requests(cfg: Config, today: date) -> list[tuple[str, dict]]:
+def planned_requests(
+    cfg: Config, today: date, items: list[dict] | None = None
+) -> list[tuple[str, dict]]:
     """First-page requests of a scan; page counts are only known once it runs."""
     take = {"take": cfg.api.take}
     return [(p, {**params, **take}) for p, params in region_requests(cfg, today)] + [
-        (p, {**params, **take}) for p, params in watchlist_requests(cfg, today)
+        (p, {**params, **take}) for p, params in watchlist_requests(cfg, today, items)
     ]
 
 
@@ -177,7 +210,7 @@ def scan_watchlist(
     max_pages: int | None = None,
 ) -> dict:
     stats = {"watchlist_results": 0, "trips": 0, "warnings": []}
-    for path, params in watchlist_requests(cfg, today):
+    for path, params in watchlist_requests(cfg, today, store.watch_items()):
 
         def save(page: list[dict]) -> None:
             for avail in page:

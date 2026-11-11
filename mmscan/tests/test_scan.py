@@ -10,6 +10,7 @@ from mmscan.cli import app
 from mmscan.client import Client
 from mmscan.config import Config, Program
 from mmscan.scan import (
+    item_requests,
     paginate,
     planned_requests,
     region_requests,
@@ -240,3 +241,19 @@ def test_only_enabled_programs_are_requested(default_config_dict):
     assert cfg.sources_for(asia) == ["singapore"]  # flyingblue is not within_region
     assert cfg.is_bookable(None) and cfg.is_bookable("flyingblue") and not cfg.is_bookable("united")
     assert not cfg.is_bookable("not-a-program")
+
+
+def test_watchlist_items_become_narrow_searches(default_config_dict):
+    cfg = cfg_from(default_config_dict, watchlist={"origins": [], "destinations": []})
+    items = [
+        {"origin": "FRA", "destination": "SIN", "date_from": "2026-12-01", "date_to": "2026-12-20"},
+        {"origin": "MUC", "destination": "BKK", "date_from": "2026-01-01", "date_to": "2026-01-05"},
+    ]
+    reqs = item_requests(cfg, TODAY, items)
+    assert len(reqs) == 1  # the second window has passed
+    path, params = reqs[0]
+    assert path == "search"
+    assert params["origin_airport"] == "FRA" and params["destination_airport"] == "SIN"
+    assert params["start_date"] == max(date(2026, 12, 1), TODAY).isoformat()
+    assert params["end_date"] == "2026-12-20"
+    assert params["sources"].split(",")[0] == cfg.source
