@@ -58,7 +58,7 @@ def test_healthz_is_public(client):
 @pytest.mark.parametrize(
     "path",
     [
-        "/",
+        "/", "/best-deals",
         "/watchlist",
         "/runs",
         "/trips",
@@ -158,7 +158,7 @@ def test_empty_database_renders(tmp_path):
     settings = WebSettings(PASSWORD, "s" * 32, tmp_path / "e.db", ROOT / "config.yaml")
     c = TestClient(create_app(settings), base_url="https://testserver")
     login(c)
-    assert "No prices yet" in c.get("/").text
+    assert "No prices yet" in c.get("/best-deals").text
     assert c.get("/reports/latest.xlsx").status_code == 404
 
 
@@ -272,7 +272,7 @@ def deals_client(tmp_path, default_config_dict, write_config):
 
 
 def test_deals_page_ranks_against_the_usual_price(deals_client):
-    r = deals_client.get("/?cabin=all&min_pct=0")
+    r = deals_client.get("/best-deals?cabin=all&min_pct=0")
     assert r.status_code == 200
     assert "Best deals right now" in r.text
     assert "Great deal" in r.text and "Chart" in r.text
@@ -281,26 +281,26 @@ def test_deals_page_ranks_against_the_usual_price(deals_client):
 
 
 def test_deals_page_filters_and_traveller_scaling(deals_client):
-    one = deals_client.get("/?cabin=all&pax=1&fresh=0&min_pct=0").text
-    two = deals_client.get("/?cabin=all&pax=2&fresh=0&min_pct=0").text
+    one = deals_client.get("/best-deals?cabin=all&pax=1&fresh=0&min_pct=0").text
+    two = deals_client.get("/best-deals?cabin=all&pax=2&fresh=0&min_pct=0").text
     assert "36,000" in one and "72,000" in two
-    assert "Nothing matches" in deals_client.get("/?cabin=economy").text
-    assert "Nothing matches" in deals_client.get("/").text  # default cabin is economy
-    assert "36,000" in deals_client.get("/?cabin=business&fresh=0").text
-    assert "Nothing matches" in deals_client.get("/?cabin=all&route=FRA").text
-    assert "Nothing matches" in deals_client.get("/?cabin=all&pax=9").text  # only 4 seats each
+    assert "Nothing matches" in deals_client.get("/best-deals?cabin=economy").text
+    assert "Nothing matches" in deals_client.get("/best-deals").text  # default cabin is economy
+    assert "36,000" in deals_client.get("/best-deals?cabin=business&fresh=0").text
+    assert "Nothing matches" in deals_client.get("/best-deals?cabin=all&route=FRA").text
+    assert "Nothing matches" in deals_client.get("/best-deals?cabin=all&pax=9").text  # only 4 seats each
 
 
 def test_deals_page_survives_bad_params(deals_client):
-    assert deals_client.get("/?sort=bogus&pax=0").status_code == 200
-    assert deals_client.get("/?pax=99").status_code == 200
+    assert deals_client.get("/best-deals?sort=bogus&pax=0").status_code == 200
+    assert deals_client.get("/best-deals?pax=99").status_code == 200
 
 
 def test_deals_page_empty_database(tmp_path):
     settings = WebSettings(PASSWORD, "s" * 32, tmp_path / "e.db", ROOT / "config.yaml")
     c = TestClient(create_app(settings), base_url="https://testserver")
     login(c)
-    assert "No prices yet" in c.get("/").text
+    assert "No prices yet" in c.get("/best-deals").text
 
 
 def test_route_page_shows_usual_price_and_saving(deals_client):
@@ -374,7 +374,7 @@ def test_trips_page_marks_dynamic_carriers(tmp_path, default_config_dict, write_
 
 
 def test_data_page(deals_client):
-    text = deals_client.get("/data").text
+    text = deals_client.get("/settings").text
     assert "Data &amp; alerts" in text and "API calls today" in text
     assert "How far to trust cached miles" in text and "not checked yet" in text  # LH etc.
     assert "Slack alerts" in text and "not sent" in text  # dynamic prices off by default
@@ -392,7 +392,7 @@ def test_data_page_shows_manual_price_checks(db, default_config_dict):
         base_url="https://testserver",
     )
     login(c)
-    text = c.get("/data").text
+    text = c.get("/settings").text
     assert "2.02×" in text  # median of 2.83 and 1.2
     assert "1.20× to 2.83×" in text
 
@@ -421,10 +421,10 @@ def test_all_routes_lists_every_flight_not_one_per_route(deals_client):
 
 
 def test_best_deals_shows_only_big_savings_and_defaults_to_one_traveller(deals_client):
-    big = deals_client.get("/?cabin=all&fresh=0").text
+    big = deals_client.get("/best-deals?cabin=all&fresh=0").text
     assert "36,000" in big  # one traveller by default, not min_seats
     assert "60,000" not in big  # saves a few percent: under the 30% cut
-    assert "60,000" in deals_client.get("/?cabin=all&fresh=0&min_pct=0").text
+    assert "60,000" in deals_client.get("/best-deals?cabin=all&fresh=0&min_pct=0").text
 
 
 def test_hide_chart_deals_toggle(deals_client):
@@ -497,7 +497,7 @@ def test_deals_pages_show_a_newer_watch_price_without_a_run_label(db, default_co
 def test_watchlist_page_explains_what_is_included_and_old_url_still_works(client):
     login(client)
     text = client.get("/watchlist").text
-    assert "<h1>Watchlist</h1>" in text and ">Watchlist</a>" in text
+    assert "<h1>Flight watchlist</h1>" in text and ">Flight watchlist</a>" in text
     assert "What is on this page" in text
     assert "MUC, FRA" in text and "SIN" in text  # the watchlist airports are listed
     assert "Benchmark" in text and 'title="On your watchlist"' in text
@@ -506,7 +506,7 @@ def test_watchlist_page_explains_what_is_included_and_old_url_still_works(client
 
 def test_data_page_shows_routes_tracked(client):
     login(client)
-    text = client.get("/data").text
+    text = client.get("/settings").text
     assert "Routes tracked" in text and "watchlist pairs have a price" in text
     assert "flights on offer" in text
 
@@ -539,7 +539,7 @@ def test_settings_page_saves_what_you_enter(client, db):
     assert saved["programs"]["singapore"]["mr_per_mile"] == 1.5
     after = client.get("/settings?saved=1").text
     assert 'value="0.8"' in after and "Saved." in after
-    assert "valued at 0.8 ct" in client.get("/").text  # the deals page note follows the setting
+    assert "valued at 0.8 ct" in client.get("/best-deals").text  # the deals page note follows the setting
     # a new process reads the same settings from the database
     fresh = TestClient(
         create_app(WebSettings(PASSWORD, "s" * 32, db, ROOT / "config.yaml")),

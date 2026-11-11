@@ -150,7 +150,14 @@ def create_app(settings: WebSettings) -> FastAPI:
         ]
 
     def settings_ctx(**extra) -> dict:
+        store = Store(settings.database, readonly=True)
+        try:
+            health = queries.data_view(store, cfg, datetime.now(UTC))
+        finally:
+            store.close()
         return {
+            "d": health,
+            "cfg": cfg,
             "main_label": cfg.program_label(cfg.source),
             "mm_cost": f"{cfg.mile_cost_eur_cents:g}",
             "mr_value": ""
@@ -284,7 +291,11 @@ def create_app(settings: WebSettings) -> FastAPI:
             "f": f,
         }
 
-    @app.get("/", response_class=HTMLResponse, dependencies=[Depends(require_login)])
+    @app.get("/", dependencies=[Depends(require_login)])
+    def home():
+        return RedirectResponse("/overview", status_code=303)
+
+    @app.get("/best-deals", response_class=HTMLResponse, dependencies=[Depends(require_login)])
     def deals_page(
         request: Request,
         store: Store = Depends(open_store),
@@ -426,11 +437,9 @@ def create_app(settings: WebSettings) -> FastAPI:
             **data,
         )
 
-    @app.get("/data", response_class=HTMLResponse, dependencies=[Depends(require_login)])
-    def data_page(request: Request, store: Store = Depends(open_store)):
-        return render(
-            request, "data.html", d=queries.data_view(store, cfg, datetime.now(UTC)), cfg=cfg
-        )
+    @app.get("/data", dependencies=[Depends(require_login)])
+    def data_page():
+        return RedirectResponse("/settings", status_code=303)
 
     @app.get("/runs", response_class=HTMLResponse, dependencies=[Depends(require_login)])
     def runs_page(request: Request, store: Store = Depends(open_store)):

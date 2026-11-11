@@ -9,7 +9,7 @@
 <div class="panel"><p class="empty" style="padding:32px;text-align:center;margin:0">No prices yet. The scanner has not stored results.</p></div>
 {% else %}
 {% set pax = view.pax %}
-<div class="banner" role="note">{{ disclaimer }} Prices are for {{ pax }} traveller{{ "s" if pax != 1 }}, one way: miles at your mile value plus fees, against what that route usually costs (the median across the dates currently on offer). Only flights at least {{ '%g'|format(f.min_pct) }}% below usual are listed; every route is covered. <a href="/overview">All routes</a> shows every flight.</div>
+<div class="banner" role="note">{{ disclaimer }} Prices are for {{ pax }} traveller{{ "s" if pax != 1 }}, one way: miles at your mile value plus fees, against what that route usually costs (the median across the dates currently on offer). Only flights at least {{ '%g'|format(f.min_pct) }}% below usual are listed; every route is covered. <a href="/overview">All flights</a> shows every flight.</div>
 
 {% set best = view.best %}
 {% if best %}
@@ -26,7 +26,7 @@
 </section>
 {% endif %}
 
-<form class="filters" method="get" action="/">
+<form class="filters" method="get" action="/best-deals">
   <label>Cabin
     <select name="cabin"><option value="all">All cabins</option>
       {% for c in cabins %}<option value="{{ c }}" {{ 'selected' if f.cabin == c }}>{{ c|capitalize }}</option>{% endfor %}</select></label>
@@ -47,7 +47,7 @@
     <input type="hidden" name="fresh" value="0">
     <label><input type="checkbox" name="fresh" value="1" {{ 'checked' if f.fresh }}> Hide stale</label>
   </div>
-  <div class="actions"><button class="primary" type="submit">Apply</button><a class="btn" href="/">Reset</a></div>
+  <div class="actions"><button class="primary" type="submit">Apply</button><a class="btn" href="/best-deals">Reset</a></div>
 </form>
 
 <div class="panel" style="margin-top:16px"><div class="scroll"><table class="cards dealtab">

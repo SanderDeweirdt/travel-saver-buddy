@@ -1,9 +1,3 @@
-{% extends "base.html" %}
-{% block title %}Data &amp; alerts · mmscan{% endblock %}
-{% block body %}
-<div class="page-head"><h1>Data &amp; alerts</h1><span class="sub">Is the tool healthy, and how far can the numbers be trusted?</span></div>
-<div class="banner" role="note">{{ disclaimer }}</div>
-
 {% set q = d.quota %}
 <div class="tiles">
   <div class="tile {{ 'bad' if q.pct >= 90 else 'warn' if q.pct >= 70 }}"><div class="k">API calls today</div><div class="v">{{ q.used }}<span class="muted"> / {{ q.cap }}</span></div>
@@ -31,7 +25,7 @@
     <div class="d">{% if d.fx.age_days is none %}No date recorded. Set <code>usd_to_eur_date</code>.{% elif d.fx.stale %}Last checked {{ d.fx.age_days }} days ago: update it.{% else %}Checked {{ d.fx.age_days }} days ago{% endif %}</div></div>
 </div>
 
-<h2>How far to trust cached miles</h2>
+<h3 class="sec">How far to trust cached miles</h3>
 <p class="note" style="margin-top:0">Hand checks of what seats.aero cached against what miles-and-more.com showed. A ratio of 1.0× means they matched; 2.0× means the live price was double. Add one with <code>mmscan verify-add --carrier LH --cached 30000 --live 52000</code>.</p>
 <div class="panel"><div class="scroll"><table class="cards">
 <thead><tr><th>Carrier</th><th>Price basis</th><th class="n">Checks</th><th class="n">Live ÷ cached (median)</th><th class="n">Range</th></tr></thead>
@@ -43,7 +37,7 @@
   <td data-label="Range" class="n">{% if t.lo is not none %}{{ "%.2f"|format(t.lo) }}× to {{ "%.2f"|format(t.hi) }}×{% else %}–{% endif %}</td></tr>
 {% else %}<tr><td class="empty" colspan="5">No carriers.</td></tr>{% endfor %}</tbody></table></div></div>
 
-<h2>Slack alerts</h2>
+<h3 class="sec">Slack alerts</h3>
 {% set n = cfg.notify %}
 <div class="panel" style="padding:14px 18px">
   <p style="margin:0 0 8px"><span class="tag {{ 'ok' if n.slack else 'plain' }}">{{ "On" if n.slack else "Off" }}</span>
@@ -55,7 +49,7 @@
   </ul>
 </div>
 
-<h2>Recent runs</h2>
+<h3 class="sec">Recent runs</h3>
 <div class="panel"><div class="scroll"><table class="cards">
 <thead><tr><th>#</th><th>Kind</th><th>Started (UTC)</th><th>Status</th><th class="n">Calls</th><th>Warnings</th></tr></thead>
 <tbody>{% for r in d.runs %}<tr class="{{ 'partial' if r.status == 'partial' }}">
@@ -65,4 +59,3 @@
   <td data-label="Warnings" style="white-space:normal">{% if r.warnings %}{{ r.warnings|join("; ") }}{% else %}<span class="muted">–</span>{% endif %}</td></tr>
 {% else %}<tr><td class="empty" colspan="6">No runs yet.</td></tr>{% endfor %}</tbody></table></div></div>
 <p class="note"><a href="/runs">All runs</a> · <a href="/quota">Calls per day</a></p>
-{% endblock %}
