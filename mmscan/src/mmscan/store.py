@@ -657,26 +657,39 @@ class Store:
 
     # Scan results
 
-    def save_availability(self, run_id: int, avail: dict, kind: str) -> None:
+    @staticmethod
+    def _availability_values(run_id: int, avail: dict, kind: str) -> tuple:
         route = avail.get("Route") or {}
-        self.conn.execute(
-            "INSERT OR REPLACE INTO availabilities(run_id, id, origin, destination, "
-            "origin_region, destination_region, date, source, updated_at, origin_kind, raw_json) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-            (
-                run_id,
-                str(avail["ID"]),
-                route.get("OriginAirport"),
-                route.get("DestinationAirport"),
-                route.get("OriginRegion"),
-                route.get("DestinationRegion"),
-                avail.get("Date"),
-                avail.get("Source"),
-                avail.get("UpdatedAt"),
-                kind,
-                json.dumps(avail, sort_keys=True),
-            ),
+        return (
+            run_id,
+            str(avail["ID"]),
+            route.get("OriginAirport"),
+            route.get("DestinationAirport"),
+            route.get("OriginRegion"),
+            route.get("DestinationRegion"),
+            avail.get("Date"),
+            avail.get("Source"),
+            avail.get("UpdatedAt"),
+            kind,
+            json.dumps(avail, sort_keys=True),
         )
+
+    _SAVE_AVAILABILITY = (
+        "INSERT OR REPLACE INTO availabilities(run_id, id, origin, destination, "
+        "origin_region, destination_region, date, source, updated_at, origin_kind, raw_json) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?)"
+    )
+
+    def save_availability(self, run_id: int, avail: dict, kind: str) -> None:
+        self.save_availabilities(run_id, [avail], kind)
+
+    def save_availabilities(self, run_id: int, avails: list[dict], kind: str) -> None:
+        """Store a page of results with one statement batch and one commit. A commit per flight
+        made a 1000-flight page cost a thousand database round trips."""
+        if not avails:
+            return
+        rows = [self._availability_values(run_id, a, kind) for a in avails]
+        self.conn.executemany(self._SAVE_AVAILABILITY, rows)
         self.conn.commit()
 
     def scan_counts(self, run_id: int) -> dict:

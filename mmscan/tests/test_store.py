@@ -138,3 +138,21 @@ def test_overrides_round_trip_and_clear(tmp_path):
     assert read_overrides(db) == {"mr_point_value_eur_cents": 1.1}
     store.set_overrides({})
     assert store.get_overrides() == {}
+
+
+def test_save_availabilities_stores_a_page_and_replaces_repeats(tmp_path):
+    from tests.helpers import avail
+
+    store = Store(tmp_path / "db.sqlite")
+    run = store.start_run("run", "{}")
+    page = [avail(f"a{i}", date=f"2026-12-{10 + i}", economy=30000 + i) for i in range(5)]
+    store.save_availabilities(run, page, "region")
+    store.save_availabilities(run, [], "region")  # an empty page is a no-op
+    store.save_availabilities(run, [avail("a0", economy=99000)], "region")  # same id, newer data
+    rows = store.conn.execute(
+        "SELECT id, origin_kind, raw_json FROM availabilities WHERE run_id=? ORDER BY id", (run,)
+    ).fetchall()
+    assert [r["id"] for r in rows] == [f"a{i}" for i in range(5)]
+    assert {r["origin_kind"] for r in rows} == {"region"}
+    assert '"99000"' in rows[0]["raw_json"]
+    store.close()
