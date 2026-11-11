@@ -1,5 +1,5 @@
 -- Reclaim disk on the Railway Postgres volume. Run with psql against the PUBLIC connection string
--- (Postgres service, Connect tab), with the scanner not running (it runs daily at 11:07 UTC).
+-- (Postgres service, Connect tab), with the scanner not running (it runs daily at 00:07 UTC).
 -- Order matters: measure, delete what is never read, null the raw copies, then rewrite the files.
 -- psql runs each statement on its own, which VACUUM needs (it cannot run inside a transaction).
 

@@ -23,7 +23,7 @@ web service. Both services build the same image from `mmscan/Dockerfile`.
    - **Source, Root Directory**: `mmscan`
    - **Build, Builder**: Dockerfile (path `Dockerfile`; auto-detected)
    - **Deploy, Custom Start Command**: `sh deploy/cron.sh`
-   - **Deploy, Cron Schedule**: `7 11 * * *` (UTC, daily at 11:07)
+   - **Deploy, Cron Schedule**: `7 0 * * *` (UTC, daily at 00:07)
    - **Deploy, Restart Policy**: Never (a failed run must not retry and spend API calls)
 3. Variables (Variables tab):
    - `DATABASE_URL` = `${{Postgres.DATABASE_URL}}` (reference variable, pick it from the dropdown)
@@ -34,10 +34,11 @@ web service. Both services build the same image from `mmscan/Dockerfile`.
 
 Each run does `mmscan run` (the full daily scan: all `region_pairs`, including Asia to Asia, plus
 the watchlist). There is no hourly `mmscan watch`; `cron.sh` also checks the hour, so the full scan
-runs only at 11 UTC even if the schedule is ever set to hourly.
+runs only at 00 UTC even if the schedule is ever set to hourly.
 The one exception is a new deployment: on the first tick after each deploy, `cron.sh` runs the full
 scan too (`mmscan deploy-pending` checks `RAILWAY_DEPLOYMENT_ID` against earlier runs). This needs
-the hourly schedule (`7 * * * *`, as in `railway.scanner.json`); with a daily one it waits for 11 UTC.
+an hourly schedule (`7 * * * *`); with the daily `7 0 * * *` the first tick after a deploy is the next
+00:07 UTC, which scans anyway.
 
 ## 3. Dashboard service (web)
 
