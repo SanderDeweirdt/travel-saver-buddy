@@ -288,6 +288,9 @@ class Config(_Model):
     mile_cost_eur_cents: float = Field(gt=0)
     usd_to_eur: float | None = Field(None, gt=0)
     usd_to_eur_date: date | None = None  # when the rate above was last checked
+    # Euro per unit of other fee currencies (Asia to Asia awards quote taxes in SGD, THB, ...).
+    # A currency listed nowhere is unpriced, and its flights stay off the pages.
+    fx_to_eur: dict[str, float] = {}
     date_window: DateWindow = DateWindow()
     region_pairs: list[RegionPair] = []
     watchlist: Watchlist = Watchlist()
@@ -419,6 +422,14 @@ class Config(_Model):
         if place == region:
             return True
         return airport in self.subregions.get(place, [])
+
+    @property
+    def fx_rates(self) -> dict[str, float]:
+        """Euro per unit of each priced fee currency: `fx_to_eur` plus USD from `usd_to_eur`."""
+        rates = dict(self.fx_to_eur)
+        if self.usd_to_eur:
+            rates["USD"] = self.usd_to_eur
+        return rates
 
     def usd_rate_age_days(self, today: date) -> int | None:
         return None if self.usd_to_eur_date is None else (today - self.usd_to_eur_date).days

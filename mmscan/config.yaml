@@ -56,6 +56,27 @@ programs:
 usd_to_eur: 0.92
 usd_to_eur_date: "2026-10-12"   # update this whenever you update the rate; the dashboard warns after 30 days
 
+# Euro per one unit of the other currencies seats.aero quotes fees in. Asia to Asia awards charge
+# taxes in local currency; a currency missing here is unpriced and its flights are hidden.
+# Approximate: check them now and then (the run log warns about any currency still missing).
+fx_to_eur:
+  SGD: 0.67
+  THB: 0.027
+  MYR: 0.20
+  IDR: 0.000055
+  PHP: 0.016
+  VND: 0.000035
+  HKD: 0.12
+  JPY: 0.0060
+  KRW: 0.00064
+  INR: 0.0105
+  TWD: 0.028
+  CNY: 0.13
+  GBP: 1.17
+  AUD: 0.60
+  AED: 0.25
+  QAR: 0.25
+
 date_window:
   start_offset_days: 0
   end_offset_days: 180

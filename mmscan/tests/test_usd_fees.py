@@ -162,3 +162,10 @@ def test_run_prices_from_summary_then_enriches_only_the_shortlist(
     assert rows["good"]["booking_link"] == "https://book.test/x"
     assert rows["pricey"]["verdict"] == "Skip" and rows["pricey"]["flight_numbers"] is None
     assert list((tmp_path / "reports").glob("*.xlsx"))
+
+
+def test_fees_eur_local_currency_rates():
+    rates = {"SGD": 0.67, "USD": 0.92}
+    assert fees_eur(3000, "SGD", rates) == 20.1
+    assert fees_eur(20000, "USD", rates) == 184.0
+    assert fees_eur(3000, "THB", rates) is None
