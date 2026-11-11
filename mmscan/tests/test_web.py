@@ -122,7 +122,7 @@ def test_route_runs_quota_pages(client):
     runs = client.get("/runs").text
     assert 'class="partial"' in runs  # the partial run is highlighted
     q = client.get("/quota").text
-    assert "of 800 calls used today" in q and "880" in q
+    assert "of 1000 calls used today" in q and "880" in q
 
 
 def test_report_downloads(client):

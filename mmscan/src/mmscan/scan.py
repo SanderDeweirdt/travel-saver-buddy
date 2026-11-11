@@ -158,8 +158,7 @@ def scan_regions(client: Client, store: Store, cfg: Config, run_id: int, today: 
     for path, params in region_requests(cfg, today):
 
         def save(page: list[dict]) -> None:
-            for avail in page:
-                store.save_availability(run_id, avail, "region")
+            store.save_availabilities(run_id, page, "region")
 
         try:
             items, warns = paginate(client, path, params, cfg.api.take, on_page=save)

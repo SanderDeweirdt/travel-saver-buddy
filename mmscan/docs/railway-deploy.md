@@ -122,8 +122,8 @@ Secrets never go in it.
 
 - **Cost:** Railway bills by usage. The cron service runs for a few minutes a day; the
   dashboard and Postgres run all day. Check the usage page after a few days.
-- **API cap:** `api.daily_call_cap` (800) is counted from the `api_calls` table, so it holds across
-  runs. The daily `run` costs about 50 calls.
+- **API cap:** `api.daily_call_cap` (1000) is counted from the `api_calls` table, so it holds across
+  runs. The daily `run` costs about 330 calls with Asia to Asia, and takes well over 40 minutes.
 - **seats.aero terms:** personal, non-commercial use; do not redistribute data. The dashboard sits
   behind a login on every route except `/healthz`; keep the password private and do not share the
   downloads.
