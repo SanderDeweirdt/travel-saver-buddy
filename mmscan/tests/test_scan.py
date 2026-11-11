@@ -169,60 +169,65 @@ def test_repo_config_also_scans_flights_within_asia():
     from pathlib import Path
 
     from mmscan.config import load_config
-    from mmscan.scan import region_requests
 
     cfg = load_config(Path(__file__).resolve().parents[1] / "config.yaml")
     pairs = {(p["origin_region"], p["destination_region"]) for _, p in region_requests(cfg, TODAY)}
     assert pairs == {("Europe", "Asia"), ("Asia", "Europe"), ("Asia", "Asia")}
 
 
-def test_repo_config_asks_star_alliance_programs_for_flights_within_asia():
+def test_repo_config_scans_the_enabled_programs():
     from pathlib import Path
 
     from mmscan.config import load_config
-    from mmscan.scan import region_requests
 
     cfg = load_config(Path(__file__).resolve().parents[1] / "config.yaml")
     all_reqs = [p for _, p in region_requests(cfg, TODAY)]
-    reqs = [p for p in all_reqs if p["origin_region"] == p["destination_region"]]
-    sources = {p["source"] for p in reqs}
-    assert "singapore" in sources and "lufthansa" not in sources
-    assert len(reqs) == len(sources)
-    europe = [p["source"] for p in all_reqs if p["origin_region"] != p["destination_region"]]
-    # Europe and Asia are asked for Miles & More and the Amex Germany partners switched on; the
-    # ones left off (Emirates, Delta) are not requested until the Settings page enables them.
-    assert set(europe) == set(cfg.bookable_programs) and "emirates" not in europe
-    assert "flyingblue" in europe and len(europe) == 2 * len(set(europe))
+    within = [p["source"] for p in all_reqs if p["origin_region"] == p["destination_region"]]
+    between = [p["source"] for p in all_reqs if p["origin_region"] != p["destination_region"]]
+    enabled = {k for k, p in cfg.programs.items() if p.enabled}
+    # Within Asia only partner programs answer (Miles & More returns nothing there).
+    assert "singapore" in within and "lufthansa" not in within and set(within) <= enabled
+    # Between regions: Miles & More and every enabled program, once per direction.
+    assert set(between) == {cfg.source} | enabled and len(between) == 2 * len(set(between))
+    assert "flyingblue" in between and "emirates" not in between  # Emirates is switched off
 
 
 def test_bad_source_is_skipped_not_fatal(tmp_path, default_config_dict):
     def handler(req):
         if req.url.params["source"] == "nope":
             return httpx.Response(400, json={"error": True, "code": "invalid_source"})
-        return page(["a", "b"], False)
+        source = req.url.params["source"]
+        return page([f"{source}-a", f"{source}-b"], False)
 
     cfg = cfg_from(
         default_config_dict,
-        region_pairs=[{"origin": "Asia", "destination": "Asia", "sources": ["nope", "united"]}],
+        region_pairs=[{"origin": "Europe", "destination": "Asia"}],
+        programs={"nope": {"enabled": True}, "united": {"enabled": True}},
         watchlist={"origins": [], "destinations": [], "both_directions": False},
-        bookable_programs=None,
     )
     client, store = make(tmp_path, handler)
     run = store.start_run("scan", "{}")
     status, stats = run_scan(client, store, cfg, run, TODAY)
     assert status == "ok"
-    assert stats["region_results"] == 2  # the good source still ran
+    assert stats["region_results"] == 4  # Miles & More and united ran, nope was skipped
     assert any("skipped source nope" in w for w in stats["warnings"])
 
 
-def test_unbookable_sources_are_not_requested(default_config_dict):
+def test_only_enabled_programs_are_requested(default_config_dict):
     cfg = cfg_from(
         default_config_dict,
         region_pairs=[
-            {"origin": "Asia", "destination": "Asia", "sources": ["singapore", "united"]}
+            {"origin": "Europe", "destination": "Asia"},
+            {"origin": "Asia", "destination": "Asia"},
         ],
-        bookable_programs=["lufthansa", "singapore"],
+        programs={
+            "singapore": {"enabled": True, "within_region": True},
+            "flyingblue": {"enabled": True},
+            "united": {"enabled": False, "within_region": True},
+        },
     )
-    assert [p["source"] for _, p in region_requests(cfg, TODAY)] == ["singapore"]
-    assert cfg.is_bookable(None) and cfg.is_bookable("lufthansa") and not cfg.is_bookable("united")
-    assert cfg_from(default_config_dict, bookable_programs=None).is_bookable("united")  # no filter
+    long_haul, asia = cfg.region_pairs
+    assert cfg.sources_for(long_haul) == ["lufthansa", "singapore", "flyingblue"]
+    assert cfg.sources_for(asia) == ["singapore"]  # flyingblue is not within_region
+    assert cfg.is_bookable(None) and cfg.is_bookable("flyingblue") and not cfg.is_bookable("united")
+    assert not cfg.is_bookable("not-a-program")

@@ -13,11 +13,12 @@ def default_config_dict() -> dict:
     # The scan tests count requests for the two long-haul pairs with the default program only; the
     # repo's own program lists have their own tests.
     data["region_pairs"] = [
-        {"origin": p["origin"], "destination": p["destination"]}  # Miles & More alone, no `sources`
+        {"origin": p["origin"], "destination": p["destination"]}
         for p in data["region_pairs"]
         if p["origin"] != p["destination"]
     ]
-    data["bookable_programs"] = None  # scan tests count requests: no program filter
+    # Miles & More alone: the repo's own program list has its own tests.
+    data["programs"] = {k: {**v, "enabled": False} for k, v in data["programs"].items()}
     data["notify"] = {"new_deals": {"enabled": False}}  # notify tests start from the code defaults
     return data
 

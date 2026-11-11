@@ -73,9 +73,7 @@ def region_requests(cfg: Config, today: date) -> list[tuple[str, dict]]:
     cabin = cfg.cabins[0] if len(cfg.cabins) == 1 else None
     out = []
     for pair in cfg.region_pairs:
-        for source in pair.sources or [cfg.source]:
-            if not cfg.is_bookable(source):
-                continue
+        for source in cfg.sources_for(pair):
             params = {
                 "source": source,
                 "cabin": cabin,

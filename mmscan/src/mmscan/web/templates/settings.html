@@ -36,10 +36,8 @@
   </table></div></div>
 
   <p style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
-    <button type="submit" class="primary btn" name="action" value="save">Save</button>
-    <button type="submit" class="btn" name="action" value="reset" formnovalidate
-      onclick="return confirm('Go back to the values in config.yaml?')">Reset to config.yaml</button>
+    <button type="submit" class="primary btn">Save</button>
   </p>
-  <p class="note">Saved settings live in the database and apply on top of <code>config.yaml</code>, for both this dashboard and the scanner. Saving recalculates every total, which takes a few seconds.</p>
+  <p class="note">Saved in the database and used by both this dashboard and the scanner; <code>config.yaml</code> only lists the programs and their starting values. Saving recalculates every total, which takes a few seconds.</p>
 </form>
 {% endblock %}

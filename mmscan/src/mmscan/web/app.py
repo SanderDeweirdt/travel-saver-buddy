@@ -136,12 +136,12 @@ def create_app(settings: WebSettings) -> FastAPI:
             return None
 
     def settings_rows() -> list[dict]:
-        """One row per program in config.yaml, from the config in force."""
+        """One row per program in `programs`, from the config in force."""
         return [
             {
                 "id": key,
                 "label": cfg.program_label(key),
-                "bookable": cfg.is_bookable(key),
+                "bookable": p.enabled,
                 "cost": "" if p.mile_cost_eur_cents is None else f"{p.mile_cost_eur_cents:g}",
                 "mr": "" if p.mr_per_mile is None else f"{p.mr_per_mile:g}",
                 "effective": cfg.mile_cents(key),
@@ -171,26 +171,22 @@ def create_app(settings: WebSettings) -> FastAPI:
         nonlocal cfg
         form = await request.form()
         errors: list[str] = []
-        reset = form.get("action") == "reset"
-        overrides: dict = {}
         mm_cost = _number(form.get("mile_cost_eur_cents"), "Miles & More mile value", errors)
         mr_value = _number(form.get("mr_point_value_eur_cents"), "Amex point value", errors)
         programs: dict[str, dict] = {}
         for key in cfg.programs:
             programs[key] = {
+                "enabled": bool(form.get(f"bookable__{key}")),
                 "mile_cost_eur_cents": _number(form.get(f"cost__{key}"), f"{key} cost", errors),
                 "mr_per_mile": _number(form.get(f"mr__{key}"), f"{key} points per mile", errors),
             }
-        if mm_cost is None and not reset:
+        if mm_cost is None:
             errors.append("Miles & More mile value is required")
-        if not reset:
-            overrides = {
-                "mile_cost_eur_cents": mm_cost,
-                "mr_point_value_eur_cents": mr_value,
-                "bookable_programs": [cfg.source]
-                + [k for k in cfg.programs if form.get(f"bookable__{k}")],
-                "programs": programs,
-            }
+        overrides = {
+            "mile_cost_eur_cents": mm_cost,
+            "mr_point_value_eur_cents": mr_value,
+            "programs": programs,
+        }
         new_cfg = None
         if not errors:
             try:

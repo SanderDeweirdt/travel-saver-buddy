@@ -82,12 +82,20 @@ def test_saved_settings_apply_over_config_yaml(default_config_dict, write_config
         path,
         {
             "mr_point_value_eur_cents": 0.5,
-            "bookable_programs": ["lufthansa", "united"],
-            "programs": {"singapore": {"mr_per_mile": 2.0}},
+            "programs": {"singapore": {"mr_per_mile": 2.0}, "united": {"enabled": True}},
             "not_a_setting": 1,  # ignored: only the settings page's keys count
         },
     )
     assert cfg.mile_cents("singapore") == pytest.approx(1.0)
-    assert cfg.is_bookable("united") and not cfg.is_bookable("singapore")
+    assert cfg.is_bookable("united") and not cfg.is_bookable("flyingblue")
     assert cfg.programs["singapore"].label == "KrisFlyer"  # merged per field, label kept
     assert load_config(path, {}).mr_point_value_eur_cents == 1.0  # nothing saved: config.yaml
+
+
+def test_settings_saved_as_a_bookable_list_still_apply(default_config_dict, write_config):
+    from mmscan.config import load_config
+
+    cfg = load_config(
+        write_config(default_config_dict), {"bookable_programs": ["lufthansa", "united"]}
+    )
+    assert cfg.is_bookable("united") and not cfg.is_bookable("singapore")
