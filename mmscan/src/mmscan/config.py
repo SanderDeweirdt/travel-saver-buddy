@@ -13,6 +13,13 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 
 Region = Literal["North America", "South America", "Africa", "Asia", "Europe", "Oceania"]
 Cabin = Literal["economy", "premium", "business", "first"]
+# The mileage programs seats.aero lists as a `source` (developers.seats.aero, Concepts). A program
+# outside this list is a typo, not a program, so config loading rejects it.
+SOURCES = frozenset(
+    "eurobonus virginatlantic aeromexico american delta etihad united emirates aeroplan alaska "
+    "velocity qantas connectmiles azul flyingblue jetblue qatar turkish singapore ethiopian "
+    "saudia finnair lufthansa frontier spirit".split()
+)
 REGIONS: tuple[str, ...] = Region.__args__  # type: ignore[attr-defined]
 _IATA = re.compile(r"^[A-Z]{3}$")
 
@@ -305,6 +312,15 @@ class Config(_Model):
     trip_freshness_hours: int = Field(72, ge=1)
 
     warnings: list[str] = Field(default_factory=list, exclude=True)
+
+    @model_validator(mode="after")
+    def _check_sources(self) -> Config:
+        unknown = sorted(({self.source} | set(self.programs)) - SOURCES)
+        if unknown:
+            raise ValueError(
+                f"unknown seats.aero source(s) {unknown}; valid sources: {sorted(SOURCES)}"
+            )
+        return self
 
     @model_validator(mode="after")
     def _check_amex(self) -> Config:

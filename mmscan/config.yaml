@@ -47,7 +47,6 @@ programs:
   # Not Amex partners: only useful if you hold their miles
   aeroplan:   {label: Aeroplan,    enabled: false, within_region: true, mile_cost_eur_cents: 1.4}
   united:     {label: United,      enabled: false, within_region: true, mile_cost_eur_cents: 1.3}
-  lifemiles:  {label: LifeMiles,   enabled: false, within_region: true, mile_cost_eur_cents: 1.3}
   turkish:    {label: Turkish,     enabled: false, within_region: true, mile_cost_eur_cents: 1.2}
   ethiopian:  {label: Ethiopian,   enabled: false, within_region: true, mile_cost_eur_cents: 1.0}
 
