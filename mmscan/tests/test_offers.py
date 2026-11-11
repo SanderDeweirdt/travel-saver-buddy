@@ -234,5 +234,21 @@ def test_database_from_before_programs_were_stored_is_tagged_miles_and_more(tmp_
     )
     store.conn.commit()
 
-    assert store.migrate() == 4
+    assert store.migrate() == 5
     assert store.conn.execute("SELECT source FROM observations").fetchone()[0] == "lufthansa"
+
+
+def test_only_bookable_programs_are_offered(tmp_path, default_config_dict):
+    cfg = config(
+        default_config_dict,
+        relative={"min_samples": 3, "history_days": 30},
+        bookable_programs=["lufthansa", "singapore"],
+    )
+    store = Store(tmp_path / "db.sqlite")
+    run = store.start_run("run", "{}", now=NOW)
+    for id_, source in (("a", "lufthansa"), ("b", "singapore"), ("c", "united")):
+        flight = avail(id_, date="2026-12-10", taxes={"economy": 12900}, economy=35000)
+        flight["Source"] = source
+        store.save_availability(run, flight, "watchlist")
+    score_run(store, cfg, run, NOW)
+    assert {s.source for s in load_current(store)} == {"lufthansa", "singapore"}

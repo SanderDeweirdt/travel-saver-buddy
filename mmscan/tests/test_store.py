@@ -123,3 +123,18 @@ def test_deployment_scanned(tmp_path):
     assert store.deployment_scanned("dep-1") and not store.deployment_scanned("dep-2")
     store.start_run("scan", '{"deployment_id": "dep-2"}')  # only full runs count
     assert not store.deployment_scanned("dep-2")
+
+
+def test_overrides_round_trip_and_clear(tmp_path):
+    from mmscan.store import read_overrides
+
+    db = tmp_path / "s.db"
+    assert read_overrides(db) == {} and not db.exists()  # reading creates nothing
+    store = Store(db)
+    assert store.get_overrides() == {}
+    store.set_overrides({"mr_point_value_eur_cents": 0.9})
+    store.set_overrides({"mr_point_value_eur_cents": 1.1})  # replaces
+    assert store.get_overrides() == {"mr_point_value_eur_cents": 1.1}
+    assert read_overrides(db) == {"mr_point_value_eur_cents": 1.1}
+    store.set_overrides({})
+    assert store.get_overrides() == {}

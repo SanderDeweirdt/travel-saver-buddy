@@ -240,8 +240,18 @@ def _add_source_columns(store: Store) -> None:
 # Tables `vacuum` may rewrite; names go into SQL, so they are checked against this list.
 VACUUM_TABLES = frozenset(
     "runs api_calls availabilities trip_fetches trips results price_checks observations "
-    "current_offers schema_version".split()
+    "current_offers settings schema_version".split()
 )
+
+# Settings edited on the dashboard's Settings page. One row, key "overrides", holds a JSON object
+# applied on top of config.yaml by both the dashboard and the scanner.
+SETTINGS_SCHEMA = """
+CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+"""
 
 VERSION_TABLE = "CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)"
 
@@ -252,6 +262,7 @@ MIGRATIONS: list[tuple[int, str | Callable[[Store], object]]] = [
     (2, OBSERVATIONS_SCHEMA),
     (3, _backfill_observations),
     (4, _add_source_columns),
+    (5, SETTINGS_SCHEMA),
 ]
 
 
@@ -264,7 +275,22 @@ def pg_ddl(sql: str) -> str:
 
 def pg_schema() -> str:
     """The whole schema in Postgres types."""
-    return pg_ddl(SCHEMA + OBSERVATIONS_SCHEMA + SOURCE_COLUMNS)
+    return pg_ddl(SCHEMA + OBSERVATIONS_SCHEMA + SOURCE_COLUMNS + SETTINGS_SCHEMA)
+
+
+def read_overrides(target: Path | str) -> dict:
+    """The dashboard's saved settings in the database at `target`, without creating anything: {}
+    when a SQLite file does not exist yet or the database cannot be read."""
+    if not is_postgres_url(target) and not Path(target).exists():
+        return {}
+    try:
+        store = Store(target, readonly=True)
+    except Exception:
+        return {}
+    try:
+        return store.get_overrides()
+    finally:
+        store.close()
 
 
 def utcnow() -> datetime:
@@ -483,6 +509,31 @@ class Store:
             "FROM price_checks ORDER BY id"
         ).fetchall()
         return [dict(zip(rows[0].keys(), tuple(r), strict=True)) for r in rows] if rows else []
+
+    # Settings
+
+    def get_overrides(self) -> dict:
+        """The settings saved on the dashboard; {} when none (or before the table exists)."""
+        try:
+            row = self.conn.execute("SELECT value FROM settings WHERE key = 'overrides'").fetchone()
+        except Exception:  # an older database a read-only process has not seen migrated yet
+            if self.postgres:
+                self.conn.rollback()
+            return {}
+        return json.loads(row[0]) if row else {}
+
+    def set_overrides(self, overrides: dict, now: datetime | None = None) -> None:
+        """Replace the saved settings; an empty dict goes back to config.yaml alone."""
+        if not overrides:
+            self.conn.execute("DELETE FROM settings WHERE key = 'overrides'")
+        else:
+            self.conn.execute(
+                "INSERT INTO settings(key, value, updated_at) VALUES ('overrides', ?, ?) "
+                "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, "
+                "updated_at = EXCLUDED.updated_at",
+                (json.dumps(overrides, sort_keys=True), (now or utcnow()).isoformat()),
+            )
+        self.conn.commit()
 
     # Size and maintenance
 

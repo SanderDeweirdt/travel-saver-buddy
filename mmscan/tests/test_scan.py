@@ -8,7 +8,14 @@ from typer.testing import CliRunner
 from mmscan.cli import app
 from mmscan.client import Client
 from mmscan.config import Config
-from mmscan.scan import paginate, planned_requests, run_scan, scan_regions, scan_watchlist
+from mmscan.scan import (
+    paginate,
+    planned_requests,
+    region_requests,
+    run_scan,
+    scan_regions,
+    scan_watchlist,
+)
 from mmscan.store import Store
 
 KEY = "pro_SECRETKEY123"
@@ -182,4 +189,40 @@ def test_repo_config_asks_star_alliance_programs_for_flights_within_asia():
     assert "singapore" in sources and "lufthansa" not in sources
     assert len(reqs) == len(sources)
     europe = [p["source"] for p in all_reqs if p["origin_region"] != p["destination_region"]]
-    assert set(europe) == {"lufthansa"}
+    # Europe and Asia are asked for Miles & More and the Amex Germany partners switched on; the
+    # ones left off (Emirates, Delta) are not requested until the Settings page enables them.
+    assert set(europe) == set(cfg.bookable_programs) and "emirates" not in europe
+    assert "flyingblue" in europe and len(europe) == 2 * len(set(europe))
+
+
+def test_bad_source_is_skipped_not_fatal(tmp_path, default_config_dict):
+    def handler(req):
+        if req.url.params["source"] == "nope":
+            return httpx.Response(400, json={"error": True, "code": "invalid_source"})
+        return page(["a", "b"], False)
+
+    cfg = cfg_from(
+        default_config_dict,
+        region_pairs=[{"origin": "Asia", "destination": "Asia", "sources": ["nope", "united"]}],
+        watchlist={"origins": [], "destinations": [], "both_directions": False},
+        bookable_programs=None,
+    )
+    client, store = make(tmp_path, handler)
+    run = store.start_run("scan", "{}")
+    status, stats = run_scan(client, store, cfg, run, TODAY)
+    assert status == "ok"
+    assert stats["region_results"] == 2  # the good source still ran
+    assert any("skipped source nope" in w for w in stats["warnings"])
+
+
+def test_unbookable_sources_are_not_requested(default_config_dict):
+    cfg = cfg_from(
+        default_config_dict,
+        region_pairs=[
+            {"origin": "Asia", "destination": "Asia", "sources": ["singapore", "united"]}
+        ],
+        bookable_programs=["lufthansa", "singapore"],
+    )
+    assert [p["source"] for _, p in region_requests(cfg, TODAY)] == ["singapore"]
+    assert cfg.is_bookable(None) and cfg.is_bookable("lufthansa") and not cfg.is_bookable("united")
+    assert cfg_from(default_config_dict, bookable_programs=None).is_bookable("united")  # no filter

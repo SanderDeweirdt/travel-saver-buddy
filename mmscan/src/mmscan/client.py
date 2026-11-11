@@ -39,6 +39,10 @@ class NotFound(ApiError):
     pass
 
 
+class BadRequest(ApiError):
+    """A 400: this one request is wrong (e.g. an unknown source), not the whole account."""
+
+
 class QuotaExhausted(ApiError):
     pass
 
@@ -219,5 +223,7 @@ class Client:
                     self._sleep(wait if wait is not None else 2.0**attempt)
                     continue
                 break
+            if status == 400:
+                raise BadRequest(f"GET {endpoint} returned {status}: {resp.text[:300]}")
             raise ApiError(f"GET {endpoint} returned {status}: {resp.text[:300]}")
         raise ApiError(f"GET {endpoint} failed after {MAX_RETRIES} retries: {last_error}")

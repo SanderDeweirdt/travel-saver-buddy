@@ -10,8 +10,14 @@ ROOT = Path(__file__).resolve().parents[1]
 @pytest.fixture
 def default_config_dict() -> dict:
     data = yaml.safe_load((ROOT / "config.yaml").read_text())
-    # The scan tests count requests for the two long-haul pairs; Asia to Asia has its own test.
-    data["region_pairs"] = [p for p in data["region_pairs"] if p["origin"] != p["destination"]]
+    # The scan tests count requests for the two long-haul pairs with the default program only; the
+    # repo's own program lists have their own tests.
+    data["region_pairs"] = [
+        {"origin": p["origin"], "destination": p["destination"]}  # Miles & More alone, no `sources`
+        for p in data["region_pairs"]
+        if p["origin"] != p["destination"]
+    ]
+    data["bookable_programs"] = None  # scan tests count requests: no program filter
     data["notify"] = {"new_deals": {"enabled": False}}  # notify tests start from the code defaults
     return data
 

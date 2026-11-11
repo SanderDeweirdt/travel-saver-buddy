@@ -63,6 +63,7 @@ def test_healthz_is_public(client):
         "/runs",
         "/trips",
         "/quota",
+        "/settings",
         "/route/MUC/SIN/business",
         "/reports/latest.xlsx",
         "/reports/latest-shortlist.csv",
@@ -508,3 +509,55 @@ def test_data_page_shows_routes_tracked(client):
     text = client.get("/data").text
     assert "Routes tracked" in text and "watchlist pairs have a price" in text
     assert "flights on offer" in text
+
+
+def _settings_form(**over):
+    form = {
+        "action": "save",
+        "mile_cost_eur_cents": "1.2",
+        "mr_point_value_eur_cents": "0.8",
+        "bookable__singapore": "on",
+        "mr__singapore": "1.5",
+        "cost__aeroplan": "1.4",
+    }
+    form.update(over)
+    return {k: v for k, v in form.items() if v is not None}
+
+
+def test_settings_page_saves_and_resets(client, db):
+    login(client)
+    page = client.get("/settings")
+    assert page.status_code == 200 and "Amex Membership Rewards point" in page.text
+    assert "bookable__singapore" in page.text and 'name="bookable__lufthansa"' not in page.text
+
+    r = client.post("/settings", data=_settings_form(), follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/settings?saved=1"
+    saved = Store(db, readonly=True).get_overrides()
+    assert saved["mr_point_value_eur_cents"] == 0.8
+    assert saved["bookable_programs"] == ["lufthansa", "singapore"]  # aeroplan was unticked
+    assert saved["programs"]["singapore"]["mr_per_mile"] == 1.5
+    after = client.get("/settings?saved=1").text
+    assert 'value="0.8"' in after and "Saved." in after
+    assert "valued at 0.8 ct" in client.get("/").text  # the deals page note follows the setting
+    # a new process reads the same settings from the database
+    fresh = TestClient(
+        create_app(WebSettings(PASSWORD, "s" * 32, db, ROOT / "config.yaml")),
+        base_url="https://testserver",
+    )
+    login(fresh)
+    assert 'value="0.8"' in fresh.get("/settings").text
+
+    client.post("/settings", data={"action": "reset"}, follow_redirects=False)
+    assert Store(db, readonly=True).get_overrides() == {}
+    assert 'value="1"' in client.get("/settings").text  # config.yaml's Amex point value, 1.0 ct
+
+
+def test_settings_rejects_bad_input_and_keeps_the_old_values(client, db):
+    login(client)
+    r = client.post("/settings", data=_settings_form(mile_cost_eur_cents="abc"))
+    assert r.status_code == 422 and "not a number" in r.text
+    r = client.post("/settings", data=_settings_form(mr_point_value_eur_cents=""))
+    assert r.status_code == 422 and "mr_point_value_eur_cents" in r.text
+    r = client.post("/settings", data=_settings_form(mile_cost_eur_cents="0"))
+    assert r.status_code == 422
+    assert Store(db, readonly=True).get_overrides() == {}
