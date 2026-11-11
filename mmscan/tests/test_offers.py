@@ -285,3 +285,16 @@ def test_only_bookable_programs_are_offered(tmp_path, default_config_dict):
         store.save_availability(run, flight, "watchlist")
     score_run(store, cfg, run, NOW)
     assert {s.source for s in load_current(store)} == {"lufthansa", "singapore"}
+
+
+def test_previous_query_returns_the_second_newest_state_of_each_flight(backend_store, cfg):
+    """PREVIOUS used `id NOT IN (SELECT max(id) ... GROUP BY key)`, which Postgres could not hash on
+    a real-sized table. The window-function form must pick the same rows."""
+    from mmscan.offers import PREVIOUS
+
+    store = backend_store
+    for i, miles in enumerate([10000, 11000, 12000]):  # three states of flight a
+        _scan(store, cfg, NOW + timedelta(hours=i), [("a", "2026-12-10", miles, 12900)])
+    _scan(store, cfg, NOW + timedelta(hours=3), [("b", "2026-12-11", 9000, 12900)])  # one state
+    rows = store.conn.execute(PREVIOUS).fetchall()
+    assert [(r["key"], r["miles"]) for r in rows] == [("MUC|SIN|2026-12-10|economy", 11000)]

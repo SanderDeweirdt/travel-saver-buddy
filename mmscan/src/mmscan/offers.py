@@ -19,6 +19,7 @@ from mmscan.scoring import (
     CURRENT_COLUMNS,
     Scored,
     column_values,
+    phase,
     rank_key,
     score_rows,
     total_cost_eur,
@@ -46,10 +47,14 @@ LATEST_STATE = (
     "WHERE id IN (SELECT max(id) FROM observations GROUP BY key)"
 )
 # The state before the latest one, for keys that have two or more.
+# A window function, not `id NOT IN (SELECT max(id) ... GROUP BY key)`: Postgres cannot hash that
+# subquery once it outgrows work_mem (4 MB by default) and rescans it for every row, which took
+# hours on 450k observations.
 PREVIOUS = (
-    "SELECT key, miles, fees_minor, currency, fees_eur, fee_estimated, source FROM observations "
-    "WHERE id IN (SELECT max(id) FROM observations "
-    "WHERE id NOT IN (SELECT max(id) FROM observations GROUP BY key) GROUP BY key)"
+    "SELECT key, miles, fees_minor, currency, fees_eur, fee_estimated, source FROM ("
+    "SELECT key, miles, fees_minor, currency, fees_eur, fee_estimated, source, "
+    "row_number() OVER (PARTITION BY key ORDER BY id DESC) AS rn FROM observations"
+    ") t WHERE rn = 2"
 )
 
 
@@ -265,18 +270,28 @@ def rebuild_current(
 ) -> list[Scored]:
     """Score every fresh flight together and replace `current_offers` with the result. The usual
     price of a route is the median over the dates currently on offer (across dates)."""
-    rows = fresh_observations(store, cfg, now)
-    current = [_to_scored(r, cfg) for r in rows]
-    prev = _previous_totals(store, cfg, rows, run_id)
-    scored = score_rows(current, [], cfg, fares, prev)
+    with phase("fresh observations") as p:
+        rows = fresh_observations(store, cfg, now)
+        p["n"] = len(rows)
+    with phase("convert observations") as p:
+        current = [_to_scored(r, cfg) for r in rows]
+        p["n"] = len(current)
+    with phase("previous totals") as p:
+        prev = _previous_totals(store, cfg, rows, run_id)
+        p["n"] = len(prev or ())
+    with phase("score rows") as p:
+        scored = score_rows(current, [], cfg, fares, prev)
+        p["n"] = len(scored)
     keys = {s.key: flight_key(s, cfg.source) for s in scored}
-    with store.conn:
-        store.conn.execute("DELETE FROM current_offers")
-        store.conn.executemany(
-            f"INSERT INTO current_offers(key, {', '.join(CURRENT_COLUMNS)}) "
-            f"VALUES (?{',?' * len(CURRENT_COLUMNS)})",
-            [(keys[s.key], *column_values(s, CURRENT_COLUMNS)) for s in scored],
-        )
+    with phase("write current_offers") as p:
+        with store.conn:
+            store.conn.execute("DELETE FROM current_offers")
+            store.conn.executemany(
+                f"INSERT INTO current_offers(key, {', '.join(CURRENT_COLUMNS)}) "
+                f"VALUES (?{',?' * len(CURRENT_COLUMNS)})",
+                [(keys[s.key], *column_values(s, CURRENT_COLUMNS)) for s in scored],
+            )
+        p["n"] = len(scored)
     return scored
 
 

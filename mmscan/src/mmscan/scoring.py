@@ -5,8 +5,10 @@ from __future__ import annotations
 import json
 import logging
 import statistics
+import time
 from bisect import bisect_left, bisect_right
 from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, fields
 from datetime import UTC, datetime
 
@@ -25,6 +27,21 @@ USD_RATE_MAX_AGE_DAYS = 30
 UNRANKED = "Unranked"  # dynamic fare with too little observed history to judge
 VERDICT_ORDER = {DEAL: 0, WORTH: 1, SKIP: 2, UNRANKED: 3}
 CHART_RATE_SHARE = 0.95
+
+
+@contextmanager
+def phase(name: str) -> Iterator[dict]:
+    """Log the start and the duration of one step of a scoring pass. Set `info["n"]` (a row count,
+    say) inside the block and it is logged with the end. Scoring used to log nothing, which made a
+    stuck query look like a hang."""
+    info: dict = {}
+    log.info("%s: start", name)
+    t0 = time.monotonic()
+    try:
+        yield info
+    finally:
+        extra = f", {info['n']:,} rows" if "n" in info else ""
+        log.info("%s: done in %.1fs%s", name, time.monotonic() - t0, extra)
 
 
 def percentile(values: list[float], p: float) -> float | None:
@@ -453,7 +470,10 @@ def score_run(
 
     currencies: dict[str, int] = {}
     rows = iter_current_rows(store, cfg, run_id, currencies)
-    record_observations(store, run_id, rows, now, cfg.source)
+    with phase(f"score run {run_id}: record observations") as p:
+        counts = record_observations(store, run_id, rows, now, cfg.source)
+        p["n"] = sum(counts.values())
+    log.info("observations: %s", counts)
     warnings = _currency_warnings(currencies, cfg)
     scored = rebuild_current(store, cfg, run_id, now, fares)
     warnings += list(getattr(fares, "warnings", []) or [])
