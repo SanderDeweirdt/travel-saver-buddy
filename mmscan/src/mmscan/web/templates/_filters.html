@@ -1,0 +1,22 @@
+{# Shared filter fields: Cabin, Origin, Destination, Travellers, Sort. #}
+{% macro place(name, label, value, places) %}
+<label>{{ label }}
+  <span class="combo" data-places='{{ places|tojson|forceescape }}'>
+    <input type="hidden" name="{{ name }}" value="{{ value }}">
+    <input type="text" class="combo-input" role="combobox" aria-expanded="false" aria-autocomplete="list"
+           autocomplete="off" placeholder="Any region or airport" value="{{ value }}">
+    <ul class="combo-list" role="listbox" hidden></ul>
+  </span></label>
+{% endmacro %}
+
+{% macro fields(f, cabins, places, sorts) %}
+<label>Cabin
+  <select name="cabin"><option value="all">All cabins</option>
+    {% for c in cabins %}<option value="{{ c }}" {{ 'selected' if f.cabin == c }}>{{ c|capitalize }}</option>{% endfor %}</select></label>
+{{ place("origin", "Origin", f.origin, places) }}
+{{ place("destination", "Destination", f.destination, places) }}
+<label>Travellers
+  <select name="pax">{% for n in range(1, 10) %}<option value="{{ n }}" {{ 'selected' if f.pax == n }}>{{ n }}</option>{% endfor %}</select></label>
+<label>Sort
+  <select name="sort">{% for k, label in sorts.items() %}<option value="{{ k }}" {{ 'selected' if f.sort == k }}>{{ label }}</option>{% endfor %}</select></label>
+{% endmacro %}

@@ -66,6 +66,15 @@ button:hover, .btn:hover { background: var(--surface-2); }
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; box-shadow: var(--shadow); }
 .filters label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: var(--ink-2); }
 .filters select { width: 100%; }
+.combo { position: relative; display: block; font-weight: 400; }
+.combo-input { width: 100%; }
+.combo-list { position: absolute; z-index: 30; left: 0; right: 0; top: 100%; margin: 2px 0 0; padding: 4px; list-style: none;
+  max-height: 260px; overflow-y: auto; min-width: 200px; background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); box-shadow: var(--shadow); }
+.combo-list li { padding: 6px 8px; border-radius: 6px; cursor: pointer; font-size: 13px; color: var(--ink); display: flex; justify-content: space-between; gap: 10px; }
+.combo-list li.group { cursor: default; font-size: 11px; font-weight: 700; color: var(--ink-2); text-transform: uppercase; letter-spacing: .04em; padding: 6px 8px 2px; }
+.combo-list li.active, .combo-list li:not(.group):hover { background: var(--surface-2); }
+.combo-list .hint { color: var(--ink-2); font-size: 12px; }
 .filters .actions { display: flex; gap: 8px; }
 
 /* stat tiles */
@@ -217,6 +226,51 @@ document.addEventListener("pointerover", e => {
 document.addEventListener("pointermove", e => {
   tip.style.left = Math.min(e.clientX + 12, innerWidth - 300) + "px";
   tip.style.top = e.clientY + 14 + "px";
+});
+
+document.querySelectorAll(".combo").forEach(box => {
+  const places = JSON.parse(box.dataset.places || "[]");
+  const hidden = box.querySelector("input[type=hidden]");
+  const input = box.querySelector(".combo-input");
+  const list = box.querySelector(".combo-list");
+  const label = v => (places.find(p => p.value === v) || {label: v}).label;
+  let shown = [], active = -1;
+  input.value = hidden.value ? label(hidden.value) : "";
+  const close = () => { list.hidden = true; input.setAttribute("aria-expanded", "false"); active = -1; };
+  const choose = p => { hidden.value = p.value; input.value = p.label; close(); };
+  const render = () => {
+    const q = input.value.trim().toLowerCase();
+    shown = places.filter(p => !q || (p.label + " " + p.value + " " + p.hint).toLowerCase().includes(q)).slice(0, 60);
+    list.innerHTML = "";
+    let kind = null;
+    shown.forEach((p, i) => {
+      if (p.kind !== kind) { kind = p.kind; const g = document.createElement("li"); g.className = "group"; g.textContent = kind + "s"; g.setAttribute("role", "presentation"); list.append(g); }
+      const li = document.createElement("li");
+      li.setAttribute("role", "option"); li.dataset.i = i;
+      const a = document.createElement("span"); a.textContent = p.label;
+      const b = document.createElement("span"); b.className = "hint"; b.textContent = p.hint;
+      li.append(a, b); list.append(li);
+    });
+    list.hidden = !shown.length; input.setAttribute("aria-expanded", String(shown.length > 0));
+  };
+  const mark = () => list.querySelectorAll("li[data-i]").forEach(li => li.classList.toggle("active", +li.dataset.i === active));
+  input.addEventListener("input", () => {
+    const q = input.value.trim().toLowerCase();
+    const exact = places.find(p => p.value.toLowerCase() === q || p.label.toLowerCase() === q);
+    hidden.value = q === "" ? "" : (exact ? exact.value : input.value.trim());
+    active = -1; render();
+  });
+  input.addEventListener("focus", () => { input.select(); render(); });
+  input.addEventListener("keydown", e => {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault(); if (list.hidden) render();
+      active = Math.max(0, Math.min(shown.length - 1, active + (e.key === "ArrowDown" ? 1 : -1))); mark();
+      const el = list.querySelector("li.active"); if (el) el.scrollIntoView({block: "nearest"});
+    } else if (e.key === "Enter" && !list.hidden && active >= 0) { e.preventDefault(); choose(shown[active]); }
+    else if (e.key === "Escape") close();
+  });
+  list.addEventListener("mousedown", e => { const li = e.target.closest("li[data-i]"); if (li) { e.preventDefault(); choose(shown[+li.dataset.i]); } });
+  input.addEventListener("blur", close);
 });
 </script>
 </body>

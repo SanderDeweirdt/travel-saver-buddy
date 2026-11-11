@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Flight watchlist · mmscan{% endblock %}
+{% import "_filters.html" as filters %}
 {% block body %}
 <div class="page-head">
   <h1>Flight watchlist</h1>
@@ -22,7 +23,12 @@
 </form>
 <p class="note">Leave the latest date empty for a single day. Each item is searched on every scan, in every cabin and every program you can book; up to {{ max_items }} items.</p>
 
-<div class="panel"><div class="scroll"><table class="cards">
+<form class="filters" method="get" action="/watchlist" style="margin-top:16px">
+  {{ filters.fields(f, cabins, places, sorts) }}
+  <div class="actions"><button class="primary" type="submit">Apply</button><a class="btn" href="/watchlist">Reset</a></div>
+</form>
+
+<div class="panel" style="margin-top:16px"><div class="scroll"><table class="cards">
 <thead><tr><th>Route</th><th>Departure</th><th class="n">Flights</th><th class="n">Cheapest €</th><th></th></tr></thead>
 <tbody>
 {% for i in items %}
@@ -30,12 +36,12 @@
   <td data-label="Route" class="route"><a href="/watchlist/{{ i.id }}">{{ i.origin }}→{{ i.destination }}</a></td>
   <td data-label="Departure" class="nowrap">{{ i.date_from }}{% if i.date_to != i.date_from %} to {{ i.date_to }}{% endif %}{% if i.past %} <span class="chip bad">passed</span>{% endif %}</td>
   <td data-label="Flights" class="n">{{ i.flights }}</td>
-  <td data-label="Cheapest €" class="n">{% if i.cheapest %}<b>{{ i.cheapest.total_eur|money }}</b> <span class="muted">{{ i.cheapest.date }}</span>{% else %}–{% endif %}</td>
+  <td data-label="Cheapest €" class="n">{% if i.cheapest %}<b>{{ i.party_cheapest|money }}</b> <span class="muted">{{ i.cheapest.date }}</span>{% else %}–{% endif %}</td>
   <td data-label=""><span style="display:inline-flex;gap:6px">
     <a class="btn sm" href="/watchlist/{{ i.id }}">View</a>
     <form method="post" action="/watchlist/{{ i.id }}/delete" style="margin:0"><button class="btn sm" type="submit" aria-label="Remove {{ i.origin }} to {{ i.destination }}">Remove</button></form>
   </span></td>
 </tr>
-{% else %}<tr><td class="empty" colspan="5">Nothing on the watchlist yet. Add a flight above.</td></tr>{% endfor %}
+{% else %}<tr><td class="empty" colspan="5">{% if f.origin or f.destination or f.cabin or f.pax > 1 %}Nothing matches these filters.{% else %}Nothing on the watchlist yet. Add a flight above.{% endif %}</td></tr>{% endfor %}
 </tbody></table></div></div>
 {% endblock %}

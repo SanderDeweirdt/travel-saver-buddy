@@ -10,7 +10,7 @@ from mmscan.baseline import baseline_for, build_baselines, thin_routes
 from mmscan.config import Config
 from mmscan.deals import rank_deals, saving_verdict
 from mmscan.offers import load_current, route_points
-from mmscan.overview import directions, in_regions
+from mmscan.overview import directions, in_regions, matches_place, place_options
 from mmscan.report import _age_hours
 from mmscan.scoring import rank_key
 from mmscan.store import Store
@@ -63,22 +63,59 @@ def _item_matches(item: dict, s) -> bool:
     )
 
 
-def watch_items_view(store: Store, items: list[dict], today: str) -> list[dict]:
-    """Each watchlist item with how many flights fit it now and the cheapest of them."""
+WATCH_SORTS = {"date": "Earliest date", "total": "Lowest price"}
+
+
+def watch_items_view(
+    store: Store,
+    cfg: Config,
+    items: list[dict],
+    today: str,
+    *,
+    cabin: str = "",
+    origin: str = "",
+    destination: str = "",
+    pax: int = 1,
+    sort: str = "date",
+) -> dict:
+    """Each watchlist item with how many flights fit it now and the cheapest of them, after the
+    filters. Cabin and travellers narrow the flights counted (seats below `pax` hide a flight,
+    unknown seats stay); origin and destination narrow the items themselves."""
     results = load_current(store)
+    regions: dict[str, str | None] = {}
+    for s in results:
+        regions.setdefault(s.origin, s.origin_region)
+        regions.setdefault(s.destination, s.destination_region)
     out = []
     for item in items:
-        fits = [s for s in results if _item_matches(item, s)]
+        if not matches_place(origin, item["origin"], regions.get(item["origin"]), cfg):
+            continue
+        if not matches_place(
+            destination, item["destination"], regions.get(item["destination"]), cfg
+        ):
+            continue
+        fits = [
+            s
+            for s in results
+            if _item_matches(item, s)
+            and (not cabin or s.cabin == cabin)
+            and not (s.seats and s.seats < pax)
+        ]
         cheapest = min(fits, key=lambda s: s.total_eur, default=None)
         out.append(
             {
                 **item,
                 "flights": len(fits),
                 "cheapest": cheapest,
+                "party_cheapest": None if cheapest is None else cheapest.total_eur * pax,
                 "past": item["date_to"] < today,
             }
         )
-    return out
+    if sort == "total":
+        out.sort(key=lambda i: (i["cheapest"] is None, i["party_cheapest"] or 0))
+    else:
+        out.sort(key=lambda i: (i["date_from"], i["id"]))
+    return {"items": out, "places": place_options(results, cfg)}
 
 
 def watch_item_view(store: Store, cfg: Config, item: dict, now: datetime) -> dict:
@@ -105,6 +142,7 @@ def deals_view(store: Store, cfg: Config, now: datetime, direction: str = "", **
     out["total"] = len(results)
     out["thin_routes"] = thin_routes(baselines)
     out["directions"] = directions(cfg)
+    out["places"] = place_options(results, cfg)
     return out
 
 
