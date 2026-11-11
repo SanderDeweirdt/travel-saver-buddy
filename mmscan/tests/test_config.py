@@ -72,3 +72,22 @@ def test_amex_points_are_priced_through_the_transfer_ratio(default_config_dict):
     assert cfg.mile_cents(None) == cfg.mile_cost_eur_cents
     with pytest.raises(Exception, match="mr_point_value_eur_cents"):
         Config.model_validate({**data, "mr_point_value_eur_cents": None})
+
+
+def test_saved_settings_apply_over_config_yaml(default_config_dict, write_config):
+    from mmscan.config import load_config
+
+    path = write_config(default_config_dict)
+    cfg = load_config(
+        path,
+        {
+            "mr_point_value_eur_cents": 0.5,
+            "bookable_programs": ["lufthansa", "united"],
+            "programs": {"singapore": {"mr_per_mile": 2.0}},
+            "not_a_setting": 1,  # ignored: only the settings page's keys count
+        },
+    )
+    assert cfg.mile_cents("singapore") == pytest.approx(1.0)
+    assert cfg.is_bookable("united") and not cfg.is_bookable("singapore")
+    assert cfg.programs["singapore"].label == "KrisFlyer"  # merged per field, label kept
+    assert load_config(path, {}).mr_point_value_eur_cents == 1.0  # nothing saved: config.yaml

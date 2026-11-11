@@ -14,7 +14,7 @@ import typer
 
 from mmscan.client import ApiError, Client
 from mmscan.config import Config, ConfigError, load_config
-from mmscan.store import FULL_RUNS, Store
+from mmscan.store import FULL_RUNS, Store, read_overrides
 
 DB_PATH = Path("data/mmscan.db")
 LIVE_FIXTURES = Path("tests/fixtures/live")
@@ -51,7 +51,7 @@ def _setup_logging(verbose: bool) -> None:
 
 def _load(config: Path) -> Config:
     try:
-        cfg = load_config(config)
+        cfg = load_config(config, read_overrides(database_target()))
     except ConfigError as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(2) from e
@@ -599,7 +599,7 @@ def web(
     host: Annotated[str, typer.Option(help="Interface to bind.")] = "0.0.0.0",
     port: Annotated[int, typer.Option(envvar="PORT", help="Port; Railway sets PORT.")] = 8000,
 ) -> None:
-    """Private read-only dashboard. Needs DASHBOARD_PASSWORD and SESSION_SECRET."""
+    """Private dashboard (read-only except its Settings page). Needs DASHBOARD_PASSWORD and SESSION_SECRET."""
     import uvicorn
 
     from mmscan.web.app import create_app

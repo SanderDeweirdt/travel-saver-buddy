@@ -108,6 +108,7 @@ with a warning naming the line.
 | **Watchlist** (`/watchlist`, was Shortlist) | Deal and Worth a look flights on your `watchlist` airports or matching a `benchmark` (`shortlist.scope: focus`), with the included airports and benchmarks listed at the top and a chip on each row saying why it is there. Best deals and All routes are not limited to it: they cover every flight between the configured regions. `/shortlist` still works. |
 | **Route** (`/route/...`) | Price history with the usual price as a dashed line, and today's results against it. |
 | **Data & alerts** (`/data`) | Quota, scanner health, the USD rate age, a table of live-to-cached mile ratios per carrier (from `mmscan verify-add`), Slack status and recent runs. |
+| **Settings** (`/settings`) | The Miles & More mile value, the Amex point value, and per program: bookable or not, cost per mile, Amex points per mile. Saved in the database (table `settings`) and applied over `config.yaml` by both the dashboard and the scanner, so a change needs no redeploy. Saving recalculates every total; which programs are requested changes at the next scan. "Reset to config.yaml" drops the saved values. The only page that writes. |
 
 "Usual price" is what the route normally costs with miles, from this tool's own history. It is not a cash ticket price.
 **Unverified** marks Lufthansa-group (dynamic) prices: the cached miles can be far below the live price.

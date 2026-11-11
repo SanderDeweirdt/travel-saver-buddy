@@ -454,7 +454,28 @@ def _airport_warnings(cfg: Config) -> list[str]:
     return out
 
 
-def load_config(path: Path) -> Config:
+# What the dashboard's Settings page may change. Everything else stays in config.yaml.
+SETTING_KEYS = ("mr_point_value_eur_cents", "mile_cost_eur_cents", "bookable_programs")
+
+
+def apply_overrides(data: dict, overrides: dict | None) -> dict:
+    """config.yaml's mapping with the saved settings on top. `programs` merges per program and per
+    field, so a saved value never drops a program's link template or label."""
+    if not overrides:
+        return data
+    merged = dict(data)
+    for key in SETTING_KEYS:
+        if key in overrides:
+            merged[key] = overrides[key]
+    if isinstance(overrides.get("programs"), dict):
+        programs = {k: dict(v or {}) for k, v in (data.get("programs") or {}).items()}
+        for name, fields in overrides["programs"].items():
+            programs[name] = {**programs.get(name, {}), **(fields or {})}
+        merged["programs"] = programs
+    return merged
+
+
+def load_config(path: Path, overrides: dict | None = None) -> Config:
     path = Path(path)
     if not path.exists():
         raise ConfigError(f"Config file not found: {path}")
@@ -465,7 +486,7 @@ def load_config(path: Path) -> Config:
     if not isinstance(data, dict):
         raise ConfigError(f"Config file {path} must be a mapping at the top level")
     try:
-        cfg = Config.model_validate(data)
+        cfg = Config.model_validate(apply_overrides(data, overrides))
     except ValidationError as e:
         raise ConfigError(_format_errors(e)) from e
     cfg.warnings.extend(_airport_warnings(cfg))

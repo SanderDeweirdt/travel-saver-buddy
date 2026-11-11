@@ -234,7 +234,7 @@ def test_database_from_before_programs_were_stored_is_tagged_miles_and_more(tmp_
     )
     store.conn.commit()
 
-    assert store.migrate() == 4
+    assert store.migrate() == 5
     assert store.conn.execute("SELECT source FROM observations").fetchone()[0] == "lufthansa"
 
 

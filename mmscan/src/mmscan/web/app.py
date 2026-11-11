@@ -14,12 +14,12 @@ from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse,
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
-from mmscan.config import Config, load_config
+from mmscan.config import Config, ConfigError, load_config
 from mmscan.fares import CsvFareSource
 from mmscan.links import mm_link
-from mmscan.offers import ensure_current
+from mmscan.offers import ensure_current, rebuild_current
 from mmscan.report import DISCLAIMER, SHORTLIST_COLUMNS, row_values, shortlist, write_report
-from mmscan.store import FULL_RUNS, Store
+from mmscan.store import FULL_RUNS, Store, read_overrides
 from mmscan.trips import age_hours, calendar_cells, trip_trend, trip_views
 from mmscan.web import queries
 from mmscan.web.auth import LoginLimiter, password_ok
@@ -69,7 +69,7 @@ def create_app(settings: WebSettings) -> FastAPI:
     templates.env.filters["when"] = _fmt_time
     templates.env.globals["mm_link"] = lambda s, pax=1: mm_link(cfg, s, pax)
     limiter = LoginLimiter()
-    cfg: Config = load_config(settings.config_path)
+    cfg: Config = load_config(settings.config_path, read_overrides(settings.database))
     templates.env.globals["program_label"] = cfg.program_label
     boot = Store(settings.database)  # create the schema once; request handlers only read
     try:
@@ -124,6 +124,118 @@ def create_app(settings: WebSettings) -> FastAPI:
         request.session["auth"] = True
         safe = next if next.startswith("/") and not next.startswith("//") else "/"
         return RedirectResponse(safe, status_code=303)
+
+    def _number(raw: str | None, label: str, errors: list[str]) -> float | None:
+        text = (raw or "").strip().replace(",", ".")
+        if not text:
+            return None
+        try:
+            return float(text)
+        except ValueError:
+            errors.append(f"{label}: {raw!r} is not a number")
+            return None
+
+    def settings_rows() -> list[dict]:
+        """One row per program in config.yaml, from the config in force."""
+        return [
+            {
+                "id": key,
+                "label": cfg.program_label(key),
+                "bookable": cfg.is_bookable(key),
+                "cost": "" if p.mile_cost_eur_cents is None else f"{p.mile_cost_eur_cents:g}",
+                "mr": "" if p.mr_per_mile is None else f"{p.mr_per_mile:g}",
+                "effective": cfg.mile_cents(key),
+            }
+            for key, p in sorted(cfg.programs.items())
+        ]
+
+    def settings_ctx(**extra) -> dict:
+        return {
+            "main_label": cfg.program_label(cfg.source),
+            "mm_cost": f"{cfg.mile_cost_eur_cents:g}",
+            "mr_value": ""
+            if cfg.mr_point_value_eur_cents is None
+            else f"{cfg.mr_point_value_eur_cents:g}",
+            "rows": settings_rows(),
+            "errors": [],
+            "saved": False,
+            **extra,
+        }
+
+    @app.get("/settings", response_class=HTMLResponse, dependencies=[Depends(require_login)])
+    def settings_page(request: Request, saved: int = 0):
+        return render(request, "settings.html", **settings_ctx(saved=bool(saved)))
+
+    @app.post("/settings", dependencies=[Depends(require_login)])
+    async def settings_save(request: Request):
+        nonlocal cfg
+        form = await request.form()
+        errors: list[str] = []
+        reset = form.get("action") == "reset"
+        overrides: dict = {}
+        mm_cost = _number(form.get("mile_cost_eur_cents"), "Miles & More mile value", errors)
+        mr_value = _number(form.get("mr_point_value_eur_cents"), "Amex point value", errors)
+        programs: dict[str, dict] = {}
+        for key in cfg.programs:
+            programs[key] = {
+                "mile_cost_eur_cents": _number(form.get(f"cost__{key}"), f"{key} cost", errors),
+                "mr_per_mile": _number(form.get(f"mr__{key}"), f"{key} points per mile", errors),
+            }
+        if mm_cost is None and not reset:
+            errors.append("Miles & More mile value is required")
+        if not reset:
+            overrides = {
+                "mile_cost_eur_cents": mm_cost,
+                "mr_point_value_eur_cents": mr_value,
+                "bookable_programs": [cfg.source]
+                + [k for k in cfg.programs if form.get(f"bookable__{k}")],
+                "programs": programs,
+            }
+        new_cfg = None
+        if not errors:
+            try:
+                new_cfg = load_config(settings.config_path, overrides)
+            except ConfigError as e:
+                errors.append(str(e))
+        if errors:
+            rows = [
+                {
+                    "id": k,
+                    "label": cfg.program_label(k),
+                    "bookable": bool(form.get(f"bookable__{k}")),
+                    "cost": form.get(f"cost__{k}", ""),
+                    "mr": form.get(f"mr__{k}", ""),
+                    "effective": None,
+                }
+                for k in sorted(cfg.programs)
+            ]
+            resp = render(
+                request,
+                "settings.html",
+                **settings_ctx(
+                    errors=errors,
+                    rows=rows,
+                    mm_cost=form.get("mile_cost_eur_cents", ""),
+                    mr_value=form.get("mr_point_value_eur_cents", ""),
+                ),
+            )
+            resp.status_code = 422
+            return resp
+        store = Store(settings.database)
+        try:
+            store.set_overrides(overrides)
+            cfg = new_cfg
+            templates.env.globals["program_label"] = cfg.program_label
+            rebuild_current(
+                store,
+                cfg,
+                0,
+                datetime.now(UTC),
+                CsvFareSource(settings.config_path.parent / "cash_fares.csv"),
+            )
+        finally:
+            store.close()
+        return RedirectResponse("/settings?saved=1", status_code=303)
 
     @app.post("/logout")
     def logout(request: Request):
