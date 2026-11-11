@@ -183,3 +183,22 @@ def test_repo_config_asks_star_alliance_programs_for_flights_within_asia():
     assert len(reqs) == len(sources)
     europe = [p["source"] for p in all_reqs if p["origin_region"] != p["destination_region"]]
     assert set(europe) == {"lufthansa"}
+
+
+def test_bad_source_is_skipped_not_fatal(tmp_path, default_config_dict):
+    def handler(req):
+        if req.url.params["source"] == "nope":
+            return httpx.Response(400, json={"error": True, "code": "invalid_source"})
+        return page(["a", "b"], False)
+
+    cfg = cfg_from(
+        default_config_dict,
+        region_pairs=[{"origin": "Asia", "destination": "Asia", "sources": ["nope", "united"]}],
+        watchlist={"origins": [], "destinations": [], "both_directions": False},
+    )
+    client, store = make(tmp_path, handler)
+    run = store.start_run("scan", "{}")
+    status, stats = run_scan(client, store, cfg, run, TODAY)
+    assert status == "ok"
+    assert stats["region_results"] == 2  # the good source still ran
+    assert any("skipped source nope" in w for w in stats["warnings"])

@@ -7,7 +7,7 @@ from collections.abc import Callable
 from datetime import date
 from typing import Any
 
-from mmscan.client import ApiError, CapReached, Client
+from mmscan.client import ApiError, BadRequest, CapReached, Client
 from mmscan.config import Config
 from mmscan.models import parse_trip
 from mmscan.store import Store
@@ -155,7 +155,14 @@ def scan_regions(client: Client, store: Store, cfg: Config, run_id: int, today: 
             for avail in page:
                 store.save_availability(run_id, avail, "region")
 
-        items, warns = paginate(client, path, params, cfg.api.take, on_page=save)
+        try:
+            items, warns = paginate(client, path, params, cfg.api.take, on_page=save)
+        except BadRequest as e:  # one bad source must not stop the other regions or the watchlist
+            msg = f"skipped source {params.get('source')} for {params.get('origin_region')} to "
+            msg += f"{params.get('destination_region')}: {e}"
+            log.warning(msg)
+            stats["warnings"].append(msg)
+            continue
         stats["region_results"] += len(items)
         stats["warnings"].extend(warns)
     return stats

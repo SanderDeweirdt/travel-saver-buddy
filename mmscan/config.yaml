@@ -21,7 +21,6 @@ programs:
   aeroplan:     {label: Aeroplan,    mile_cost_eur_cents: 1.4}
   united:       {label: United,      mile_cost_eur_cents: 1.3}
   lifemiles:    {label: LifeMiles,   mile_cost_eur_cents: 1.3}
-  connectmiles: {label: ConnectMiles, mile_cost_eur_cents: 1.3}
   turkish:      {label: Turkish,     mile_cost_eur_cents: 1.2}
   ethiopian:    {label: Ethiopian,   mile_cost_eur_cents: 1.0}
 
@@ -42,7 +41,7 @@ region_pairs:
   # nothing here, so ask the Star Alliance partners' own programs (one call per source).
   - origin: Asia
     destination: Asia
-    sources: [singapore, aeroplan, united, lifemiles, connectmiles, turkish, ethiopian]
+    sources: [singapore, aeroplan, united, lifemiles, turkish, ethiopian]
 
 watchlist:
   origins: [MUC, FRA, ZRH, VIE, BRU, DUS, HAM, BER, GVA, AMS, CDG]
