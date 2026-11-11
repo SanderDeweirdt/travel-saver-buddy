@@ -60,7 +60,7 @@ ALL_COLUMNS = SHORTLIST_COLUMNS + ["Fee source", "Seats OK", "Direct", "Expired"
 
 def eligible(results: list[Scored], cfg: Config | None = None) -> list[Scored]:
     """Priced, live results; with `cfg` and shortlist.scope "focus", only those in the benchmark
-    or watchlist focus."""
+    focus."""
     out = [s for s in results if not s.fee_estimated and not s.expired and s.total_eur is not None]
     if cfg is not None and cfg.shortlist.scope == "focus":
         out = [

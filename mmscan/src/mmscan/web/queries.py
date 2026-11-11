@@ -170,28 +170,15 @@ def carrier_trust(checks: list[dict], cfg: Config) -> list[dict]:
     return out
 
 
-def routes_view(store: Store, cfg: Config) -> dict:
-    """How much the pages cover: airport-to-airport routes with a current price, how many of them
-    are watchlist pairs, and the flights (route, date, cabin) on offer."""
-    pairs = store.conn.execute(
-        "SELECT DISTINCT origin, destination FROM current_offers WHERE origin IS NOT NULL"
-    ).fetchall()
-    wl = cfg.watchlist
-    on_watchlist = sum(
-        1
-        for o, d in (tuple(p) for p in pairs)
-        if (o in wl.origins and d in wl.destinations)
-        or (wl.both_directions and o in wl.destinations and d in wl.origins)
-    )
+def routes_view(store: Store) -> dict:
+    """How much the pages cover: airport-to-airport routes with a current price, and the flights
+    (route, date, cabin) on offer."""
+    routes = store.conn.execute(
+        "SELECT count(*) FROM (SELECT DISTINCT origin, destination FROM current_offers "
+        "WHERE origin IS NOT NULL) AS pairs"
+    ).fetchone()[0]
     flights = store.conn.execute("SELECT count(*) FROM current_offers").fetchone()[0]
-    return {
-        "routes": len(pairs),
-        "on_watchlist": on_watchlist,
-        "watchlist_pairs": len(wl.origins)
-        * len(wl.destinations)
-        * (2 if wl.both_directions else 1),
-        "flights": flights,
-    }
+    return {"routes": routes, "flights": flights}
 
 
 def data_view(store: Store, cfg: Config, now: datetime) -> dict:
@@ -207,7 +194,7 @@ def data_view(store: Store, cfg: Config, now: datetime) -> dict:
     )
     return {
         "quota": quota_view(store, cfg.api.daily_call_cap, now),
-        "coverage": routes_view(store, cfg),
+        "coverage": routes_view(store),
         "runs": runs[:10],
         "last_watch": last_watch,
         "last_full": last_full,

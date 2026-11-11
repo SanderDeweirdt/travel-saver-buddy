@@ -363,7 +363,7 @@ def test_deals_pages_show_a_newer_watch_price_without_a_run_label(db, default_co
 def test_data_page_shows_routes_tracked(client):
     login(client)
     text = client.get("/settings").text
-    assert "Routes tracked" in text and "watchlist pairs have a price" in text
+    assert "Routes tracked" in text and "airport pairs with a price" in text
     assert "flights on offer" in text
 
 

@@ -48,12 +48,6 @@ class RegionPair(_Model):
     destination: Region
 
 
-class Watchlist(_Model):
-    origins: list[str] = []
-    destinations: list[str] = []
-    both_directions: bool = True
-
-
 class DateRange(_Model):
     start: date
     end: date
@@ -130,10 +124,9 @@ class Relative(_Model):
 
 
 class ShortlistScope(_Model):
-    # focus: only results matching a benchmark or the watchlist reach the Shortlist, the CSV
-    # and Slack alerts. all: every Deal and Worth a look, as the PRD says.
+    # focus: only results matching a benchmark reach the Shortlist, the CSV and Slack alerts.
+    # all: every Deal and Worth a look, as the PRD says.
     scope: Literal["focus", "all"] = "focus"
-    focus_watchlist: bool = True
 
 
 class Prescreen(_Model):
@@ -290,7 +283,6 @@ class Config(_Model):
     usd_to_eur_date: date | None = None  # when the rate above was last checked
     date_window: DateWindow = DateWindow()
     region_pairs: list[RegionPair] = []
-    watchlist: Watchlist = Watchlist()
     subregions: dict[str, list[str]] = {}
     benchmarks: list[Benchmark] = []
     relative: Relative = Relative()
@@ -390,15 +382,8 @@ class Config(_Model):
     def focus_reasons(
         self, origin: str, origin_region: str, dest: str, dest_region: str, cabin: str
     ) -> list[str]:
-        """Why a flight is on the Watchlist page: "watchlist" when its airports are a watchlist
-        pair (and shortlist.focus_watchlist is on), "benchmark" when it matches a benchmark."""
+        """Why a flight is in the shortlist focus: "benchmark" when it matches a benchmark."""
         out = []
-        wl = self.watchlist
-        if self.shortlist.focus_watchlist and (
-            (origin in wl.origins and dest in wl.destinations)
-            or (wl.both_directions and origin in wl.destinations and dest in wl.origins)
-        ):
-            out.append("watchlist")
         if self.benchmark_for(cabin, origin, origin_region, dest, dest_region):
             out.append("benchmark")
         return out
@@ -406,7 +391,7 @@ class Config(_Model):
     def in_focus(
         self, origin: str, origin_region: str, dest: str, dest_region: str, cabin: str
     ) -> bool:
-        """Matches a benchmark, or (when focus_watchlist) a watchlist airport pair."""
+        """Matches a benchmark."""
         return bool(self.focus_reasons(origin, origin_region, dest, dest_region, cabin))
 
     def date_range(self, today: date) -> tuple[date, date]:
@@ -465,11 +450,7 @@ def _format_errors(err: ValidationError) -> str:
 
 def _airport_warnings(cfg: Config) -> list[str]:
     out = []
-    lists = {
-        "watchlist.origins": cfg.watchlist.origins,
-        "watchlist.destinations": cfg.watchlist.destinations,
-    }
-    lists.update({f"subregions.{k}": v for k, v in cfg.subregions.items()})
+    lists = {f"subregions.{k}": v for k, v in cfg.subregions.items()}
     for t in cfg.trips:
         lists[f"trips.{t.name}.origins"] = t.origins
         lists[f"trips.{t.name}.destinations"] = t.destinations

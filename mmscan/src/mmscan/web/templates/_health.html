@@ -12,7 +12,7 @@
     <div class="d">partial or failed this week: {{ d.failed_week }}</div></div>
   {% set cv = d.coverage %}
   <div class="tile"><div class="k">Routes tracked</div><div class="v">{{ "{:,}".format(cv.routes) }}</div>
-    <div class="d">{{ cv.on_watchlist }} of {{ cv.watchlist_pairs }} watchlist pairs have a price; the rest come from the region scans</div>
+    <div class="d">airport pairs with a price, from the region scans and your watchlist</div>
     <div class="d">{{ "{:,}".format(cv.flights) }} flights on offer (route, date, cabin)</div></div>
   {% set st = d.storage %}
   {% if st %}

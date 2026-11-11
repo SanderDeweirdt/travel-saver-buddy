@@ -1,4 +1,4 @@
-"""Steps 1 and 2: scan region pairs (Bulk Availability) and the watchlist (Cached Search)."""
+"""Steps 1 and 2: scan region pairs (Bulk Availability), then watchlist items and trips."""
 
 from __future__ import annotations
 
@@ -88,11 +88,7 @@ def region_requests(cfg: Config, today: date) -> list[tuple[str, dict]]:
 def watchlist_requests(
     cfg: Config, today: date, items: list[dict] | None = None
 ) -> list[tuple[str, dict]]:
-    return (
-        _wide_watchlist_requests(cfg, today)
-        + trip_requests(cfg, today)
-        + item_requests(cfg, today, items or [])
-    )
+    return trip_requests(cfg, today) + item_requests(cfg, today, items or [])
 
 
 def item_requests(cfg: Config, today: date, items: list[dict]) -> list[tuple[str, dict]]:
@@ -120,32 +116,9 @@ def item_requests(cfg: Config, today: date, items: list[dict]) -> list[tuple[str
     return out
 
 
-def _wide_watchlist_requests(cfg: Config, today: date) -> list[tuple[str, dict]]:
-    wl = cfg.watchlist
-    if not wl.origins or not wl.destinations:
-        return []
-    directions = [(wl.origins, wl.destinations)]
-    if wl.both_directions:
-        directions.append((wl.destinations, wl.origins))
-    cabins = cfg.cabins[0] if len(cfg.cabins) == 1 else None
-    out = []
-    for origins, dests in directions:
-        params = {
-            "origin_airport": ",".join(origins),
-            "destination_airport": ",".join(dests),
-            "sources": cfg.source,
-            "cabins": cabins,
-            "order_by": "lowest_mileage",
-            "include_trips": True,
-            **_common(cfg, today),
-        }
-        out.append(("search", {k: v for k, v in params.items() if v is not None}))
-    return out
-
-
 def trip_requests(cfg: Config, today: date) -> list[tuple[str, dict]]:
     """One narrow Cached Search per trip leg, so a trip's dates are never crowded out of the
-    cheapest-first page of the wide watchlist search."""
+    cheapest-first page of another search."""
     out = []
     for trip in cfg.trips:
         cabins = cfg.trip_cabins(trip)
