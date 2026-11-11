@@ -39,9 +39,6 @@ class DateWindow(_Model):
 class RegionPair(_Model):
     origin: Region
     destination: Region
-    # seats.aero programs to ask for this pair, one Bulk Availability request each. Empty = the
-    # top-level `source`.
-    sources: list[str] = []
 
 
 class Watchlist(_Model):
@@ -251,6 +248,11 @@ class Program(_Model):
     # Prefilled award-search URL, same placeholders as miles_and_more.link_template.
     link_template: str = ""
     label: str = ""  # short name on the Book button; empty = the source id
+    # Can you book with this program? Off = never requested from seats.aero and never shown.
+    enabled: bool = True
+    # Also scan flights within one region (Asia to Asia). Miles & More returns nothing there, so
+    # only the partner programs that do are asked.
+    within_region: bool = False
 
     @model_validator(mode="after")
     def _check_template(self) -> Program:
@@ -264,13 +266,10 @@ class Program(_Model):
 
 class Config(_Model):
     source: str = "lufthansa"
-    # Per-program overrides, keyed by seats.aero source id. The top-level `source` falls back to
-    # mile_cost_eur_cents and miles_and_more.link_template when it has no entry here.
+    # The one list of mileage programs, keyed by seats.aero source id: what each costs you, whether
+    # you can book it (`enabled`) and where it is scanned. The top-level `source` (Miles & More) is
+    # always on and falls back to mile_cost_eur_cents and miles_and_more.link_template.
     programs: dict[str, Program] = {}
-    # seats.aero source ids of the programs you can actually book with: the top-level `source`
-    # (Miles & More) plus any program your points transfer to. Anything else is neither scanned
-    # nor shown. None = no filter.
-    bookable_programs: list[str] | None = None
     # What one Amex Membership Rewards point is worth to you, in euro cents. Turns points sent to a
     # transfer partner into euros, so those awards compare with Miles & More on one total.
     mr_point_value_eur_cents: float | None = Field(None, gt=0)
@@ -332,8 +331,19 @@ class Config(_Model):
         return self
 
     def is_bookable(self, source: str | None) -> bool:
-        """Can you book this program's awards? A flight with no stored source is the default one."""
-        return self.bookable_programs is None or (source or self.source) in self.bookable_programs
+        """Can you book this program's awards? The default program always; others when enabled.
+        A flight with no stored source is the default one."""
+        key = source or self.source
+        program = self.programs.get(key)
+        return key == self.source or bool(program and program.enabled)
+
+    def sources_for(self, pair: RegionPair) -> list[str]:
+        """The programs to ask for one region pair, from `programs` alone. Between two regions:
+        Miles & More and every enabled program. Within one region: enabled `within_region` ones."""
+        enabled = [k for k, p in self.programs.items() if p.enabled and k != self.source]
+        if pair.origin == pair.destination:
+            return [k for k in enabled if self.programs[k].within_region]
+        return [self.source, *enabled]
 
     def mile_cents(self, source: str | None) -> float:
         """Euro cents one mile of `source` costs you. No source means the default program."""
@@ -455,7 +465,7 @@ def _airport_warnings(cfg: Config) -> list[str]:
 
 
 # What the dashboard's Settings page may change. Everything else stays in config.yaml.
-SETTING_KEYS = ("mr_point_value_eur_cents", "mile_cost_eur_cents", "bookable_programs")
+SETTING_KEYS = ("mr_point_value_eur_cents", "mile_cost_eur_cents")
 
 
 def apply_overrides(data: dict, overrides: dict | None) -> dict:
@@ -467,9 +477,14 @@ def apply_overrides(data: dict, overrides: dict | None) -> dict:
     for key in SETTING_KEYS:
         if key in overrides:
             merged[key] = overrides[key]
-    if isinstance(overrides.get("programs"), dict):
+    saved = overrides.get("programs")
+    legacy = overrides.get("bookable_programs")  # saved before `enabled` moved into each program
+    if isinstance(saved, dict) or isinstance(legacy, list):
         programs = {k: dict(v or {}) for k, v in (data.get("programs") or {}).items()}
-        for name, fields in overrides["programs"].items():
+        if isinstance(legacy, list):
+            for name, fields in programs.items():
+                fields["enabled"] = name in legacy
+        for name, fields in (saved or {}).items():
             programs[name] = {**programs.get(name, {}), **(fields or {})}
         merged["programs"] = programs
     return merged

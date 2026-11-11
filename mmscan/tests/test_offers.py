@@ -242,7 +242,7 @@ def test_only_bookable_programs_are_offered(tmp_path, default_config_dict):
     cfg = config(
         default_config_dict,
         relative={"min_samples": 3, "history_days": 30},
-        bookable_programs=["lufthansa", "singapore"],
+        programs={"singapore": {"enabled": True}, "united": {"enabled": False}},
     )
     store = Store(tmp_path / "db.sqlite")
     run = store.start_run("run", "{}", now=NOW)

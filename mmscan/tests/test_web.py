@@ -513,7 +513,6 @@ def test_data_page_shows_routes_tracked(client):
 
 def _settings_form(**over):
     form = {
-        "action": "save",
         "mile_cost_eur_cents": "1.2",
         "mr_point_value_eur_cents": "0.8",
         "bookable__singapore": "on",
@@ -524,17 +523,19 @@ def _settings_form(**over):
     return {k: v for k, v in form.items() if v is not None}
 
 
-def test_settings_page_saves_and_resets(client, db):
+def test_settings_page_saves_what_you_enter(client, db):
     login(client)
     page = client.get("/settings")
     assert page.status_code == 200 and "Amex Membership Rewards point" in page.text
     assert "bookable__singapore" in page.text and 'name="bookable__lufthansa"' not in page.text
+    assert "Reset" not in page.text  # one source of truth: no way back to config.yaml
 
     r = client.post("/settings", data=_settings_form(), follow_redirects=False)
     assert r.status_code == 303 and r.headers["location"] == "/settings?saved=1"
     saved = Store(db, readonly=True).get_overrides()
     assert saved["mr_point_value_eur_cents"] == 0.8
-    assert saved["bookable_programs"] == ["lufthansa", "singapore"]  # aeroplan was unticked
+    assert saved["programs"]["singapore"]["enabled"] is True
+    assert saved["programs"]["aeroplan"]["enabled"] is False  # unticked
     assert saved["programs"]["singapore"]["mr_per_mile"] == 1.5
     after = client.get("/settings?saved=1").text
     assert 'value="0.8"' in after and "Saved." in after
@@ -547,9 +548,9 @@ def test_settings_page_saves_and_resets(client, db):
     login(fresh)
     assert 'value="0.8"' in fresh.get("/settings").text
 
-    client.post("/settings", data={"action": "reset"}, follow_redirects=False)
-    assert Store(db, readonly=True).get_overrides() == {}
-    assert 'value="1"' in client.get("/settings").text  # config.yaml's Amex point value, 1.0 ct
+    # ticked stays ticked, and a program left unticked in the form is off afterwards
+    assert 'name="bookable__singapore" id="b-singapore" checked' in after
+    assert 'name="bookable__flyingblue" id="b-flyingblue" checked' not in after
 
 
 def test_settings_rejects_bad_input_and_keeps_the_old_values(client, db):
