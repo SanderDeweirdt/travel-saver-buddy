@@ -91,7 +91,8 @@ The new `price_checks` table is created automatically the next time either servi
 
 ## 4c. Keeping the database small
 
-Per-run copies (`availabilities`, `results`) are purged after 14 days, trip details after 30 days and
+Per-run copies (`availabilities`, `results`) are purged after 3 days (a full scan stores about
+265k rows, hundreds of MB, and only the latest run is read), trip details after 30 days and
 price history after 180. Postgres does not hand the freed space back to the volume by itself, so
 `deploy/cron.sh` runs `mmscan vacuum` (VACUUM FULL, one table at a time) on the 1st of each month
 after the scan. Set `storage.limit_gb` in `config.yaml` to the volume size: the Data page shows the

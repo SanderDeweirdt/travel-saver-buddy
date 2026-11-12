@@ -73,6 +73,8 @@ fx_to_eur:
   TWD: 0.028
   CNY: 0.13
   GBP: 1.17
+  CHF: 1.07   # approximate, not checked against a live rate: please verify
+  SAR: 0.245  # pegged to USD at 3.75, so usd_to_eur / 3.75
   AUD: 0.60
   AED: 0.25
   QAR: 0.25
