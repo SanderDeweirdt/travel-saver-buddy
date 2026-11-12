@@ -104,7 +104,7 @@ def test_migrations_upgrade_a_pre_migration_database(tmp_path):
     assert store.conn.execute("SELECT count(*) FROM observations").fetchone()[0] == 0
 
 
-def test_purge_drops_per_run_detail_after_two_weeks_but_keeps_the_run(tmp_path):
+def test_purge_drops_per_run_detail_after_a_month_but_keeps_the_run(tmp_path):
     store = Store(tmp_path / "db.sqlite")
     mid = store.start_run("scan", "{}", now=NOW - timedelta(days=30))
     store.conn.execute(
@@ -156,3 +156,18 @@ def test_save_availabilities_stores_a_page_and_replaces_repeats(tmp_path):
     assert {r["origin_kind"] for r in rows} == {"region"}
     assert '"99000"' in rows[0]["raw_json"]
     store.close()
+
+
+def test_purge_keeps_per_run_detail_for_three_days_only(tmp_path):
+    store = Store(tmp_path / "db.sqlite")
+    recent = store.start_run("run", "{}", now=NOW - timedelta(days=2))
+    old = store.start_run("run", "{}", now=NOW - timedelta(days=4))
+    for run in (recent, old):
+        store.conn.execute(
+            "INSERT INTO availabilities(run_id, id, origin_kind, raw_json) VALUES (?,?,?,?)",
+            (run, "a", "region", "{}"),
+        )
+    store.purge_older_than(180, now=NOW)
+    left = [r[0] for r in store.conn.execute("SELECT run_id FROM availabilities")]
+    assert left == [recent]
+    assert store.conn.execute("SELECT count(*) FROM runs").fetchone()[0] == 2

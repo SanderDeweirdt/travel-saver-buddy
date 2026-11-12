@@ -627,14 +627,15 @@ class Store:
         self,
         days: int = 180,
         now: datetime | None = None,
-        detail_days: int = 14,
+        detail_days: int = 3,
         trip_days: int = 30,
     ) -> None:
         """Drop old history. The per-run copies (`availabilities` with their raw JSON, `results`)
         are only read for the latest run; the price history lives in `observations`. They go after
-        `detail_days` so the database does not fill up. Trip details (`trips`, `trip_fetches`) are
-        only read for those same availabilities, plus `has_fetch` to skip a paid re-fetch, so they
-        go after `trip_days`. The rest goes after `days`."""
+        `detail_days` so the database does not fill up: a full scan stores about 265k rows (hundreds
+        of MB), so two weeks of daily scans would not fit the volume. Trip details (`trips`,
+        `trip_fetches`) are only read for those same availabilities, plus `has_fetch` to skip a paid
+        re-fetch, so they go after `trip_days`. The rest goes after `days`."""
         now = now or utcnow()
         cutoff = (now - timedelta(days=days)).isoformat()
         detail_cutoff = (now - timedelta(days=min(days, detail_days))).isoformat()
