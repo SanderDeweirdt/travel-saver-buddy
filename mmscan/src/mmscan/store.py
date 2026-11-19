@@ -306,6 +306,30 @@ def read_overrides(target: Path | str) -> dict:
         store.close()
 
 
+# The only parts of an API availability the app reads back (models.parse_cabin_offers, scoring,
+# enrich): the route's airports and regions, the date, the source, the fee currency and, per cabin,
+# the six fields below. Everything else the API sends (route ids and distances, the `...Raw` twin of
+# every field, created/parsed timestamps, nested trips) was stored on every run and never read.
+_ROUTE_KEYS = ("OriginAirport", "DestinationAirport", "OriginRegion", "DestinationRegion")
+_CABIN_KEYS = ("Available", "MileageCost", "RemainingSeats", "Airlines", "Direct", "TotalTaxes")
+_TOP_KEYS = ("ID", "Date", "Source", "UpdatedAt", "TaxesCurrency")
+
+
+def slim_availability(avail: dict) -> str:
+    """The availability as compact JSON holding only the fields the app reads, without empties."""
+    route = avail.get("Route") or {}
+    slim: dict = {k: avail[k] for k in _TOP_KEYS if avail.get(k) not in (None, "")}
+    if slim_route := {k: route[k] for k in _ROUTE_KEYS if route.get(k) not in (None, "")}:
+        slim["Route"] = slim_route
+    for prefix in ("Y", "W", "J", "F"):
+        if avail.get(f"{prefix}Available") is not True:
+            continue  # an unavailable cabin is never priced; skip its leftover fields
+        for key in _CABIN_KEYS:
+            if avail.get(f"{prefix}{key}") not in (None, ""):
+                slim[f"{prefix}{key}"] = avail[f"{prefix}{key}"]
+    return json.dumps(slim, sort_keys=True, separators=(",", ":"))
+
+
 def utcnow() -> datetime:
     return datetime.now(UTC)
 
@@ -631,19 +655,28 @@ class Store:
         trip_days: int = 30,
     ) -> None:
         """Drop old history. The per-run copies (`availabilities` with their raw JSON, `results`)
-        are only read for the latest run; the price history lives in `observations`. They go after
-        `detail_days` so the database does not fill up. Trip details (`trips`, `trip_fetches`) are
-        only read for those same availabilities, plus `has_fetch` to skip a paid re-fetch, so they
-        go after `trip_days`. The rest goes after `days`."""
+        are only read for the latest run of a kind (scoring, enrich); the price history lives in
+        `observations`. So a run's copy goes as soon as a newer run of the same kind exists, and in
+        any case after `detail_days`. Each flight was otherwise stored once per run for two weeks:
+        that is what filled the volume. Run configs go with the copies. Trip details (`trips`,
+        `trip_fetches`) are only read for those same availabilities, plus `has_fetch` to skip a
+        paid re-fetch, so they go after `trip_days`. The rest goes after `days`."""
         now = now or utcnow()
         cutoff = (now - timedelta(days=days)).isoformat()
         detail_cutoff = (now - timedelta(days=min(days, detail_days))).isoformat()
         trip_cutoff = (now - timedelta(days=min(days, trip_days))).isoformat()
-        stale_runs = "SELECT id FROM runs WHERE started_at < ?"
+        superseded = (
+            "SELECT r.id FROM runs r WHERE r.started_at < ? "
+            "OR r.id < (SELECT max(n.id) FROM runs n WHERE n.kind = r.kind)"
+        )
         for table in ("availabilities", "results"):
             self.conn.execute(
-                f"DELETE FROM {table} WHERE run_id IN ({stale_runs})", (detail_cutoff,)
+                f"DELETE FROM {table} WHERE run_id IN ({superseded})", (detail_cutoff,)
             )
+        self.conn.execute(
+            "UPDATE runs SET config_json = NULL WHERE config_json IS NOT NULL AND started_at < ?",
+            (detail_cutoff,),
+        )
         self.conn.execute("DELETE FROM runs WHERE started_at < ?", (cutoff,))
         self.conn.execute("DELETE FROM api_calls WHERE ts < ?", (cutoff,))
         self.conn.execute("DELETE FROM observations WHERE last_seen < ?", (cutoff,))
@@ -671,7 +704,7 @@ class Store:
             avail.get("Source"),
             avail.get("UpdatedAt"),
             kind,
-            json.dumps(avail, sort_keys=True),
+            slim_availability(avail),
         )
 
     _SAVE_AVAILABILITY = (

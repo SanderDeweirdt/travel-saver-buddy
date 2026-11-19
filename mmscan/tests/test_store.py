@@ -156,3 +156,39 @@ def test_save_availabilities_stores_a_page_and_replaces_repeats(tmp_path):
     assert {r["origin_kind"] for r in rows} == {"region"}
     assert '"99000"' in rows[0]["raw_json"]
     store.close()
+
+
+def test_slim_availability_keeps_what_the_app_reads_and_drops_the_rest():
+    import json
+
+    from mmscan.models import parse_cabin_offers
+    from mmscan.store import slim_availability
+
+    full = json.load(open("tests/fixtures/synthetic/availability.json"))["data"][0]
+    full["JMileageCostRaw"] = 60000  # the API's twin of every field
+    slim_json = slim_availability(full)
+    slim = json.loads(slim_json)
+    cabins = ["economy", "premium", "business", "first"]
+    assert parse_cabin_offers(slim, cabins) == parse_cabin_offers(full, cabins)
+    assert slim["Route"]["OriginAirport"] == "MUC" and slim["Date"] == "2026-12-10"
+    assert "JMileageCostRaw" not in slim and "ParsedDate" not in slim and "WMileageCost" not in slim
+    assert len(slim_json) < len(json.dumps(full)) * 0.6
+    assert (
+        slim_availability(slim) == slim_json
+    )  # idempotent: re-saving a stored copy changes nothing
+
+
+def test_purge_drops_a_runs_detail_once_a_newer_run_of_its_kind_exists(tmp_path):
+    store = Store(tmp_path / "db.sqlite")
+    first = store.start_run("run", "{}", now=NOW - timedelta(days=1))
+    watch = store.start_run("watch", "{}", now=NOW - timedelta(days=1))
+    second = store.start_run("run", "{}", now=NOW)
+    for r in (first, watch, second):
+        store.conn.execute(
+            "INSERT INTO availabilities(run_id, id, origin_kind, raw_json) VALUES (?,?,?,?)",
+            (r, f"a{r}", "region", "{}"),
+        )
+    store.purge_older_than(180, now=NOW)
+    kept = {r[0] for r in store.conn.execute("SELECT run_id FROM availabilities")}
+    assert kept == {watch, second}  # the newest of each kind; the old full run's copy is gone
+    assert store.conn.execute("SELECT count(*) FROM runs").fetchone()[0] == 3
