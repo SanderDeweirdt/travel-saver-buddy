@@ -15,7 +15,8 @@ ORDER BY pg_total_relation_size(c.oid) DESC;
 
 SELECT pg_size_pretty(pg_database_size(current_database())) AS database_size;
 
--- 2. Delete what the app no longer reads. Per-run copies: only the latest run is read.
+-- 2. Delete what the app no longer reads. (Since the app now keeps only the newest run's copy and
+--    stores a slimmed raw_json, this is a one-off to empty the volume that filled before that.) Per-run copies: only the latest run is read.
 --    TRUNCATE frees the disk immediately (no VACUUM needed) and needs no spare space, so it is
 --    the safe first step when the volume is full. The next scan refills them for the latest run.
 --    (If you would rather keep the latest run: use the DELETEs below instead of TRUNCATE.)

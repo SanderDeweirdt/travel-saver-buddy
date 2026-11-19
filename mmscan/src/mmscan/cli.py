@@ -123,8 +123,8 @@ def scan(
             typer.echo(f"  GET /{path} {params}")
         return
     store = _store()
-    store.purge_older_than(180)
     run_id = store.start_run("scan", cfg.model_dump_json())
+    store.purge_older_than(180)  # after start_run: the new run supersedes the last one's detail
     try:
         client = Client.from_env(store, run_id, cfg.api.daily_call_cap)
     except ApiError as e:
@@ -445,8 +445,8 @@ def run(
             typer.echo(f"  GET /{path} {params}")
         return
     store = _store()
-    store.purge_older_than(180)
     run_id = store.start_run("run", _run_config_json(cfg))
+    store.purge_older_than(180)  # after start_run: the new run supersedes the last one's detail
     client = _client(store, run_id, cfg)
     status, stats = run_scan(client, store, cfg, run_id, today)
     for w in stats["warnings"]:
@@ -500,8 +500,8 @@ def watch(
             typer.echo(f"  GET /{path} { ({**params, 'take': cfg.api.take}) }")
         return
     store = _store()
-    store.purge_older_than(180)
     run_id = store.start_run("watch", cfg.model_dump_json())
+    store.purge_older_than(180)  # after start_run: the new run supersedes the last one's detail
     client = _client(store, run_id, cfg)
     status, stats = run_scan(client, store, cfg, run_id, today, watch_only=True)
     for w in stats["warnings"]:
